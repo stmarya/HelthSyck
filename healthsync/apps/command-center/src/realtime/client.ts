@@ -29,9 +29,9 @@ export class RealtimeClient {
         this.emit(event);
       } catch { /* ignore malformed frames */ }
     });
-    this.socket.addEventListener('close', () => {
-      this.emit({ type: 'realtime.disconnected', payload: {} });
-      if (!this.closedByUser) {
+    this.socket.addEventListener('close', (event) => {
+      this.emit({ type: 'realtime.disconnected', payload: { code: event.code } });
+      if (!this.closedByUser && event.code !== 4003) {
         const delay = this.reconnectDelay;
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15000);
         this.reconnectTimer = window.setTimeout(() => this.connect(this.token, this.entityId), delay);

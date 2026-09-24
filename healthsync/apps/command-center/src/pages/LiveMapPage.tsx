@@ -375,6 +375,12 @@ export default function LiveMapPage() {
 
   const [lastSeenAt, setLastSeenAt] = useState<Record<string, number>>({});
 
+  const [, setClock] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   // ── Filter toggle ──────────────────────────────────────────────────────────
 
   const [filter, setFilter] = useState<Record<Kategori, boolean>>({

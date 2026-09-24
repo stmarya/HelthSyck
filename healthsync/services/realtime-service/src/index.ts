@@ -13,7 +13,7 @@ const MAX_MESSAGE_LENGTH = 4000;
 
 type Role = 'COMMAND_CENTER' | 'ADMIN' | 'AMBULANCE_DRIVER' | 'DRIVER' | 'PHARMACIST' | 'DOCTOR' | 'HOSPITAL_OPERATOR';
 type Claims = { sub: string; role: Role };
-type Client = { socket: WebSocket; userId: string; role: Role; entityId?: string; rooms: Set<string> };
+type Client = { socket: WebSocket; userId: string; role: Role; entityId?: string; rooms: Set<string>; windowStartedAt: number; eventCount: number };
 type Incoming = { type: string; requestId?: string; payload?: Record<string, unknown> };
 
 type Event = {
@@ -51,9 +51,10 @@ let redisConnectPromise: Promise<void> | null = null;
 
 async function ensureRedis(): Promise<void> {
   if (redis.status === 'ready') return;
-  if (redis.status !== 'wait') return;
-  redisConnectPromise ??= redis.connect().finally(() => { redisConnectPromise = null; });
+  if (redis.status !== 'wait') throw new Error(`Redis belum siap: ${redis.status}`);
+  redisConnectPromise ??= redis.connect().then(() => undefined).finally(() => { redisConnectPromise = null; });
   await redisConnectPromise;
+  if (redis.status !== 'ready') throw new Error(`Redis gagal siap: ${redis.status}`);
 }
 
 async function auditEvent(action: string, client: Client, details: Record<string, unknown>): Promise<void> {
@@ -81,8 +82,30 @@ function isOperator(client: Client): boolean {
   return client.role === 'COMMAND_CENTER' || client.role === 'ADMIN';
 }
 
-function broadcastToTarget(targetId: string, event: Event): void {
-  for (const client of clients) if (matchesTarget(client, targetId)) send(client, event);
+function broadcastToTarget(targetId: string, event: Event): boolean {
+  let delivered = false;
+  for (const client of clients) {
+    if (matchesTarget(client, targetId)) {
+      delivered = true;
+      send(client, event);
+    }
+  }
+  return delivered;
+}
+
+function canCommunicate(sender: Client, targetId: string): boolean {
+  if (isOperator(sender)) return true;
+  return [...clients].some((target) => matchesTarget(target, targetId) && isOperator(target));
+}
+
+function allowEvent(client: Client): boolean {
+  const now = Date.now();
+  if (now - client.windowStartedAt >= 60_000) {
+    client.windowStartedAt = now;
+    client.eventCount = 0;
+  }
+  client.eventCount += 1;
+  return client.eventCount <= 120;
 }
 
 function broadcastPresence(client: Client, online: boolean): void {
@@ -129,7 +152,9 @@ function handle(client: Client, message: Incoming): void {
     const recipientId = String(payload.recipientId ?? '');
     const body = String(payload.body ?? '').trim();
     const conversationId = String(payload.conversationId ?? [client.userId, recipientId].sort().join(':'));
+    const validConversation = isOperator(client) || conversationId.includes(client.userId) || conversationId.includes(recipientId);
     if (!recipientId || !body || body.length > MAX_MESSAGE_LENGTH) return sendError(client, requestId, 'INVALID_MESSAGE', 'recipientId dan body valid wajib diisi');
+    if (!validConversation || !canCommunicate(client, recipientId)) return sendError(client, requestId, 'FORBIDDEN', 'Target komunikasi tidak diizinkan');
     const chat = { id: crypto.randomUUID(), conversationId, senderId: client.userId, senderRole: client.role, recipientId, body, sentAt: new Date().toISOString() };
     void saveChat(chat);
     void auditEvent('chat.send', client, { recipientId, conversationId });
@@ -147,20 +172,28 @@ function handle(client: Client, message: Incoming): void {
     if (!isOperator(client) && requestedEntityId && requestedEntityId !== entityId) return sendError(client, requestId, 'FORBIDDEN', 'Tidak boleh mengirim lokasi entity lain');
     const latitude = Number(payload.latitude);
     const longitude = Number(payload.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return sendError(client, requestId, 'INVALID_LOCATION', 'Koordinat tidak valid');
-    const event = { type: 'location.updated', requestId, payload: { entityId, entityType: payload.entityType ?? (client.role === 'AMBULANCE_DRIVER' ? 'AMBULANCE' : 'DRIVER'), latitude, longitude, accuracyM: Number(payload.accuracyM ?? 0), heading: Number(payload.heading ?? 0), speedKmh: Number(payload.speedKmh ?? 0), recordedAt: new Date().toISOString(), staleAfterSeconds: 15, source: 'device' } };
+    const accuracyM = Number(payload.accuracyM ?? 0);
+    const heading = Number(payload.heading ?? 0);
+    const speedKmh = Number(payload.speedKmh ?? 0);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 || !Number.isFinite(accuracyM) || accuracyM < 0 || !Number.isFinite(heading) || !Number.isFinite(speedKmh) || speedKmh < 0) return sendError(client, requestId, 'INVALID_LOCATION', 'Koordinat atau metadata lokasi tidak valid');
+    const expectedType = client.role === 'AMBULANCE_DRIVER' ? 'AMBULANCE' : 'DRIVER';
+    const entityType = isOperator(client) ? String(payload.entityType ?? expectedType) : expectedType;
+    const event: Event = { type: 'location.updated', requestId, payload: { entityId, entityType, latitude, longitude, accuracyM, heading, speedKmh, recordedAt: new Date().toISOString(), staleAfterSeconds: 15, source: 'device' } };
     for (const target of clients) if (isOperator(target) || target.entityId === entityId) send(target, event);
     void auditEvent('location.update', client, { entityId, latitude, longitude, accuracyM: event.payload.accuracyM });
-    void ensureRedis().then(() => redis.hset(`realtime:location:${entityId}`, event.payload as Record<string, string | number>).then(() => redis.expire(`realtime:location:${entityId}`, 90))).catch(() => undefined);
+    void ensureRedis().then(() => redis.hset(`realtime:location:${entityId}`, event.payload as unknown as Record<string, string | number>).then(() => redis.expire(`realtime:location:${entityId}`, 90))).catch(() => undefined);
     return;
   }
 
   if (message.type.startsWith('call.')) {
     const targetId = String(payload.targetId ?? '');
     if (!targetId) return sendError(client, requestId, 'INVALID_TARGET', 'targetId wajib diisi');
-    const forwarded = { type: message.type, requestId, payload: { ...payload, senderId: client.userId, senderRole: client.role } };
+    if (!canCommunicate(client, targetId)) return sendError(client, requestId, 'FORBIDDEN', 'Target call tidak diizinkan');
+    const allowedCallTypes = new Set(['call.invite', 'call.answer', 'call.ice', 'call.hangup']);
+    if (!allowedCallTypes.has(message.type)) return sendError(client, requestId, 'UNKNOWN_EVENT', `Event ${message.type} tidak didukung`);
+    const forwarded: Event = { type: message.type, requestId, payload: { ...payload, senderId: client.userId, senderRole: client.role } };
     void auditEvent(message.type, client, { targetId });
-    broadcastToTarget(targetId, forwarded);
+    if (!broadcastToTarget(targetId, forwarded) && message.type !== 'call.hangup') return sendError(client, requestId, 'TARGET_OFFLINE', 'Target call sedang offline');
     return;
   }
 
@@ -185,20 +218,26 @@ wss.on('connection', (socket) => {
         const token = String(message.payload?.token ?? '');
         const claims = jwt.verify(token, JWT_SECRET) as Claims & { entityId?: string };
         const validRoles: Role[] = ['COMMAND_CENTER', 'ADMIN', 'AMBULANCE_DRIVER', 'DRIVER', 'PHARMACIST', 'DOCTOR', 'HOSPITAL_OPERATOR'];
-        if (!claims.sub || !validRoles.includes(claims.role)) return socket.close(4003, 'Invalid role');
+        if (!claims.sub || !validRoles.includes(claims.role)) {
+          socket.send(JSON.stringify({ type: 'auth.error', payload: { code: 'INVALID_ROLE' } }));
+          return socket.close(4003, 'Invalid role');
+        }
         const requestedEntityId = String(message.payload?.entityId ?? '');
         const entityId = claims.entityId ?? (claims.role === 'COMMAND_CENTER' || claims.role === 'ADMIN' ? requestedEntityId : claims.sub);
-        client = { socket, userId: claims.sub, role: claims.role, entityId, rooms: new Set() };
+        client = { socket, userId: claims.sub, role: claims.role, entityId, rooms: new Set(), windowStartedAt: Date.now(), eventCount: 0 };
         clients.add(client);
         clearTimeout(authTimeout);
         send(client, { type: 'auth.ok', requestId: message.requestId, payload: { userId: client.userId, entityId: client.entityId, role: client.role } });
         broadcastPresence(client, true);
         return;
       }
+      if (!allowEvent(client)) return sendError(client, message.requestId, 'RATE_LIMITED', 'Terlalu banyak event; coba lagi sebentar');
       handle(client, message);
     } catch (error) {
-      if (!client) socket.close(4003, 'Invalid authentication');
-      else sendError(client, undefined, 'INVALID_EVENT', (error as Error).message);
+      if (!client) {
+        try { socket.send(JSON.stringify({ type: 'auth.error', payload: { code: 'INVALID_AUTH' } })); } catch { /* socket already closed */ }
+        socket.close(4003, 'Invalid authentication');
+      } else sendError(client, undefined, 'INVALID_EVENT', (error as Error).message);
     }
   });
   socket.on('close', () => { clearTimeout(authTimeout); if (client) { broadcastPresence(client, false); clients.delete(client); } });

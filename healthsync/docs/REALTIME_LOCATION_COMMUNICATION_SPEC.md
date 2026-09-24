@@ -55,3 +55,18 @@ Native release tetap harus menambahkan permission lokasi foreground/background p
 - Chat, call signaling, dan location update dicatat ke Redis Stream `realtime:audit` dengan retention maksimum 10.000 event.
 - Reconnect client memakai exponential backoff sampai 15 detik.
 - TURN dapat dikonfigurasi melalui `VITE_TURN_URL`, `VITE_TURN_USERNAME`, dan `VITE_TURN_CREDENTIAL`. Credential TURN sebaiknya ephemeral dan tidak hard-code.
+
+## Audit ulang terakhir
+
+Temuan yang diperbaiki pada audit ulang:
+
+- Redis readiness tidak lagi dianggap siap ketika status masih connecting.
+- Non-operator hanya dapat chat/call ke operator aktif; operator tetap dapat menghubungi semua target.
+- Rate limit gateway ditambahkan: maksimum 120 event per koneksi per menit.
+- Driver/ambulans tidak dapat spoof `entityType`, koordinat, metadata akurasi, atau entity ID lain.
+- Call ke target offline mengembalikan `TARGET_OFFLINE`, bukan membuat UI menggantung di status calling.
+- Event call yang tidak dikenal ditolak.
+- Browser tidak melakukan retry permanen untuk close code invalid-auth.
+- Mobile GPS reconnect otomatis dengan backoff dan hanya mengirim lokasi setelah `auth.ok`.
+- Candidate ICE yang datang sebelum remote description diantrikan.
+- Map memperbarui usia GPS setiap detik sehingga label stale tidak membeku.

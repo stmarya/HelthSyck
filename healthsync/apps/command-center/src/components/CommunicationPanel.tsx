@@ -35,6 +35,8 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const incomingOfferRef = useRef<{ senderId: string; offer: RTCSessionDescriptionInit } | null>(null);
+  const activeCallTargetRef = useRef<string | null>(null);
+  const pendingIceRef = useRef<RTCIceCandidateInit[]>([]);
   const localStreamRef = useRef<MediaStream | null>(null);
   const [selectedId, setSelectedId] = useState(contacts[0]?.id ?? '');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -55,20 +57,34 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
       if (event.type === 'auth.ok') setConnection('Terhubung');
       if (event.type === 'realtime.connecting') setConnection('Menghubungkan');
       if (event.type === 'realtime.disconnected') setConnection('Terputus · mencoba ulang');
-      if (event.type === 'error') setConnection('Error');
+      if (event.type === 'error') {
+        setConnection(String(event.payload.code ?? '') === 'TARGET_OFFLINE' ? 'Target offline' : 'Error');
+        if (String(event.payload.code ?? '') === 'TARGET_OFFLINE') stopCall(false);
+      }
       if (event.type === 'chat.message') {
         const message = event.payload as unknown as ChatMessage;
         setMessages((previous) => [...previous, message].slice(-100));
       }
       if (event.type === 'call.invite') {
         const senderId = String(event.payload.senderId ?? '');
+        activeCallTargetRef.current = senderId;
         incomingOfferRef.current = { senderId, offer: event.payload.offer as RTCSessionDescriptionInit };
         setIncomingCaller(senderId);
         setSelectedId(senderId);
         setCallState('incoming');
       }
-      if (event.type === 'call.answer' && peerRef.current) void peerRef.current.setRemoteDescription(event.payload.answer as RTCSessionDescriptionInit).then(() => setCallState('connected'));
-      if (event.type === 'call.ice' && peerRef.current && event.payload.candidate) void peerRef.current.addIceCandidate(event.payload.candidate as RTCIceCandidateInit);
+      if (event.type === 'call.answer' && peerRef.current) {
+        void peerRef.current.setRemoteDescription(event.payload.answer as RTCSessionDescriptionInit).then(async () => {
+          const queued = pendingIceRef.current.splice(0);
+          await Promise.all(queued.map((candidate) => peerRef.current?.addIceCandidate(candidate)));
+          setCallState('connected');
+        }).catch(() => setConnection('Call gagal: negosiasi WebRTC tidak valid'));
+      }
+      if (event.type === 'call.ice' && peerRef.current && event.payload.candidate) {
+        const candidate = event.payload.candidate as RTCIceCandidateInit;
+        if (peerRef.current.remoteDescription) void peerRef.current.addIceCandidate(candidate).catch(() => undefined);
+        else pendingIceRef.current.push(candidate);
+      }
       if (event.type === 'call.hangup') stopCall(false);
     });
     client.connect(token, 'command-center');
@@ -102,6 +118,7 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
       if (!navigator.mediaDevices?.getUserMedia) { setConnection('Audio tidak didukung browser'); return; }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
+      activeCallTargetRef.current = selected.id;
       const peer = ensurePeer(selected.id);
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
       const offer = await peer.createOffer();
@@ -121,6 +138,7 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
       if (!navigator.mediaDevices?.getUserMedia) { setConnection('Audio tidak didukung browser'); return; }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
+      activeCallTargetRef.current = incoming.senderId;
       const peer = ensurePeer(incoming.senderId);
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
       await peer.setRemoteDescription(incoming.offer);
@@ -135,11 +153,14 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
   }
 
   function stopCall(notify = true): void {
-    if (notify && selected) clientRef.current?.send('call.hangup', { targetId: selected.id });
+    const targetId = activeCallTargetRef.current ?? selected?.id;
+    if (notify && targetId) clientRef.current?.send('call.hangup', { targetId });
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
     peerRef.current?.close();
     peerRef.current = null;
     incomingOfferRef.current = null;
+    activeCallTargetRef.current = null;
+    pendingIceRef.current = [];
     setCallState('idle');
   }
 
