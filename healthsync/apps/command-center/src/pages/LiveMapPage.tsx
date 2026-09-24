@@ -373,6 +373,8 @@ export default function LiveMapPage() {
     };
   });
 
+  const [lastSeenAt, setLastSeenAt] = useState<Record<string, number>>({});
+
   // ── Filter toggle ──────────────────────────────────────────────────────────
 
   const [filter, setFilter] = useState<Record<Kategori, boolean>>({
@@ -456,6 +458,7 @@ export default function LiveMapPage() {
       const lng = Number(event.payload.longitude);
       if (!entityId || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
       const koordinat = { lat, lng };
+      setLastSeenAt((previous) => ({ ...previous, [entityId]: Date.parse(String(event.payload.recordedAt ?? '')) || Date.now() }));
       setEntities((prev) => {
         if (entityType === 'ambulance' || entityType === 'ambulans') return { ...prev, ambulans: prev.ambulans.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
         if (entityType === 'driver') return { ...prev, driver: prev.driver.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
@@ -597,6 +600,13 @@ export default function LiveMapPage() {
     handleMarkerClick(id);
   }, [handleMarkerClick]);
 
+  function freshnessLabel(id: string): string {
+    const seen = lastSeenAt[id];
+    if (!seen) return 'Seed / menunggu GPS';
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - seen) / 1000));
+    return ageSeconds <= 15 ? 'GPS live' : `GPS stale ${ageSeconds}s`;
+  }
+
   // ── Hitung total entitas ───────────────────────────────────────────────────
 
   const totalEntitas =
@@ -614,11 +624,11 @@ export default function LiveMapPage() {
       kategori: 'pasien', isUrgent: p.status === 'Darurat' || p.status === 'Kritis',
     })) : []),
     ...(filter.ambulans ? entities.ambulans.map((a): PanelItem => ({
-      id: a.id, label: a.nomorUnit, sub: `${a.status}${a.eta !== undefined ? ` · ETA ${a.eta} mnt` : ''}`,
+      id: a.id, label: a.nomorUnit, sub: `${a.status}${a.eta !== undefined ? ` · ETA ${a.eta} mnt` : ''} · ${freshnessLabel(a.id)}`,
       kategori: 'ambulans', isUrgent: a.status === 'Dalam Perjalanan',
     })) : []),
     ...(filter.driver ? entities.driver.map((d): PanelItem => ({
-      id: d.id, label: d.nama, sub: d.status,
+      id: d.id, label: d.nama, sub: `${d.status} · ${freshnessLabel(d.id)}`,
       kategori: 'driver', isUrgent: d.status === 'Mengantarkan',
     })) : []),
     ...(filter.rumahSakit ? entities.rumahSakit.map((rs): PanelItem => ({
@@ -654,7 +664,7 @@ export default function LiveMapPage() {
             <span style={{ fontSize: 10, fontWeight: 700, color: '#16A34A', letterSpacing: 1 }}>LIVE</span>
           </div>
           <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-            {totalEntitas} entitas ditampilkan
+            {totalEntitas} entitas ditampilkan · GPS stale jika >15 detik
           </span>
         </div>
 

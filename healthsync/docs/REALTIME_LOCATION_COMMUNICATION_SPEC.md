@@ -43,3 +43,15 @@ Mobile dashboard driver dan ambulans menjalankan `RealtimeLocationTracker` setel
 Perubahan role mobile memisahkan `DRIVER` dari `AMBULANCE_DRIVER` dan menambahkan route guard. Data user lama dengan role `AMBULANCE_DRIVER` harus dimigrasikan ke role driver atau ambulans yang tepat; tanpa migrasi, user lama akan masuk mode ambulans.
 
 Native release tetap harus menambahkan permission lokasi foreground/background pada Android/iOS dan menjalankan `flutter pub get`, `flutter analyze`, serta build device nyata sebelum pilot operasional.
+
+
+## Hardening yang sudah ditambahkan
+
+- `/health` menjadi liveness check; `/ready` memvalidasi koneksi Redis untuk readiness.
+- Frame WebSocket dibatasi 64 KiB.
+- JWT role divalidasi saat handshake; non-operator tidak dapat mengirim lokasi entity lain.
+- Event lokasi diberi `staleAfterSeconds: 15` dan last-known location memiliki TTL 90 detik.
+- Presence event dikirim saat entity online/offline.
+- Chat, call signaling, dan location update dicatat ke Redis Stream `realtime:audit` dengan retention maksimum 10.000 event.
+- Reconnect client memakai exponential backoff sampai 15 detik.
+- TURN dapat dikonfigurasi melalui `VITE_TURN_URL`, `VITE_TURN_USERNAME`, dan `VITE_TURN_CREDENTIAL`. Credential TURN sebaiknya ephemeral dan tidak hard-code.

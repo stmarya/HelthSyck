@@ -53,6 +53,8 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
     clientRef.current = client;
     const off = client.on('*', (event: RealtimeEvent) => {
       if (event.type === 'auth.ok') setConnection('Terhubung');
+      if (event.type === 'realtime.connecting') setConnection('Menghubungkan');
+      if (event.type === 'realtime.disconnected') setConnection('Terputus · mencoba ulang');
       if (event.type === 'error') setConnection('Error');
       if (event.type === 'chat.message') {
         const message = event.payload as unknown as ChatMessage;
@@ -81,7 +83,12 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
 
   function ensurePeer(targetId: string): RTCPeerConnection {
     if (peerRef.current) return peerRef.current;
-    const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    const turnUrl = import.meta.env.VITE_TURN_URL as string | undefined;
+    const turnUsername = import.meta.env.VITE_TURN_USERNAME as string | undefined;
+    const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL as string | undefined;
+    const iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
+    if (turnUrl && turnUsername && turnCredential) iceServers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential });
+    const peer = new RTCPeerConnection({ iceServers });
     peer.onicecandidate = (event) => { if (event.candidate) clientRef.current?.send('call.ice', { targetId, candidate: event.candidate.toJSON() }); };
     peer.ontrack = (event) => { if (remoteAudioRef.current) { remoteAudioRef.current.srcObject = event.streams[0]; void remoteAudioRef.current.play().catch(() => undefined); } };
     peer.onconnectionstatechange = () => { if (peer.connectionState === 'connected') setCallState('connected'); if (['failed', 'closed', 'disconnected'].includes(peer.connectionState)) stopCall(false); };
@@ -91,30 +98,40 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
 
   async function startCall(): Promise<void> {
     if (!selected) return;
-    if (!navigator.mediaDevices?.getUserMedia) { setConnection('Audio tidak didukung browser'); return; }
-    if (!navigator.mediaDevices?.getUserMedia) { setConnection('Audio tidak didukung browser'); return; }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    localStreamRef.current = stream;
-    const peer = ensurePeer(selected.id);
-    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
-    clientRef.current?.send('call.invite', { targetId: selected.id, offer });
-    setCallState('calling');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) { setConnection('Audio tidak didukung browser'); return; }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+      const peer = ensurePeer(selected.id);
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      clientRef.current?.send('call.invite', { targetId: selected.id, offer });
+      setCallState('calling');
+    } catch (error) {
+      setConnection(error instanceof Error ? `Call gagal: ${error.message}` : 'Call gagal');
+      stopCall(false);
+    }
   }
 
   async function acceptCall(): Promise<void> {
     const incoming = incomingOfferRef.current;
     if (!incoming) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    localStreamRef.current = stream;
-    const peer = ensurePeer(incoming.senderId);
-    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
-    await peer.setRemoteDescription(incoming.offer);
-    const answer = await peer.createAnswer();
-    await peer.setLocalDescription(answer);
-    clientRef.current?.send('call.answer', { targetId: incoming.senderId, answer });
-    setCallState('connected');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) { setConnection('Audio tidak didukung browser'); return; }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+      const peer = ensurePeer(incoming.senderId);
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+      await peer.setRemoteDescription(incoming.offer);
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      clientRef.current?.send('call.answer', { targetId: incoming.senderId, answer });
+      setCallState('connected');
+    } catch (error) {
+      setConnection(error instanceof Error ? `Call gagal: ${error.message}` : 'Call gagal');
+      stopCall(false);
+    }
   }
 
   function stopCall(notify = true): void {

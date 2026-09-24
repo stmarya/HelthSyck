@@ -22,20 +22,48 @@ type Event = {
   payload: Record<string, unknown>;
 };
 
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', service: 'realtime-service', clients: clients.size, timestamp: new Date().toISOString() }));
+    return;
+  }
+  if (req.url === '/ready') {
+    try {
+      await ensureRedis();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ready', service: 'realtime-service', redis: true }));
+    } catch {
+      res.writeHead(503, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ status: 'not_ready', service: 'realtime-service', redis: false }));
+    }
     return;
   }
   res.writeHead(404);
   res.end();
 });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 const clients = new Set<Client>();
 const redis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 2 });
 redis.on('error', (error) => console.error('[realtime] redis:', error.message));
+let redisConnectPromise: Promise<void> | null = null;
+
+async function ensureRedis(): Promise<void> {
+  if (redis.status === 'ready') return;
+  if (redis.status !== 'wait') return;
+  redisConnectPromise ??= redis.connect().finally(() => { redisConnectPromise = null; });
+  await redisConnectPromise;
+}
+
+async function auditEvent(action: string, client: Client, details: Record<string, unknown>): Promise<void> {
+  try {
+    await ensureRedis();
+    await redis.xadd('realtime:audit', 'MAXLEN', '~', '10000', '*', 'action', action, 'userId', client.userId, 'role', client.role, 'details', JSON.stringify(details), 'at', new Date().toISOString());
+  } catch (error) {
+    console.error('[realtime] audit:', (error as Error).message);
+  }
+}
 
 function send(client: Client, event: Event): void {
   if (client.socket.readyState === WebSocket.OPEN) client.socket.send(JSON.stringify(event));
@@ -57,9 +85,14 @@ function broadcastToTarget(targetId: string, event: Event): void {
   for (const client of clients) if (matchesTarget(client, targetId)) send(client, event);
 }
 
+function broadcastPresence(client: Client, online: boolean): void {
+  const event: Event = { type: 'presence.updated', payload: { userId: client.userId, entityId: client.entityId ?? client.userId, role: client.role, online, at: new Date().toISOString() } };
+  for (const target of clients) if (isOperator(target) || target.userId === client.userId || target.entityId === client.entityId) send(target, event);
+}
+
 async function saveChat(message: Record<string, unknown>): Promise<void> {
   try {
-    if (redis.status === 'wait') await redis.connect();
+    await ensureRedis();
     const conversationId = String(message.conversationId);
     const key = `realtime:chat:${conversationId}`;
     await redis.lpush(key, JSON.stringify(message));
@@ -72,7 +105,7 @@ async function saveChat(message: Record<string, unknown>): Promise<void> {
 
 async function loadChat(conversationId: string): Promise<Record<string, unknown>[]> {
   try {
-    if (redis.status === 'wait') await redis.connect();
+    await ensureRedis();
     const rows = await redis.lrange(`realtime:chat:${conversationId}`, 0, 99);
     return rows.map((row) => JSON.parse(row) as Record<string, unknown>).reverse();
   } catch {
@@ -86,7 +119,8 @@ function handle(client: Client, message: Incoming): void {
 
   if (message.type === 'chat.history') {
     const conversationId = String(payload.conversationId ?? '');
-    if (!conversationId) return sendError(client, requestId, 'INVALID_CONVERSATION', 'conversationId wajib diisi');
+    const belongsToClient = conversationId.includes(client.userId) || Boolean(client.entityId && conversationId.includes(client.entityId));
+    if (!conversationId || (!isOperator(client) && !belongsToClient)) return sendError(client, requestId, 'FORBIDDEN', 'Conversation tidak diizinkan');
     void loadChat(conversationId).then((messages) => send(client, { type: 'chat.history', requestId, payload: { conversationId, messages } }));
     return;
   }
@@ -98,6 +132,7 @@ function handle(client: Client, message: Incoming): void {
     if (!recipientId || !body || body.length > MAX_MESSAGE_LENGTH) return sendError(client, requestId, 'INVALID_MESSAGE', 'recipientId dan body valid wajib diisi');
     const chat = { id: crypto.randomUUID(), conversationId, senderId: client.userId, senderRole: client.role, recipientId, body, sentAt: new Date().toISOString() };
     void saveChat(chat);
+    void auditEvent('chat.send', client, { recipientId, conversationId });
     const event = { type: 'chat.message', requestId, payload: chat };
     send(client, event);
     broadcastToTarget(recipientId, event);
@@ -107,13 +142,16 @@ function handle(client: Client, message: Incoming): void {
   if (message.type === 'location.update') {
     const allowed = isOperator(client) || client.role === 'AMBULANCE_DRIVER' || client.role === 'DRIVER';
     if (!allowed) return sendError(client, requestId, 'FORBIDDEN', 'Role tidak boleh mengirim lokasi');
-    const entityId = String(payload.entityId ?? client.entityId ?? client.userId);
+    const requestedEntityId = String(payload.entityId ?? '');
+    const entityId = isOperator(client) ? (requestedEntityId || client.entityId || client.userId) : (client.entityId || client.userId);
+    if (!isOperator(client) && requestedEntityId && requestedEntityId !== entityId) return sendError(client, requestId, 'FORBIDDEN', 'Tidak boleh mengirim lokasi entity lain');
     const latitude = Number(payload.latitude);
     const longitude = Number(payload.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return sendError(client, requestId, 'INVALID_LOCATION', 'Koordinat tidak valid');
-    const event = { type: 'location.updated', requestId, payload: { entityId, entityType: payload.entityType ?? (client.role === 'AMBULANCE_DRIVER' ? 'AMBULANCE' : 'DRIVER'), latitude, longitude, accuracyM: Number(payload.accuracyM ?? 0), heading: Number(payload.heading ?? 0), speedKmh: Number(payload.speedKmh ?? 0), recordedAt: new Date().toISOString(), source: 'device' } };
+    const event = { type: 'location.updated', requestId, payload: { entityId, entityType: payload.entityType ?? (client.role === 'AMBULANCE_DRIVER' ? 'AMBULANCE' : 'DRIVER'), latitude, longitude, accuracyM: Number(payload.accuracyM ?? 0), heading: Number(payload.heading ?? 0), speedKmh: Number(payload.speedKmh ?? 0), recordedAt: new Date().toISOString(), staleAfterSeconds: 15, source: 'device' } };
     for (const target of clients) if (isOperator(target) || target.entityId === entityId) send(target, event);
-    try { if (redis.status === 'wait') void redis.connect().then(() => redis.hset(`realtime:location:${entityId}`, event.payload as Record<string, string | number>)); } catch { /* best effort */ }
+    void auditEvent('location.update', client, { entityId, latitude, longitude, accuracyM: event.payload.accuracyM });
+    void ensureRedis().then(() => redis.hset(`realtime:location:${entityId}`, event.payload as Record<string, string | number>).then(() => redis.expire(`realtime:location:${entityId}`, 90))).catch(() => undefined);
     return;
   }
 
@@ -121,6 +159,7 @@ function handle(client: Client, message: Incoming): void {
     const targetId = String(payload.targetId ?? '');
     if (!targetId) return sendError(client, requestId, 'INVALID_TARGET', 'targetId wajib diisi');
     const forwarded = { type: message.type, requestId, payload: { ...payload, senderId: client.userId, senderRole: client.role } };
+    void auditEvent(message.type, client, { targetId });
     broadcastToTarget(targetId, forwarded);
     return;
   }
@@ -144,11 +183,16 @@ wss.on('connection', (socket) => {
       if (!client) {
         if (message.type !== 'auth') return socket.close(4001, 'Authenticate first');
         const token = String(message.payload?.token ?? '');
-        const claims = jwt.verify(token, JWT_SECRET) as Claims;
-        client = { socket, userId: claims.sub, role: claims.role, entityId: String(message.payload?.entityId ?? ''), rooms: new Set() };
+        const claims = jwt.verify(token, JWT_SECRET) as Claims & { entityId?: string };
+        const validRoles: Role[] = ['COMMAND_CENTER', 'ADMIN', 'AMBULANCE_DRIVER', 'DRIVER', 'PHARMACIST', 'DOCTOR', 'HOSPITAL_OPERATOR'];
+        if (!claims.sub || !validRoles.includes(claims.role)) return socket.close(4003, 'Invalid role');
+        const requestedEntityId = String(message.payload?.entityId ?? '');
+        const entityId = claims.entityId ?? (claims.role === 'COMMAND_CENTER' || claims.role === 'ADMIN' ? requestedEntityId : claims.sub);
+        client = { socket, userId: claims.sub, role: claims.role, entityId, rooms: new Set() };
         clients.add(client);
         clearTimeout(authTimeout);
-        send(client, { type: 'auth.ok', requestId: message.requestId, payload: { userId: client.userId, role: client.role } });
+        send(client, { type: 'auth.ok', requestId: message.requestId, payload: { userId: client.userId, entityId: client.entityId, role: client.role } });
+        broadcastPresence(client, true);
         return;
       }
       handle(client, message);
@@ -157,7 +201,7 @@ wss.on('connection', (socket) => {
       else sendError(client, undefined, 'INVALID_EVENT', (error as Error).message);
     }
   });
-  socket.on('close', () => { clearTimeout(authTimeout); if (client) clients.delete(client); });
+  socket.on('close', () => { clearTimeout(authTimeout); if (client) { broadcastPresence(client, false); clients.delete(client); } });
 });
 
 server.on('upgrade', (request, socket, head) => {

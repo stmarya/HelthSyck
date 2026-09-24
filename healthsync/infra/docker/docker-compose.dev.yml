@@ -475,7 +475,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3011/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3011/ready || exit 1"]
       interval: 20s
       timeout: 5s
       retries: 3
@@ -633,6 +633,9 @@ services:
       VITE_IOT_TARGET:          http://iot-ingestion:4001
       VITE_ALERT_TARGET:        http://alert-service:4002
       VITE_REALTIME_TARGET:      http://realtime-service:3011
+      VITE_TURN_URL:              ${TURN_URL:-}
+      VITE_TURN_USERNAME:         ${TURN_USERNAME:-}
+      VITE_TURN_CREDENTIAL:       ${TURN_CREDENTIAL:-}
     ports:
       - "5173:5173"
     depends_on:
