@@ -1,0 +1,81 @@
+name: HealthSync Admin Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: healthsync-admin-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  admin:
+    name: Admin typecheck, lint, and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: healthsync
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: healthsync/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+      - name: Admin typecheck
+        run: npm run typecheck --workspace=apps/admin
+      - name: Admin lint
+        run: npm run lint --workspace=apps/admin
+      - name: Admin build
+        run: npm run build --workspace=apps/admin
+
+  services:
+    name: Service checks (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - auth-service
+          - consultation-service
+          - hospital-service
+          - patient-service
+          - ambulance-service
+          - referral-service
+    defaults:
+      run:
+        working-directory: healthsync
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: healthsync/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+      - name: Typecheck
+        run: npx tsc --project services/${{ matrix.service }}/tsconfig.json --noEmit
+      - name: Unit tests
+        run: npm test --workspace=services/${{ matrix.service }}
+        env:
+          NODE_ENV: test
+          PORT: '0'
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-test-secret-do-not-use-in-production
+          REDIS_URL: redis://localhost:6379
