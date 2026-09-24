@@ -1,10 +1,7 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Token helpers — sessionStorage keeps tokens out of persistent XSS reach;
-// for production, prefer httpOnly cookies managed by the backend.
-// ─────────────────────────────────────────────────────────────────────────────
-
+// Token helpers — sessionStorage limits persistence. Production should prefer
+// httpOnly, same-site cookies managed by the backend.
 export const tokenStore = {
   getAccess:   () => sessionStorage.getItem('hs_admin_access_token'),
   getRefresh:  () => sessionStorage.getItem('hs_admin_refresh_token'),
@@ -19,41 +16,36 @@ export const tokenStore = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Token-refresh state (shared across all clients)
-// ─────────────────────────────────────────────────────────────────────────────
+// A shared promise prevents a refresh stampede. Every request that receives a
+// 401 awaits the same refresh operation and can therefore be retried or
+// rejected deterministically; no subscriber is left hanging when refresh fails.
+let refreshPromise: Promise<string> | null = null;
 
-let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
+function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) return refreshPromise;
 
-function subscribeTokenRefresh(cb: (token: string) => void) {
-  refreshSubscribers.push(cb);
+  refreshPromise = (async () => {
+    const refreshToken = tokenStore.getRefresh();
+    if (!refreshToken) throw new Error('No refresh token available');
+
+    const { data } = await rawAuthClient.post('/v1/auth/refresh', { refreshToken });
+    const nextAccess = data?.data?.accessToken;
+    const nextRefresh = data?.data?.refreshToken;
+    if (typeof nextAccess !== 'string' || typeof nextRefresh !== 'string') {
+      throw new Error('Refresh response did not contain valid tokens');
+    }
+
+    tokenStore.setTokens(nextAccess, nextRefresh);
+    return nextAccess;
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
 }
 
-function onRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token));
-  refreshSubscribers = [];
-}
-
-function onRefreshFailed() {
-  // Drain the queue so no request hangs forever
-  refreshSubscribers = [];
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Per-service axios instances
-// Ports are sourced from README.md / docker-compose.dev.yml (authoritative):
-//   auth:3001  patient:3002  consultation:3003  prescription:3004
-//   ambulance:3005  referral:3006  hospital:3007  pharmacy:3008
-//   notification:3009  integration:3010  iot-ingestion:4001  alert:4002
-// ─────────────────────────────────────────────────────────────────────────────
-
-// All axios clients use an EMPTY baseURL so every request is sent as a
-// relative path (e.g. /v1/auth/login).  In the browser this resolves against
-// the current origin — which is the Vite dev-server — and Vite's proxy rules
-// forward /v1/* to the correct backend service.
-// Never use absolute http://localhost:PORT here; that would bypass the proxy
-// and cause CORS errors when running inside Docker.
+// All clients use relative URLs so Vite's proxy remains the single routing
+// layer in local development and Docker.
 function makeClient(): AxiosInstance {
   return axios.create({
     baseURL: '',
@@ -62,9 +54,8 @@ function makeClient(): AxiosInstance {
   });
 }
 
-// Raw auth client — NO interceptors attached.
-// Used exclusively inside the refresh interceptor to avoid an infinite 401 loop:
-// if the refresh endpoint itself returns 401, we must NOT re-enter the interceptor.
+// Raw auth client intentionally has no interceptors. A failed refresh must not
+// recursively trigger another refresh attempt.
 const rawAuthClient = makeClient();
 
 export const authClient         = makeClient();
@@ -79,10 +70,6 @@ export const notificationClient = makeClient();
 export const integrationClient  = makeClient();
 export const alertClient        = makeClient();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Attach JWT + 401-refresh interceptors to every client
-// ─────────────────────────────────────────────────────────────────────────────
-
 function attachInterceptors(client: AxiosInstance) {
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
@@ -96,38 +83,21 @@ function attachInterceptors(client: AxiosInstance) {
   client.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
-      const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+      const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+      const requestUrl = originalRequest?.url ?? '';
+      const isRefreshRequest = requestUrl.includes('/v1/auth/refresh');
 
-      if (error.response?.status === 401 && !originalRequest._retry) {
-        if (isRefreshing) {
-          return new Promise((resolve) => {
-            subscribeTokenRefresh((token: string) => {
-              originalRequest.headers['Authorization'] = `Bearer ${token}`;
-              resolve(client(originalRequest));
-            });
-          });
-        }
-
+      if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isRefreshRequest) {
         originalRequest._retry = true;
-        isRefreshing = true;
-
         try {
-          const refreshToken = tokenStore.getRefresh();
-          // Use rawAuthClient (no interceptors) to avoid an infinite 401 loop
-          // if the refresh endpoint itself returns 401.
-          const { data } = await rawAuthClient.post('/v1/auth/refresh', { refreshToken });
-          const newToken: string = data.data.accessToken;
-          tokenStore.setTokens(newToken, data.data.refreshToken);
-          onRefreshed(newToken);
+          const newToken = await refreshAccessToken();
           originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
           return client(originalRequest);
         } catch {
-          onRefreshFailed();
           tokenStore.clear();
-          window.location.href = '/login';
-          return Promise.reject(error);
-        } finally {
-          isRefreshing = false;
+          if (window.location.pathname !== '/login') {
+            window.location.replace('/login');
+          }
         }
       }
 
@@ -142,5 +112,4 @@ function attachInterceptors(client: AxiosInstance) {
   notificationClient, integrationClient, alertClient,
 ].forEach(attachInterceptors);
 
-// Default export — auth client for login/register calls
 export default authClient;
