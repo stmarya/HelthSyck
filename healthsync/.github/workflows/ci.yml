@@ -64,7 +64,6 @@ jobs:
       - name: Lint
         working-directory: healthsync
         run: npm run lint --workspace=services/${{ matrix.service }}
-        continue-on-error: true
 
       - name: Test
         working-directory: healthsync
@@ -124,6 +123,81 @@ jobs:
           path: healthsync/services/${{ matrix.service }}/coverage.out
 
   # ─────────────────────────────────────────────
+  # Command Center frontend quality gate
+  # ─────────────────────────────────────────────
+  check-command-center:
+    name: "Command Center [typecheck/build/lint]"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: healthsync/package-lock.json
+      - name: Install dependencies
+        working-directory: healthsync
+        run: npm ci
+      - name: Build shared package
+        working-directory: healthsync
+        run: npm run build --workspace=packages/shared
+      - name: Type-check Command Center
+        working-directory: healthsync
+        run: npm run typecheck --workspace=apps/command-center
+      - name: Lint Command Center
+        working-directory: healthsync
+        run: npm run lint --workspace=apps/command-center
+      - name: Build Command Center
+        working-directory: healthsync
+        run: npm run build --workspace=apps/command-center
+
+  # ─────────────────────────────────────────────
+  # Realtime gateway quality gate
+  # ─────────────────────────────────────────────
+  check-realtime:
+    name: "Realtime gateway [typecheck/build]"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install gateway dependencies
+        working-directory: healthsync/services/realtime-service
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Build realtime gateway
+        working-directory: healthsync/services/realtime-service
+        run: npm run build
+
+  # ─────────────────────────────────────────────
+  # Flutter mobile quality gate
+  # ─────────────────────────────────────────────
+  check-mobile:
+    name: "Mobile [analyze/test]"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install Flutter dependencies
+        working-directory: healthsync/apps/mobile
+        run: flutter pub get
+      - name: Analyze Flutter code
+        working-directory: healthsync/apps/mobile
+        run: flutter analyze
+      - name: Run Flutter tests
+        working-directory: healthsync/apps/mobile
+        run: flutter test --no-pub
+
+  # ─────────────────────────────────────────────
   # Docker Build
   # Node services: build context = monorepo root (healthsync/)
   #   so @healthsync/shared can be resolved during npm ci
@@ -132,7 +206,7 @@ jobs:
   build-docker:
     name: "Docker [${{ matrix.service }}]"
     runs-on: ubuntu-latest
-    needs: [lint-and-test-node, lint-and-test-go]
+    needs: [lint-and-test-node, lint-and-test-go, check-command-center, check-realtime, check-mobile]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
@@ -169,6 +243,9 @@ jobs:
           - service: integration-service
             context: healthsync
             dockerfile: healthsync/services/integration-service/Dockerfile
+          - service: realtime-service
+            context: healthsync
+            dockerfile: healthsync/services/realtime-service/Dockerfile
           # Go services — self-contained, use their own directory as context
           - service: iot-ingestion
             context: healthsync/services/iot-ingestion
@@ -200,14 +277,18 @@ jobs:
   ci-pass:
     name: CI Pass
     runs-on: ubuntu-latest
-    needs: [lint-and-test-node, lint-and-test-go]
+    needs: [lint-and-test-node, lint-and-test-go, check-command-center, check-realtime, check-mobile]
     if: always()
     steps:
       - name: Check all jobs passed
         run: |
           if [[ "${{ needs.lint-and-test-node.result }}" != "success" ]] || \
-             [[ "${{ needs.lint-and-test-go.result }}" != "success" ]]; then
+             [[ "${{ needs.lint-and-test-go.result }}" != "success" ]] || \
+             [[ "${{ needs.check-command-center.result }}" != "success" ]] || \
+             [[ "${{ needs.check-realtime.result }}" != "success" ]] || \
+             [[ "${{ needs.check-mobile.result }}" != "success" ]]; then
             echo "One or more CI jobs failed."
             exit 1
           fi
           echo "All CI jobs passed."
+
