@@ -38,7 +38,7 @@ jobs:
       - run: npm exec --workspace=apps/admin -- eslint src --ext ts,tsx --max-warnings 0
       - run: npm exec --workspace=apps/admin -- vite build
 
-  node-services:
+  node_services:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -64,7 +64,7 @@ jobs:
       - run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
       - run: npm exec --workspace=${{ matrix.workspace }} -- jest --runInBand --passWithNoTests
 
-  go-services:
+  go_services:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -114,7 +114,7 @@ jobs:
           END $$;
           SQL
 
-  compose-validation:
+  compose_validation:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: healthsync } }
     steps:
@@ -146,16 +146,16 @@ jobs:
 
   readiness:
     if: always()
-    needs: [admin, node-services, go-services, database, compose-validation]
+    needs: [admin, node_services, go_services, database, compose_validation]
     runs-on: ubuntu-latest
     steps:
       - name: Enforce every deployment gate
         env:
           ADMIN: ${{ needs.admin.result }}
-          NODE_SERVICES: ${{ needs.node-services.result }}
-          GO_SERVICES: ${{ needs.go-services.result }}
+          NODE_SERVICES: ${{ needs.node_services.result }}
+          GO_SERVICES: ${{ needs.go_services.result }}
           DATABASE: ${{ needs.database.result }}
-          COMPOSE: ${{ needs.compose-validation.result }}
+          COMPOSE: ${{ needs.compose_validation.result }}
         run: |
           printf '%-20s %s\n' Admin "$ADMIN" Node-services "$NODE_SERVICES" Go-services "$GO_SERVICES" Database "$DATABASE" Docker-compose "$COMPOSE"
           test "$ADMIN" = success
