@@ -1,34 +1,25 @@
-name: HealthSync Admin Validation
+name: HealthSync Admin and Services Validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, copilot/admin-readiness-production-safe]
     paths:
       - '.github/workflows/healthsync-admin.yml'
-      - 'healthsync/package-lock.json'
-      - 'healthsync/package.json'
+      - 'healthsync/package*.json'
       - 'healthsync/packages/shared/**'
       - 'healthsync/apps/admin/**'
-      - 'healthsync/services/auth-service/**'
-      - 'healthsync/services/consultation-service/**'
-      - 'healthsync/services/hospital-service/**'
-      - 'healthsync/services/patient-service/**'
-      - 'healthsync/services/ambulance-service/**'
-      - 'healthsync/services/referral-service/**'
+      - 'healthsync/services/**'
+      - 'healthsync/infra/db/**'
+      - 'healthsync/infra/docker/**'
   pull_request:
-    branches: [main]
     paths:
       - '.github/workflows/healthsync-admin.yml'
-      - 'healthsync/package-lock.json'
-      - 'healthsync/package.json'
+      - 'healthsync/package*.json'
       - 'healthsync/packages/shared/**'
       - 'healthsync/apps/admin/**'
-      - 'healthsync/services/auth-service/**'
-      - 'healthsync/services/consultation-service/**'
-      - 'healthsync/services/hospital-service/**'
-      - 'healthsync/services/patient-service/**'
-      - 'healthsync/services/ambulance-service/**'
-      - 'healthsync/services/referral-service/**'
+      - 'healthsync/services/**'
+      - 'healthsync/infra/db/**'
+      - 'healthsync/infra/docker/**'
   workflow_dispatch:
 
 concurrency:
@@ -37,7 +28,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  DATABASE_URL: ******localhost:5432/healthsync_test
+  DATABASE_URL: postgresql://healthsync:healthsync_test@localhost:5432/healthsync_test
   JWT_SECRET: ci-test-secret-do-not-use-in-production
   REDIS_URL: redis://localhost:6379
   PORT: '0'
@@ -46,34 +37,16 @@ env:
 jobs:
   admin:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: healthsync
+    defaults: { run: { working-directory: healthsync } }
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: healthsync/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build shared package
-        run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
-
-      - name: Admin typecheck
-        run: npm exec --workspace=apps/admin -- tsc --noEmit
-
-      - name: Admin lint
-        run: npm exec --workspace=apps/admin -- eslint src --ext ts,tsx --max-warnings 0
-
-      - name: Admin build
-        run: npm exec --workspace=apps/admin -- vite build
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm, cache-dependency-path: healthsync/package-lock.json }
+      - run: npm ci
+      - run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
+      - run: npm exec --workspace=apps/admin -- tsc --noEmit
+      - run: npm exec --workspace=apps/admin -- eslint src --ext ts,tsx --max-warnings 0
+      - run: npm exec --workspace=apps/admin -- vite build
 
   services:
     runs-on: ubuntu-latest
@@ -87,28 +60,33 @@ jobs:
           - services/patient-service
           - services/ambulance-service
           - services/referral-service
-    defaults:
-      run:
-        working-directory: healthsync
+          - services/pharmacy-service
+          - services/prescription-service
+    defaults: { run: { working-directory: healthsync } }
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm, cache-dependency-path: healthsync/package-lock.json }
+      - run: npm ci
+      - run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
+      - run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
+      - run: npm exec --workspace=${{ matrix.workspace} -- jest --runInBand --passWithNoTests
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: healthsync/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build shared package
-        run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
-
-      - name: Service typecheck
-        run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
-
-      - name: Service tests
-        run: npm exec --workspace=${{ matrix.workspace }} -- jest --passWithNoTests
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg15
+        env:
+          POSTGRES_USER: healthsync
+          POSTGRES_PASSWORD: healthsync_test
+          POSTGRES_DB: healthsync_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U healthsync -d healthsync_test"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    defaults: { run: { working-directory: healthsync } }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate all migrations from an empty database
+        run: bash infra/db/run_migrations.sh
