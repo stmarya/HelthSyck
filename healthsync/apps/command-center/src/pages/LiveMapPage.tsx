@@ -7,6 +7,7 @@ import type { SimEvent } from '../simulation/SimulationEngine';
 import type { Pasien, Ambulans, DriverApotek, RumahSakit, Apotek } from '../simulation/SimulationData';
 import { SEED_APOTEK } from '../simulation/SimulationData';
 import { useToast } from '../context/ToastContext';
+import { RealtimeClient } from '../realtime/client';
 
 // ─── Konstanta Peta Jakarta ────────────────────────────────────────────────────
 
@@ -446,6 +447,24 @@ export default function LiveMapPage() {
       );
     });
 
+    const realtime = new RealtimeClient();
+    const token = localStorage.getItem('hs_access_token');
+    const unsubscribeRealtime = token ? realtime.on('location.updated', (event) => {
+      const entityId = String(event.payload.entityId ?? '');
+      const entityType = String(event.payload.entityType ?? '').toLowerCase();
+      const lat = Number(event.payload.latitude);
+      const lng = Number(event.payload.longitude);
+      if (!entityId || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const koordinat = { lat, lng };
+      setEntities((prev) => {
+        if (entityType === 'ambulance' || entityType === 'ambulans') return { ...prev, ambulans: prev.ambulans.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
+        if (entityType === 'driver') return { ...prev, driver: prev.driver.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
+        if (entityType === 'patient' || entityType === 'pasien') return { ...prev, pasien: prev.pasien.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
+        return prev;
+      });
+    }) : undefined;
+    if (token) realtime.connect(token, 'command-center');
+
     const unsubCapacity = simulationEngine.on('HOSPITAL_CAPACITY_UPDATE', (ev: SimEvent) => {
       if (ev.type !== 'HOSPITAL_CAPACITY_UPDATE') return;
       // Perbarui data rumah sakit di state lokal
@@ -472,6 +491,8 @@ export default function LiveMapPage() {
       unsubLocation();
       unsubEmergency();
       unsubCapacity();
+      unsubscribeRealtime?.();
+      realtime.close();
     };
   }, [toast]);
 

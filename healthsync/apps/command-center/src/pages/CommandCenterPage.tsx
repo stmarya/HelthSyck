@@ -4,6 +4,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { simulationEngine } from '../simulation/SimulationEngine';
 import type { EmergencyCase, SimEvent, SimState } from '../simulation/SimulationEngine';
 import { useToast } from '../context/ToastContext';
+import CommunicationPanel, { type CommunicationContact } from '../components/CommunicationPanel';
+import { SEED_APOTEK } from '../simulation/SimulationData';
 import styles from './Page.module.css';
 
 type FeedItem = { id: string; text: string; level: 'info' | 'warning' | 'danger' | 'success'; at: Date };
@@ -109,6 +111,14 @@ export default function CommandCenterPage() {
     refresh();
   }, [refresh, selectedCase, state.pasien, toast]);
 
+  const communicationContacts: CommunicationContact[] = [
+    ...state.rumahSakit.map((item) => ({ id: item.id, label: item.nama, kind: 'HOSPITAL' as const, status: item.statusKoneksi })),
+    ...SEED_APOTEK.map((item) => ({ id: item.id, label: item.nama, kind: 'PHARMACY' as const })),
+    ...state.dokter.map((item) => ({ id: item.id, label: item.nama, kind: 'DOCTOR' as const, status: item.status })),
+    ...state.driver.map((item) => ({ id: item.id, label: item.nama, kind: 'DRIVER' as const, status: item.status })),
+    ...state.ambulans.map((item) => ({ id: item.id, label: item.nomorUnit, kind: 'AMBULANCE' as const, status: item.status })),
+  ];
+
   const topFeed = useMemo(() => [...feed].reverse().slice(0, 12), [feed]);
 
   return (
@@ -170,6 +180,8 @@ export default function CommandCenterPage() {
           <section style={panelStyle}><strong>Activity Feed</strong><div style={{ maxHeight: 240, overflow: 'auto', marginTop: 8 }}>{topFeed.map((item) => <div key={item.id} style={{ padding: '8px 0', borderTop: '1px solid var(--color-border)', fontSize: 11 }}><div style={{ color: item.level === 'danger' ? 'var(--color-danger)' : 'var(--color-text)' }}>{item.text}</div><div style={muted}>{item.at.toLocaleTimeString('id-ID')}</div></div>)}{topFeed.length === 0 && <div style={muted}>Feed akan terisi ketika simulasi berjalan.</div>}</div></section>
         </div>
       </div>
+
+      <CommunicationPanel contacts={communicationContacts} />
     </div>
   );
 }
