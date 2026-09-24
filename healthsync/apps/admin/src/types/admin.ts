@@ -240,7 +240,15 @@ export interface PatientsApiResponse {
 
 // ── Prescriptions ─────────────────────────────────────────────────────────────
 
-export type PrescriptionStatus = 'ISSUED' | 'CONFIRMED' | 'DISPENSED' | 'DELIVERED' | 'CANCELLED';
+export type PrescriptionStatus =
+  | 'ISSUED'
+  | 'SENT_TO_PHARMACY'
+  | 'CONFIRMED'
+  | 'PREPARING'
+  | 'READY'
+  | 'DELIVERING'
+  | 'DELIVERED'
+  | 'CANCELLED';
 export type FulfillmentType = 'PICKUP' | 'DELIVERY';
 
 export interface Prescription {
@@ -269,7 +277,7 @@ export type ReferralStatus =
   | 'ARRIVED'
   | 'CANCELLED';
 
-export type UrgencyLevel = 'NORMAL' | 'URGENT' | 'EMERGENCY' | 'CRITICAL';
+export type UrgencyLevel = 'NORMAL' | 'URGENT' | 'CRITICAL';
 
 export interface Referral {
   id: string;
@@ -427,8 +435,11 @@ export interface NotificationRow {
 
 /** Response dari GET /v1/notifications */
 export interface NotificationsApiResponse {
-  data: NotificationRow[];
-  meta: { page: number; limit: number; total: number; totalPages: number };
+  data: {
+    notifications: NotificationRow[];
+    meta: { page: number; limit: number; total: number; pages: number };
+  };
+  meta?: { timestamp?: string };
 }
 
 /** Response dari GET /v1/notifications/unread-count */

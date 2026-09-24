@@ -217,11 +217,9 @@ export default function OverviewPage() {
   const activeAmbs = ambulances.filter((a) => activeStatuses.includes(a.status)).length;
 
   // ── Agregasi Rujukan ──
-  const pendingReferrals = referrals.filter((r) => r.status === 'PENDING').length;
+  const pendingReferrals = referrals.filter((r) => r.status === 'SENT').length;
   const inTransitReferrals = referrals.filter((r) => r.status === 'IN_TRANSIT').length;
-  const criticalReferrals = referrals.filter(
-    (r) => r.urgency_level === 'CRITICAL' || r.urgency_level === 'EMERGENCY',
-  ).length;
+  const criticalReferrals = referrals.filter((r) => r.urgency_level === 'CRITICAL').length;
 
   // ── Agregasi Rumah Sakit ──
   const totalBeds = hospitals.reduce((s, h) => s + (h.total_beds ?? 0), 0);
@@ -240,10 +238,9 @@ export default function OverviewPage() {
 
   // ── Data grafik batang: urgency rujukan ──
   const referralUrgencyData = [
-    { name: 'Rutin', value: referrals.filter((r) => r.urgency_level === 'ROUTINE').length, color: '#6b7280' },
+    { name: 'Normal', value: referrals.filter((r) => r.urgency_level === 'NORMAL').length, color: '#6b7280' },
     { name: 'Mendesak', value: referrals.filter((r) => r.urgency_level === 'URGENT').length, color: '#f59e0b' },
     { name: 'Kritis', value: referrals.filter((r) => r.urgency_level === 'CRITICAL').length, color: '#ef4444' },
-    { name: 'Darurat', value: referrals.filter((r) => r.urgency_level === 'EMERGENCY').length, color: '#7c2d12' },
   ].filter((d) => d.value > 0);
 
   // ── Service Health Check ──

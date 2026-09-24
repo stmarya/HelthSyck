@@ -27,7 +27,7 @@ const URGENCY_OPTIONS: { value: UrgencyLevel | ''; label: string }[] = [
   { value: '',          label: 'Semua Tingkat' },
   { value: 'NORMAL',    label: 'Normal' },
   { value: 'URGENT',    label: 'Urgent' },
-  { value: 'EMERGENCY', label: 'Darurat' },
+  { value: 'CRITICAL',  label: 'Kritis' },
 ];
 
 const STATUS_STYLE: Record<ReferralStatus, { bg: string; color: string }> = {
@@ -49,7 +49,6 @@ const STATUS_LABEL: Record<ReferralStatus, string> = {
 const URGENCY_STYLE: Record<string, { bg: string; color: string }> = {
   NORMAL:    { bg: 'var(--color-surface-2)',  color: 'var(--color-muted)' },
   URGENT:    { bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
-  EMERGENCY: { bg: 'var(--color-danger-bg)',  color: 'var(--color-danger)' },
   CRITICAL:  { bg: 'var(--color-danger-bg)',  color: 'var(--color-danger)' },
 };
 

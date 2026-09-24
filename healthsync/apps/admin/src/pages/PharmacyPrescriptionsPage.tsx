@@ -12,9 +12,10 @@ import styles from './Page.module.css';
 type PrescriptionStatus =
   | 'ISSUED'
   | 'SENT_TO_PHARMACY'
+  | 'CONFIRMED'
   | 'PREPARING'
   | 'READY'
-  | 'DISPENSED'
+  | 'DELIVERING'
   | 'DELIVERED'
   | 'CANCELLED';
 
@@ -43,9 +44,10 @@ interface PharmacyOption {
 const STATUS_META: Record<PrescriptionStatus, { label: string; bg: string; color: string }> = {
   ISSUED:            { label: 'Diterbitkan',   bg: '#eff6ff', color: '#2563eb' },
   SENT_TO_PHARMACY:  { label: 'Ke Apotek',     bg: '#fefce8', color: '#ca8a04' },
+  CONFIRMED:         { label: 'Dikonfirmasi',  bg: '#fef3c7', color: '#b45309' },
   PREPARING:         { label: 'Disiapkan',     bg: '#fff7ed', color: '#ea580c' },
   READY:             { label: 'Siap Ambil',    bg: '#f0fdf4', color: '#16a34a' },
-  DISPENSED:         { label: 'Diserahkan',    bg: '#f5f3ff', color: '#7c3aed' },
+  DELIVERING:        { label: 'Sedang Diantar', bg: '#f5f3ff', color: '#7c3aed' },
   DELIVERED:         { label: 'Dikirim',       bg: '#ecfdf5', color: '#059669' },
   CANCELLED:         { label: 'Dibatalkan',    bg: '#fef2f2', color: '#dc2626' },
 };

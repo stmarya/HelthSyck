@@ -110,6 +110,11 @@ class _DashboardDokterScreenState extends ConsumerState<DashboardDokterScreen> {
             icon: const Icon(Icons.local_hospital_outlined),
           ),
           IconButton(
+            tooltip: 'Notifikasi',
+            onPressed: () => context.push('/doctor/notifications'),
+            icon: const Icon(Icons.notifications_none),
+          ),
+          IconButton(
             tooltip: 'Muat ulang',
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh),

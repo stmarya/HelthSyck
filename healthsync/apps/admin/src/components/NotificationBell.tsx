@@ -57,7 +57,7 @@ export default function NotificationBell() {
       const res = await notificationClient.get<NotificationsApiResponse>(
         '/v1/notifications?unread=true&limit=10',
       );
-      setNotifications(res.data?.data ?? []);
+      setNotifications(res.data?.data?.notifications ?? []);
     } catch {
       setNotifications([]);
     } finally {
@@ -101,7 +101,7 @@ export default function NotificationBell() {
     setMarkingRead(true);
     try {
       const ids = notifications.map((n) => n.id);
-      await notificationClient.put('/v1/notifications/read', { ids });
+      await notificationClient.put('/v1/notifications/read', { notificationIds: ids });
       setUnreadCount(0);
       setNotifications([]);
     } catch {

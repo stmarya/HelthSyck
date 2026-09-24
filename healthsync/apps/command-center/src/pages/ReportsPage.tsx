@@ -117,7 +117,7 @@ function useReportData(periode: PeriodeDays): ReportData {
       const pendingKonsultasi = consultations.filter((c) => c.status === 'PENDING').length;
       const activeAmbulance   = ambulances.filter((a) => ['DISPATCHED', 'EN_ROUTE', 'AT_SCENE', 'TRANSPORTING'].includes(a.status)).length;
       const criticalAlerts    = alerts.filter((a) => a.severity === 'CRITICAL' || a.severity === 'HIGH').length;
-      const pendingReferrals  = referrals.filter((r) => r.status === 'PENDING').length;
+      const pendingReferrals  = referrals.filter((r) => r.status === 'SENT').length;
 
       const kpiShift: KpiShift[] = [
         { label: 'Konsultasi Aktif',  value: pendingKonsultasi, icon: '🩺', color: 'var(--color-info)',    keterangan: 'Status PENDING saat ini' },
@@ -165,9 +165,9 @@ function useReportData(periode: PeriodeDays): ReportData {
       // ── Distribusi urgensi rujukan ──
       const refUrgCount: Record<string, number> = {};
       referrals.forEach((r) => { refUrgCount[r.urgency_level] = (refUrgCount[r.urgency_level] ?? 0) + 1; });
-      const REF_COLORS: Record<string, string> = { ROUTINE: '#22c55e', URGENT: '#f59e0b', CRITICAL: '#f97316', EMERGENCY: '#ef4444' };
+      const REF_COLORS: Record<string, string> = { NORMAL: '#22c55e', URGENT: '#f59e0b', CRITICAL: '#ef4444' };
       const referralByUrgency: PieItem[] = Object.entries(refUrgCount).map(([k, v]) => ({
-        label: { ROUTINE: 'Rutin', URGENT: 'Mendesak', CRITICAL: 'Kritis', EMERGENCY: 'Darurat' }[k] ?? k,
+        label: { NORMAL: 'Normal', URGENT: 'Mendesak', CRITICAL: 'Kritis' }[k] ?? k,
         value: v,
         color: REF_COLORS[k] ?? '#9ca3af',
       }));

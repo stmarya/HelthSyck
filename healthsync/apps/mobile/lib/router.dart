@@ -41,6 +41,7 @@ import 'features/dokter/screens/prescription_create_screen.dart';
 import 'features/dokter/screens/prescription_detail_dokter_screen.dart';
 import 'features/dokter/screens/rujukan_dokter_screen.dart';
 import 'features/dokter/screens/riwayat_dokter_screen.dart';
+import 'features/dokter/screens/notifications_dokter_screen.dart';
 
 // ─────────────────────────────────────────────
 // Konstanta role — sesuai nilai dari database
@@ -146,6 +147,10 @@ GoRouter buildMultiRoleRouter(AuthState authState) {
       GoRoute(
         path: '/doctor/history',
         builder: (_, __) => const RiwayatDokterScreen(),
+      ),
+      GoRoute(
+        path: '/doctor/notifications',
+        builder: (_, __) => const NotificationsDokterScreen(),
       ),
 
       // ── Apotek ─────────────────────────────────────
