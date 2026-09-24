@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../core/providers/consultation_provider.dart';
+import '../core/providers/auth_provider.dart';
 
 class BookConsultationScreen extends ConsumerStatefulWidget {
   const BookConsultationScreen({super.key});
@@ -70,7 +71,8 @@ class _BookConsultationScreenState
     final consultation = await ref
         .read(consultationProvider.notifier)
         .bookConsultation(
-          doctorId: _doctorIdCtrl.text.trim(),
+          patientId: ref.read(authProvider).user?.patientId ?? '',
+          preferredDoctorId: _doctorIdCtrl.text.trim(),
           type: _type,
           chiefComplaint: _complaintCtrl.text.trim(),
           scheduledAt: _scheduledAt!,

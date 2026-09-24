@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import { Pool } from 'pg';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -66,17 +66,48 @@ const PaginationSchema = z.object({
   page:       z.coerce.number().int().min(1).default(1),
   limit:      z.coerce.number().int().min(1).max(100).default(20),
   pharmacyId: z.string().uuid().optional(),
-  status:     z.enum(['ISSUED','SENT_TO_PHARMACY','PREPARING','READY','DISPENSED','DELIVERED','CANCELLED']).optional(),
+  status:     z.enum(['ISSUED','SENT_TO_PHARMACY','CONFIRMED','PREPARING','READY','DELIVERING','DELIVERED','CANCELLED']).optional(),
   patientId:  z.string().uuid().optional(),
   doctorId:   z.string().uuid().optional(),
+  consultationId: z.string().uuid().optional(),
 });
+
+async function resolvePatientId(userId: string): Promise<string | null> {
+  const result = await pool.query<{ id: string }>(
+    'SELECT id FROM patients WHERE user_id = $1',
+    [userId],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+async function resolveDoctorId(userId: string): Promise<string | null> {
+  const result = await pool.query<{ id: string }>(
+    'SELECT id FROM doctors WHERE user_id = $1',
+    [userId],
+  );
+  return result.rows[0]?.id ?? null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────────────────────────────────────
 
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(requestIdMiddleware);
 
@@ -109,8 +140,9 @@ app.post(
       const consultResult = await pool.query<{
         status: string;
         doctor_id: string | null;
+        patient_id: string;
       }>(
-        `SELECT status, doctor_id FROM consultations WHERE id=$1`,
+        `SELECT status, doctor_id, patient_id FROM consultations WHERE id=$1`,
         [consultationId],
       );
       if (consultResult.rowCount === 0) {
@@ -118,15 +150,20 @@ app.post(
         return;
       }
 
-      const { status: consultStatus, doctor_id } = consultResult.rows[0]!;
+      const { status: consultStatus, doctor_id, patient_id: consultationPatientId } = consultResult.rows[0]!;
       if (consultStatus !== 'IN_PROGRESS' && consultStatus !== 'COMPLETED') {
         res.status(409).json(
           buildProblem(409, 'Conflict', 'Prescription can only be created for IN_PROGRESS or COMPLETED consultations', req.path, authReq.requestId),
         );
         return;
       }
-      if (doctor_id !== authReq.user.sub) {
+      const doctorId = await resolveDoctorId(authReq.user.sub);
+      if (!doctorId || doctor_id !== doctorId) {
         res.status(403).json(buildProblem(403, 'Forbidden', 'You are not the assigned doctor for this consultation', req.path, authReq.requestId));
+        return;
+      }
+      if (patientId !== consultationPatientId) {
+        res.status(422).json(buildProblem(422, 'Validation Error', 'patientId must match the consultation patient', req.path, authReq.requestId));
         return;
       }
 
@@ -156,7 +193,7 @@ app.post(
              (id, consultation_id, patient_id, doctor_id, status, expires_at)
            VALUES ($1, $2, $3, $4, 'ISSUED', NOW() + INTERVAL '30 days')
            RETURNING *`,
-          [prescriptionId, consultationId, patientId, authReq.user.sub],
+          [prescriptionId, consultationId, consultationPatientId, doctorId],
         );
 
         const insertedItems: unknown[] = [];
@@ -209,7 +246,7 @@ app.get(
     try {
       const rxResult = await pool.query(
         `SELECT p.*,
-                pat.full_name AS patient_name,
+                pat.name      AS patient_name,
                 u.email       AS doctor_email
          FROM prescriptions p
          JOIN patients pat ON pat.id = p.patient_id
@@ -221,6 +258,27 @@ app.get(
 
       if (rxResult.rowCount === 0) {
         res.status(404).json(buildProblem(404, 'Not Found', 'Prescription not found', req.path, authReq.requestId));
+        return;
+      }
+
+      const prescription = rxResult.rows[0] as {
+        patient_id: string;
+        doctor_id: string;
+        pharmacy_id: string | null;
+        status: string;
+      };
+      let canRead = authReq.user.role === 'ADMIN' || authReq.user.role === 'COMMAND_CENTER';
+      if (authReq.user.role === 'PATIENT') {
+        const patientId = await resolvePatientId(authReq.user.sub);
+        canRead = patientId === prescription.patient_id;
+      } else if (authReq.user.role === 'DOCTOR') {
+        const doctorId = await resolveDoctorId(authReq.user.sub);
+        canRead = doctorId === prescription.doctor_id;
+      } else if (authReq.user.role === 'PHARMACIST') {
+        canRead = prescription.pharmacy_id === authReq.user.sub || prescription.status === 'ISSUED';
+      }
+      if (!canRead) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You are not authorized to view this prescription', req.path, authReq.requestId));
         return;
       }
 
@@ -257,7 +315,7 @@ app.get(
       return;
     }
 
-    const { page, limit, pharmacyId, status, patientId, doctorId } = parsed.data;
+    const { page, limit, pharmacyId, status, patientId, doctorId, consultationId } = parsed.data;
     const offset = (page - 1) * limit;
     const { role, sub } = authReq.user;
 
@@ -268,9 +326,19 @@ app.get(
       const addParam = (v: unknown): string => { params.push(v); return `$${params.length}`; };
 
       if (role === 'PATIENT') {
-        conditions.push(`p.patient_id=${addParam(sub)}`);
+        const profileId = await resolvePatientId(sub);
+        if (!profileId) {
+          res.status(403).json(buildProblem(403, 'Forbidden', 'Patient profile is not complete', req.path, authReq.requestId));
+          return;
+        }
+        conditions.push(`p.patient_id=${addParam(profileId)}`);
       } else if (role === 'DOCTOR') {
-        conditions.push(`p.doctor_id=${addParam(sub)}`);
+        const profileId = await resolveDoctorId(sub);
+        if (!profileId) {
+          res.status(403).json(buildProblem(403, 'Forbidden', 'Doctor profile is not registered', req.path, authReq.requestId));
+          return;
+        }
+        conditions.push(`p.doctor_id=${addParam(profileId)}`);
       } else if (role === 'PHARMACIST') {
         conditions.push(`(p.pharmacy_id=${addParam(sub)} OR p.status='ISSUED')`);
       }
@@ -280,6 +348,7 @@ app.get(
         if (patientId)  conditions.push(`p.patient_id=${addParam(patientId)}`);
         if (doctorId)   conditions.push(`p.doctor_id=${addParam(doctorId)}`);
       }
+      if (consultationId) conditions.push(`p.consultation_id=${addParam(consultationId)}`);
       if (status) conditions.push(`p.status=${addParam(status)}`);
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -336,7 +405,8 @@ app.put(
       }
 
       const { patient_id, status } = rxResult.rows[0]!;
-      if (patient_id !== authReq.user.sub) {
+      const patientId = await resolvePatientId(authReq.user.sub);
+      if (!patientId || patient_id !== patientId) {
         res.status(403).json(buildProblem(403, 'Forbidden', 'This prescription does not belong to you', req.path, authReq.requestId));
         return;
       }

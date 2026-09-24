@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import { Pool } from 'pg';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
@@ -14,6 +14,10 @@ import {
   AuthenticatedRequest,
 } from '@healthsync/shared';
 
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
+
 /** Non-blocking auth — attaches req.user if token valid, always calls next() */
 function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
   const authHeader = req.headers['authorization'];
@@ -21,7 +25,7 @@ function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
     try {
       const raw = jwt.verify(
         authHeader.slice(7),
-        process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production',
+        JWT_SECRET,
       );
       if (raw && typeof raw === 'object' && 'sub' in raw) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -91,8 +95,22 @@ const UpdatePharmacySchema = CreatePharmacySchema.partial();
 // App
 // ─────────────────────────────────────────────────────────────────────────────
 
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(requestIdMiddleware);
 
@@ -346,7 +364,7 @@ app.get(
 
     try {
       const result = await pool.query(
-        `SELECT id, generic_name, brand_name, dosage_form, strength, requires_prescription
+        `SELECT id, generic_name, brand_name, dosage_form, strength, unit, drug_class, requires_prescription
          FROM drugs
          WHERE generic_name ILIKE '%' || $1 || '%'
             OR brand_name   ILIKE '%' || $1 || '%'

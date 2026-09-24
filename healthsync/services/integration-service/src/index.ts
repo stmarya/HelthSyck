@@ -1,11 +1,13 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import jwt from 'jsonwebtoken';
 import { z, ZodError } from 'zod';
 import crypto from 'crypto';
 
 const PORT = parseInt(process.env['PORT'] ?? '3010', 10);
-const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
 const SERVICE_NAME = 'integration-service';
 
 // ─────────────────────────────────────────────
@@ -64,41 +66,22 @@ function buildProblem(status: number, title: string, detail: string, instance: s
   return { type: `https://errors.healthsync.id/${title.toLowerCase().replace(/\s+/g, '-')}`, title, status, detail, instance, requestId: crypto.randomUUID() };
 }
 
-function ok<T>(res: Response, data: T, status = 200): void {
-  res.status(status).json({ data, meta: { timestamp: new Date().toISOString() } });
-}
-
-// ─────────────────────────────────────────────
-// SATUSEHAT helpers (placeholders)
-// ─────────────────────────────────────────────
-
-async function getSatusehatToken(): Promise<string> {
-  // TODO: POST SATUSEHAT_BASE_URL/oauth2/v1/accesstoken?grant_type=client_credentials
-  //       Basic auth: btoa(SATUSEHAT_CLIENT_ID:SATUSEHAT_CLIENT_SECRET)
-  //       Cache token in Redis with TTL from expires_in
-  return 'placeholder-token';
-}
-
-async function syncFhirResource(resourceType: string, resourceId: string): Promise<void> {
-  await getSatusehatToken(); // will be used when FHIR sync is implemented
-  // TODO: Build FHIR R4 resource payload from internal data
-  // TODO: PUT SATUSEHAT_BASE_URL/fhir-r4/v1/${resourceType}/${resourceId}
-  console.log(`[satusehat] sync ${resourceType}/${resourceId}`);
-}
-
-// ─────────────────────────────────────────────
-// BPJS helpers (placeholders)
-// ─────────────────────────────────────────────
-
-function buildBpjsSignature(timestamp: string): string {
-  // BPJS HMAC-SHA256 signature: HMAC_SHA256(CONS_ID + "&" + timestamp, SECRET_KEY)
-  const consId = process.env['BPJS_CONS_ID'] ?? '';
-  const secretKey = process.env['BPJS_SECRET_KEY'] ?? '';
-  return crypto.createHmac('sha256', secretKey).update(`${consId}&${timestamp}`).digest('base64');
-}
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
 
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
@@ -116,16 +99,12 @@ app.post('/v1/satusehat/sync', authenticate, async (req: Request, res: Response)
     res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
     return;
   }
-  const { resourceType, resourceId, action } = parsed.data;
-  await syncFhirResource(resourceType, resourceId);
-  // TODO: Record sync attempt in integration_logs table
-  ok(res, { syncId: crypto.randomUUID(), resourceType, resourceId, action, status: 'SYNCED', syncedAt: new Date().toISOString() });
+  res.status(501).json(buildProblem(501, 'Not Implemented', 'SATUSEHAT integration is not enabled', req.path));
 });
 
 /** GET /v1/satusehat/status — check SATUSEHAT connection status */
 app.get('/v1/satusehat/status', authenticate, async (_req: Request, res: Response) => {
-  // TODO: Ping SATUSEHAT health endpoint and return latency
-  ok(res, { provider: 'SATUSEHAT', status: 'CONNECTED', latencyMs: 0, checkedAt: new Date().toISOString() });
+  res.status(501).json(buildProblem(501, 'Not Implemented', 'SATUSEHAT integration is not enabled', '/v1/satusehat/status'));
 });
 
 // ─────────────────────────────────────────────
@@ -139,12 +118,7 @@ app.post('/v1/bpjs/eligibility', authenticate, (req: Request, res: Response) => 
     res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
     return;
   }
-  const { nik } = parsed.data;
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  buildBpjsSignature(timestamp); // will be used in actual BPJS API call
-  // TODO: GET BPJS_BASE_URL/peserta/nik/${nik}
-  //       Headers: X-cons-id, X-timestamp, X-signature, user_key
-  ok(res, { nik, isActive: true, bpjsClass: 'I', message: 'Eligibility check placeholder' });
+  res.status(501).json(buildProblem(501, 'Not Implemented', 'BPJS integration is not enabled', req.path));
 });
 
 /** POST /v1/bpjs/sep — create SEP (Surat Eligibilitas Peserta) */
@@ -154,11 +128,8 @@ app.post('/v1/bpjs/sep', authenticate, (req: Request, res: Response) => {
     res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
     return;
   }
-  const { patientId, bpjsNumber, visitType, diagnosisCode } = parsed.data;
-  // TODO: POST BPJS_BASE_URL/sep/2.0/insert
-  //       Build request body per BPJS API spec
-  //       Store SEP number in integration_logs
-  ok(res, { sepId: crypto.randomUUID(), patientId, bpjsNumber, visitType, diagnosisCode, sepNumber: `SEP-${Date.now()}`, status: 'CREATED', createdAt: new Date().toISOString() }, 201);
+  void parsed.data;
+  res.status(501).json(buildProblem(501, 'Not Implemented', 'BPJS integration is not enabled', req.path));
 });
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

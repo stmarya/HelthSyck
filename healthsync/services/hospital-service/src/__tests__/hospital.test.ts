@@ -14,6 +14,27 @@ jest.mock('pg', () => {
     if (s === 'SELECT 1') return { rows: [{ '?column?': 1 }] };
     if (s.includes('COUNT(*)')) return { rows: [{ count: '2' }] };
 
+    if (s.includes('FROM DOCTORS') && s.includes('WHERE D.USER_ID')) {
+      return {
+        rows: [{
+          id: 'doctor-uuid-1',
+          user_id: 'doctor-uuid-1',
+          specialization: 'CARDIOLOGY',
+          is_available: true,
+          email: 'doctor@healthsync.id',
+          hospital_name: 'RS Harapan Bangsa',
+        }],
+        rowCount: 1,
+      };
+    }
+
+    if (s.startsWith('UPDATE DOCTORS')) {
+      return {
+        rows: [{ id: 'doctor-uuid-1', user_id: 'doctor-uuid-1', is_available: true }],
+        rowCount: 1,
+      };
+    }
+
     if (s.startsWith('UPDATE HOSPITALS') && params) {
       const id = params[params.length - 1];
       if (id === 'hosp-uuid-1') return { rows: [{ id, available_beds: 15, icu_available: 5 }], rowCount: 1 };
@@ -57,6 +78,7 @@ const makeToken = (role: string, sub = `${role}-uuid-1`) =>
   jwt.sign({ sub, role }, JWT_SECRET, { expiresIn: '1h' });
 
 const patientToken = makeToken('PATIENT',       'patient-uuid-1');
+const doctorToken  = makeToken('DOCTOR',        'doctor-uuid-1');
 const adminToken   = makeToken('ADMIN',         'admin-uuid-1');
 const cmdToken     = makeToken('COMMAND_CENTER','cmd-uuid-1');
 
@@ -98,6 +120,32 @@ describe('hospital-service', () => {
         .get('/v1/hospitals?specialization=CARDIOLOGY')
         .set('Authorization', `Bearer ${adminToken}`);
       expect([200]).toContain(res.status);
+    });
+  });
+
+  describe('Doctor profile and availability', () => {
+    it('DOCTOR can load their own profile', async () => {
+      const res = await request(app)
+        .get('/v1/doctors/me')
+        .set('Authorization', `Bearer ${doctorToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveProperty('specialization', 'CARDIOLOGY');
+    });
+
+    it('PATIENT cannot load the Doctor profile endpoint', async () => {
+      const res = await request(app)
+        .get('/v1/doctors/me')
+        .set('Authorization', `Bearer ${patientToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('DOCTOR can update their availability', async () => {
+      const res = await request(app)
+        .patch('/v1/doctors/me/availability')
+        .set('Authorization', `Bearer ${doctorToken}`)
+        .send({ isAvailable: true });
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveProperty('is_available', true);
     });
   });
 

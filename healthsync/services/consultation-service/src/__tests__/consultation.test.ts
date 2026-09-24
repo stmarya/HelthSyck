@@ -16,7 +16,19 @@ jest.mock('pg', () => {
 
     // Patient exists check
     if (s.includes('FROM PATIENTS') && s.includes('= $1')) {
-      return { rows: [{ id: params?.[0] ?? 'patient-uuid-1' }], rowCount: 1 };
+      return {
+        rows: [{
+          id: params?.[0] === 'patient-uuid-1'
+            ? 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
+            : params?.[0] ?? 'patient-uuid-1',
+        }],
+        rowCount: 1,
+      };
+    }
+
+    // Doctor profile lookup
+    if (s.includes('FROM DOCTORS') && s.includes('= $1')) {
+      return { rows: [{ id: 'doctor-uuid-1' }], rowCount: 1 };
     }
 
     // Active consultation check

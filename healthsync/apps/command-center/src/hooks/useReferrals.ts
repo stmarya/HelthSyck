@@ -8,8 +8,8 @@ export interface Referral {
   patient_id: string;
   from_hospital_id: string | null;
   to_hospital_id: string | null;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'IN_TRANSIT' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED';
-  urgency_level: 'ROUTINE' | 'URGENT' | 'CRITICAL' | 'EMERGENCY';
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
+  urgency_level: 'NORMAL' | 'URGENT' | 'CRITICAL';
   reason: string | null;
   sent_at: string | null;
   accepted_at: string | null;
@@ -59,7 +59,7 @@ export function useReferrals(pollIntervalMs = 15000) {
     return () => clearInterval(interval);
   }, [fetchReferrals, pollIntervalMs]);
 
-  const emergencyCount = referrals.filter((r) => r.urgency_level === 'CRITICAL' || r.urgency_level === 'EMERGENCY').length;
+  const emergencyCount = referrals.filter((r) => r.urgency_level === 'CRITICAL').length;
   const inTransitCount = referrals.filter((r) => r.status === 'IN_TRANSIT').length;
 
   return {

@@ -52,6 +52,16 @@ spec:
                 secretKeyRef:
                   name: healthsync-secrets
                   key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: redis-url
+            - name: CORS_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: cors-origins
           resources:
             requests:
               cpu: "100m"

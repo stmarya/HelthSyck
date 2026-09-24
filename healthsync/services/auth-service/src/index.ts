@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
@@ -11,7 +11,9 @@ import Redis from 'ioredis';
 // Config
 // ─────────────────────────────────────────────
 const PORT = parseInt(process.env['PORT'] ?? '3001', 10);
-const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
 const JWT_EXPIRES_IN = '15m';
 const REFRESH_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const SERVICE_NAME = 'auth-service';
@@ -72,7 +74,10 @@ const RegisterSchema = z.object({
     .string()
     .min(8, 'Password must be at least 8 characters')
     .regex(PASSWORD_REGEX, 'Password must contain uppercase, lowercase, number, and special character'),
-  role: z.enum(['PATIENT', 'DOCTOR', 'COMMAND_CENTER', 'PHARMACIST', 'AMBULANCE_DRIVER']).default('PATIENT'),
+  // Privileged roles are provisioned by an administrator after verification.
+  // Public registration must never be able to self-assign a clinical or
+  // operational role.
+  role: z.literal('PATIENT').default('PATIENT'),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   phone: z.string().min(8).optional(),
 });
@@ -191,8 +196,22 @@ function authenticate(req: Request, res: Response, next: NextFunction): void {
 // ─────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Request ID injection
@@ -472,8 +491,23 @@ app.post('/v1/auth/login', async (req: Request, res: Response, next: NextFunctio
 
     await writeAuditLog(user.id, 'LOGIN_SUCCESS', req);
 
+    const profile = await pool.query<{ patient_id: string | null; doctor_id: string | null }>(
+      `SELECT
+         (SELECT id FROM patients WHERE user_id = $1) AS patient_id,
+         (SELECT id FROM doctors WHERE user_id = $1) AS doctor_id`,
+      [user.id],
+    );
+
     res.json({
-      data: { userId: user.id, email: user.email, role: user.role, accessToken, refreshToken },
+      data: {
+        userId: user.id,
+        patientId: profile.rows[0]?.patient_id ?? null,
+        doctorId: profile.rows[0]?.doctor_id ?? null,
+        email: user.email,
+        role: user.role,
+        accessToken,
+        refreshToken,
+      },
       meta: { timestamp: new Date().toISOString() },
     });
   } catch (err) {
@@ -565,6 +599,12 @@ app.get('/v1/auth/me', authenticate, async (req: Request, res: Response, next: N
     res.json({
       data: {
         userId: user.id,
+        patientId: user.role === 'PATIENT'
+          ? (await getPool().query<{ id: string }>('SELECT id FROM patients WHERE user_id = $1', [user.id])).rows[0]?.id ?? null
+          : null,
+        doctorId: user.role === 'DOCTOR'
+          ? (await getPool().query<{ id: string }>('SELECT id FROM doctors WHERE user_id = $1', [user.id])).rows[0]?.id ?? null
+          : null,
         email: user.email,
         phone: user.phone,
         role: user.role,

@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { z, ZodError } from 'zod';
@@ -10,7 +10,9 @@ import Redis from 'ioredis';
 // Config
 // ─────────────────────────────────────────────
 const PORT = parseInt(process.env['PORT'] ?? '3005', 10);
-const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
 const SERVICE_NAME = 'ambulance-service';
 
 // ─────────────────────────────────────────────
@@ -202,8 +204,22 @@ function requireRole(...roles: string[]) {
 // ─────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use((req: Request, _res: Response, next: NextFunction) => {
   req.headers['x-request-id'] = req.headers['x-request-id'] ?? crypto.randomUUID();

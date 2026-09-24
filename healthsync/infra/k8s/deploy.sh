@@ -29,6 +29,12 @@ MANIFESTS=(
 
 echo "==> HealthSync K8s $ACTION"
 
+if [[ "$ACTION" == "apply" ]] && grep -q "REPLACE_WITH_" "$K8S_DIR/secrets.yaml"; then
+  echo "ERROR: infra/k8s/secrets.yaml masih berisi placeholder secret."
+  echo "Isi secret melalui secret manager/kubectl sebelum menjalankan deploy."
+  exit 1
+fi
+
 for manifest in "${MANIFESTS[@]}"; do
   file="$K8S_DIR/$manifest"
   if [[ -f "$file" ]]; then
@@ -48,7 +54,7 @@ if [[ "$ACTION" == "apply" ]]; then
     notification-service integration-service iot-ingestion alert-service
   )
   for dep in "${DEPLOYMENTS[@]}"; do
-    kubectl rollout status deployment/"$dep" -n "$NAMESPACE" --timeout=120s || true
+    kubectl rollout status deployment/"$dep" -n "$NAMESPACE" --timeout=120s
   done
   echo ""
   echo "==> Status"

@@ -7,16 +7,6 @@ import '../core/models/consultation.dart';
 import '../core/providers/consultation_provider.dart';
 
 // ─────────────────────────────────────────────
-// Per-consultation messages provider
-// ─────────────────────────────────────────────
-
-final _messagesProvider = FutureProvider.family<List<ConsultationMessage>, String>(
-  (ref, consultationId) => ref
-      .read(consultationProvider.notifier)
-      .fetchMessages(consultationId),
-);
-
-// ─────────────────────────────────────────────
 // Consultation room screen (telemedicine chat)
 // ─────────────────────────────────────────────
 
@@ -110,8 +100,6 @@ class _ConsultationRoomScreenState
         .firstOrNull;
 
     final theme = Theme.of(context);
-    final myId = ''; // pulled from authProvider in real usage
-
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -133,19 +121,6 @@ class _ConsultationRoomScreenState
               ),
           ],
         ),
-        actions: [
-          if (consultation?.type == 'telemedicine')
-            IconButton(
-              icon: const Icon(Icons.videocam_outlined),
-              tooltip: 'Start Video',
-              onPressed: () {
-                // TODO: integrate WebRTC/video SDK
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Video call — coming soon')),
-                );
-              },
-            ),
-        ],
       ),
       body: Column(
         children: [

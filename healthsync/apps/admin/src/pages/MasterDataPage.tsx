@@ -36,40 +36,17 @@ function eksporCsv(header: string[], rows: (string | number)[][], namaFile: stri
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mock data fallback — digunakan saat backend tidak mengembalikan data
-// (Layanan & Fasilitas belum ada endpoint backend)
+// No mock fallback — layanan & fasilitas menunggu endpoint backend
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MOCK_SERVICE_TYPES: ServiceType[] = [
-  { id: 'st-1', code: 'RJ',   name: 'Rawat Jalan',  isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-2', code: 'RI',   name: 'Rawat Inap',   isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-3', code: 'IGD',  name: 'IGD',          isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-4', code: 'LAB',  name: 'Laboratorium', isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-5', code: 'RAD',  name: 'Radiologi',    isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-6', code: 'FARM', name: 'Farmasi',      isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-7', code: 'FT',   name: 'Fisioterapi',  isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-8', code: 'OP',   name: 'Operasi',      isActive: false, createdAt: new Date().toISOString() },
-];
+const MOCK_SERVICE_TYPES: ServiceType[] = [];
 
-const MOCK_FACILITIES: FacilityCategory[] = [
-  { id: 'fc-1', code: 'PARKIR',  name: 'Parkir',   isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-2', code: 'WIFI',    name: 'WiFi',      isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-3', code: 'MUSHOLA', name: 'Mushola',  isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-4', code: 'ATM',     name: 'ATM',       isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-5', code: 'KANTIN',  name: 'Kantin',   isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-6', code: 'AMBU',    name: 'Ambulans', isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-7', code: 'HELIPAD', name: 'Helipad',  isActive: false, createdAt: new Date().toISOString() },
-  { id: 'fc-8', code: 'BPJS',    name: 'BPJS',      isActive: true,  createdAt: new Date().toISOString() },
-];
 
-const INIT_CONFIGS: SystemConfig[] = [
-  { key: 'MAX_CONSULTATION_DURATION', value: '60',    type: 'number',  description: 'Durasi maksimum konsultasi (menit)', updatedAt: new Date().toISOString() },
-  { key: 'DEFAULT_REMINDER_MINUTES',  value: '30',    type: 'number',  description: 'Pengingat default sebelum jadwal (menit)', updatedAt: new Date().toISOString() },
-  { key: 'ENABLE_VIDEO_CALL',         value: 'true',  type: 'boolean', description: 'Aktifkan fitur video call', updatedAt: new Date().toISOString() },
-  { key: 'MAINTENANCE_MODE',          value: 'false', type: 'boolean', description: 'Mode pemeliharaan sistem', updatedAt: new Date().toISOString() },
-  { key: 'MAX_FILE_UPLOAD_MB',        value: '10',    type: 'number',  description: 'Batas ukuran file upload (MB)', updatedAt: new Date().toISOString() },
-  { key: 'SESSION_TIMEOUT_MINUTES',   value: '30',    type: 'number',  description: 'Batas waktu sesi pengguna (menit)', updatedAt: new Date().toISOString() },
-];
+const MOCK_FACILITIES: FacilityCategory[] = [];
+
+
+const INIT_CONFIGS: SystemConfig[] = [];
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipe — DoctorRow dari GET /v1/doctors
@@ -100,7 +77,7 @@ function BannerSimulasi() {
     }}>
       <span>⚠</span>
       <span>
-        Data ini berjalan dalam <strong>mode simulasi</strong> — perubahan tidak tersimpan ke database.
+        Endpoint layanan & fasilitas belum tersedia — perubahan tidak akan disimpan.
         Endpoint backend untuk tipe layanan & fasilitas belum tersedia.
       </span>
     </div>

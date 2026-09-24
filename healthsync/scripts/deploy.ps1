@@ -19,6 +19,7 @@
 
 $ErrorActionPreference = "Stop"
 $ROOT = Split-Path -Parent $PSScriptRoot
+$ENV_FILE = Join-Path $ROOT "infra\docker\.env.dev"
 
 # ── Warna helper ────────────────────────────────────────────
 function Write-Step  { param($msg) Write-Host "`n▶  $msg" -ForegroundColor Cyan }
@@ -31,6 +32,10 @@ function Write-Banner {
   Write-Host "║   HealthSync Indonesia — First-Time Deploy       ║" -ForegroundColor Magenta
   Write-Host "╚══════════════════════════════════════════════════╝" -ForegroundColor Magenta
   Write-Host ""
+}
+
+if (-not (Test-Path $ENV_FILE)) {
+  Write-Fail "File $ENV_FILE belum ada. Jalankan: Copy-Item infra/docker/.env.dev.example infra/docker/.env.dev"
 }
 
 Write-Banner
@@ -91,7 +96,7 @@ Set-Location $ROOT
 
 docker compose `
   -f infra/docker/docker-compose.dev.yml `
-  --env-file infra/docker/.env.dev `
+  --env-file `"$ENV_FILE`" `
   up -d --build 2>&1 | Select-String "Container|Error|Warning" | Select-Object -Last 20
 
 if ($LASTEXITCODE -ne 0) { Write-Fail "docker compose up gagal." }
@@ -122,7 +127,7 @@ foreach ($svc in $infraServices) {
 # ═══════════════════════════════════════════════════════════
 # STEP 6 — Tunggu migrasi database selesai
 # ═══════════════════════════════════════════════════════════
-Write-Step "STEP 6/7 — Menunggu migrasi database (V001-V007) selesai"
+Write-Step "STEP 6/7 — Menunggu migrasi database (V001-V012) selesai"
 
 $elapsed = 0
 do {
@@ -134,7 +139,7 @@ do {
 
 $exitCode = docker inspect --format='{{.State.ExitCode}}' hs-migrate 2>$null
 if ($exitCode -ne "0") { Write-Fail "Migrasi database gagal (exit code: $exitCode). Cek: docker logs hs-migrate" }
-Write-OK "Migrasi database V001-V007 berhasil"
+Write-OK "Migrasi database V001-V012 berhasil"
 
 # ═══════════════════════════════════════════════════════════
 # STEP 7 — Verifikasi semua services

@@ -37,7 +37,7 @@ function getMockPool(): { query: jest.Mock } {
 function makeJwt(sub = 'u1', role = 'PATIENT'): string {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const jwt = require('jsonwebtoken') as typeof import('jsonwebtoken');
-  return jwt.sign({ sub, role }, 'dev-secret-change-in-production', { expiresIn: '1h' });
+  return jwt.sign({ sub, role }, process.env['JWT_SECRET'] ?? 'test-secret', { expiresIn: '1h' });
 }
 
 // ─────────────────────────────────────────────

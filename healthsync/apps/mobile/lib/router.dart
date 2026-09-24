@@ -34,6 +34,14 @@ import 'features/ambulans/screens/dashboard_ambulans_screen.dart';
 import 'features/ambulans/screens/panggilan_darurat_screen.dart';
 import 'features/ambulans/screens/navigasi_darurat_screen.dart';
 import 'features/ambulans/screens/riwayat_tugas_screen.dart';
+import 'features/dokter/screens/dashboard_dokter_screen.dart';
+import 'features/dokter/screens/consultation_detail_dokter_screen.dart';
+import 'features/dokter/screens/patient_clinical_screen.dart';
+import 'features/dokter/screens/prescription_create_screen.dart';
+import 'features/dokter/screens/prescription_detail_dokter_screen.dart';
+import 'features/dokter/screens/rujukan_dokter_screen.dart';
+import 'features/dokter/screens/riwayat_dokter_screen.dart';
+import 'features/dokter/screens/notifications_dokter_screen.dart';
 
 // ─────────────────────────────────────────────
 // Konstanta role — sesuai nilai dari database
@@ -99,6 +107,52 @@ GoRouter buildMultiRoleRouter(AuthState authState) {
       GoRoute(path: '/ambulance',     builder: (_, __) => const AmbulanceScreen()),
       GoRoute(path: '/profile',       builder: (_, __) => const ProfileScreen()),
 
+      // ── Dokter ─────────────────────────────────────
+      GoRoute(path: '/doctor', builder: (_, __) => const DashboardDokterScreen()),
+      GoRoute(
+        path: '/doctor/consultations/:id',
+        builder: (_, s) => ConsultationDetailDokterScreen(
+          consultationId: s.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/patients/:patientId',
+        builder: (_, s) => PatientClinicalScreen(
+          patientId: s.pathParameters['patientId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/prescriptions/new/:consultationId/:patientId',
+        builder: (_, s) => PrescriptionCreateScreen(
+          consultationId: s.pathParameters['consultationId']!,
+          patientId: s.pathParameters['patientId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/prescriptions/:prescriptionId',
+        builder: (_, s) => PrescriptionDetailDokterScreen(
+          prescriptionId: s.pathParameters['prescriptionId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/referrals',
+        builder: (_, __) => const RujukanDokterScreen(),
+      ),
+      GoRoute(
+        path: '/doctor/referrals/new/:patientId',
+        builder: (_, s) => RujukanDokterScreen(
+          patientId: s.pathParameters['patientId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/history',
+        builder: (_, __) => const RiwayatDokterScreen(),
+      ),
+      GoRoute(
+        path: '/doctor/notifications',
+        builder: (_, __) => const NotificationsDokterScreen(),
+      ),
+
       // ── Apotek ─────────────────────────────────────
       GoRoute(path: '/apotek',            builder: (_, __) => const DashboardApotekScreen()),
       GoRoute(path: '/apotek/resep',      builder: (_, __) => const ResepMasukScreen()),
@@ -128,6 +182,7 @@ GoRouter buildMultiRoleRouter(AuthState authState) {
 
 String _dashboardForRole(String role) {
   switch (role.toUpperCase()) {
+    case AppRole.dokter:   return '/doctor';
     case AppRole.apotek:   return '/apotek';
     case AppRole.driver:   return '/driver';
     case AppRole.ambulans: return '/ambulans';

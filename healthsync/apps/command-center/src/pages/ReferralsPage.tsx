@@ -12,7 +12,8 @@ import styles from './Page.module.css';
 // ─── Konfigurasi badge ──────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  PENDING:    { label: 'Menunggu',         cls: styles.badgeWarning },
+  DRAFT:      { label: 'Draft',            cls: styles.badgeWarning },
+  SENT:       { label: 'Terkirim',         cls: styles.badgeWarning },
   ACCEPTED:   { label: 'Diterima',         cls: styles.badgeOk },
   REJECTED:   { label: 'Ditolak',          cls: styles.badgeCritical },
   IN_TRANSIT: { label: 'Dalam Perjalanan', cls: styles.badgePending },
@@ -22,10 +23,9 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
 };
 
 const URGENCY_CONFIG: Record<string, { label: string; cls: string; color: string; barColor: string }> = {
-  ROUTINE:   { label: 'Rutin',    cls: styles.badgeOk,       color: 'var(--color-success)', barColor: '#10b981' },
+  NORMAL:    { label: 'Normal',   cls: styles.badgeOk,       color: 'var(--color-success)', barColor: '#10b981' },
   URGENT:    { label: 'Mendesak', cls: styles.badgeWarning,  color: 'var(--color-warning)', barColor: '#f59e0b' },
   CRITICAL:  { label: 'Kritis',   cls: styles.badgeCritical, color: 'var(--color-danger)',  barColor: '#ef4444' },
-  EMERGENCY: { label: 'Darurat',  cls: styles.badgeCritical, color: 'var(--color-danger)',  barColor: '#dc2626' },
 };
 
 // ─── Tipe aksi yang tersedia per status ────────────────────────────────────
@@ -39,7 +39,7 @@ interface AksiRujukan {
 
 function getAksiTersedia(status: string): AksiRujukan[] {
   switch (status) {
-    case 'PENDING':
+    case 'SENT':
       return [
         { label: '✓ Terima',    endpoint: 'accept',  style: 'primary',    konfirmasi: 'Terima rujukan ini?' },
         { label: '✗ Tolak',     endpoint: 'reject',  style: 'danger',     konfirmasi: 'Tolak rujukan ini?' },
@@ -155,7 +155,7 @@ export default function ReferralsPage() {
     if (r.urgency_level) urgencyCounts[r.urgency_level] = (urgencyCounts[r.urgency_level] ?? 0) + 1;
   }
 
-  const pendingCount    = statusCounts['PENDING']    ?? 0;
+  const pendingCount    = statusCounts['SENT']       ?? 0;
   const acceptedCount   = statusCounts['ACCEPTED']   ?? 0;
   const transitCount    = statusCounts['IN_TRANSIT'] ?? 0;
   const completedCount  = statusCounts['COMPLETED']  ?? 0;
@@ -171,7 +171,7 @@ export default function ReferralsPage() {
   ].filter((s) => s.value > 0 || pendingCount > 0);
 
   // Bar chart urgensi
-  const urgencyChartData = ['ROUTINE', 'URGENT', 'CRITICAL', 'EMERGENCY'].map((key) => ({
+  const urgencyChartData = ['NORMAL', 'URGENT', 'CRITICAL'].map((key) => ({
     name: URGENCY_CONFIG[key]?.label ?? key,
     value: urgencyCounts[key] ?? 0,
     color: URGENCY_CONFIG[key]?.barColor ?? '#9ca3af',
@@ -181,10 +181,19 @@ export default function ReferralsPage() {
   const handleAksi = useCallback(
     async (referralId: string, endpoint: string, konfirmasi?: string) => {
       if (konfirmasi && !window.confirm(konfirmasi)) return;
+      let body: Record<string, string> = {};
+      if (endpoint === 'reject') {
+        const rejectedReason = window.prompt('Masukkan alasan penolakan (minimal 10 karakter):')?.trim() ?? '';
+        if (rejectedReason.length < 10) {
+          setActionError('Alasan penolakan minimal 10 karakter.');
+          return;
+        }
+        body = { rejectedReason };
+      }
       setActionLoading((prev) => ({ ...prev, [`${referralId}-${endpoint}`]: true }));
       setActionError(null);
       try {
-        await referralClient.put(`/v1/referrals/${referralId}/${endpoint}`);
+        await referralClient.put(`/v1/referrals/${referralId}/${endpoint}`, body);
         setActionSuccess(`Aksi "${endpoint}" berhasil diterapkan.`);
         setTimeout(() => setActionSuccess(null), 4000);
         appendLog({
@@ -328,12 +337,11 @@ export default function ReferralsPage() {
             }}
           >
             <option value="">Semua Status</option>
-            <option value="PENDING">Menunggu</option>
+            <option value="SENT">Terkirim</option>
             <option value="ACCEPTED">Diterima</option>
             <option value="REJECTED">Ditolak</option>
             <option value="IN_TRANSIT">Dalam Perjalanan</option>
             <option value="ARRIVED">Tiba</option>
-            <option value="COMPLETED">Selesai</option>
             <option value="CANCELLED">Dibatalkan</option>
           </select>
           <select
@@ -346,10 +354,9 @@ export default function ReferralsPage() {
             }}
           >
             <option value="">Semua Urgensi</option>
-            <option value="ROUTINE">Rutin</option>
+            <option value="NORMAL">Normal</option>
             <option value="URGENT">Mendesak</option>
             <option value="CRITICAL">Kritis</option>
-            <option value="EMERGENCY">Darurat</option>
           </select>
         </div>
 
@@ -420,7 +427,7 @@ export default function ReferralsPage() {
                 return (
                   <tr
                     key={r.id}
-                    style={(r.urgency_level === 'EMERGENCY' || r.urgency_level === 'CRITICAL')
+                    style={r.urgency_level === 'CRITICAL'
                       ? { background: 'var(--color-danger-bg)' }
                       : undefined}
                   >
@@ -451,11 +458,11 @@ export default function ReferralsPage() {
                     </td>
                     <td style={{ fontSize: 11, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
                       <div>{new Date(r.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-                      {(r.status === 'PENDING' || r.status === 'ACCEPTED') && (
+                      {(r.status === 'SENT' || r.status === 'ACCEPTED') && (
                         <DurasiAktif
                           isoString={r.created_at}
-                          warnAfterMinutes={r.urgency_level === 'EMERGENCY' ? 5 : r.urgency_level === 'CRITICAL' ? 10 : 30}
-                          criticalAfterMinutes={r.urgency_level === 'EMERGENCY' ? 10 : r.urgency_level === 'CRITICAL' ? 20 : 60}
+                          warnAfterMinutes={r.urgency_level === 'CRITICAL' ? 10 : 30}
+                          criticalAfterMinutes={r.urgency_level === 'CRITICAL' ? 20 : 60}
                         />
                       )}
                     </td>

@@ -21,14 +21,27 @@ class ApiClient {
         _accessToken = token;
 
   static String _buildBaseUrl(int? port) {
-    // In production, read from flutter_dotenv or dart-define
-    // flutter run --dart-define=API_BASE_URL=https://api.healthsync.id
+    // Production uses the ingress/gateway URL. Local development may still
+    // address individual service ports directly.
+    const configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+    if (configuredBaseUrl.isNotEmpty) return configuredBaseUrl;
+
     const host = String.fromEnvironment(
       'API_HOST',
       defaultValue: 'localhost',
     );
     final p = port ?? 3001;
     return 'http://$host:$p';
+  }
+
+  String _buildUrl(String path, int? port) {
+    final base = Uri.parse(baseUrl);
+    const configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+    final useGateway = configuredBaseUrl.isNotEmpty || base.scheme == 'https';
+    if (port != null && !useGateway) {
+      return 'http://${base.host}:$port$path';
+    }
+    return '${baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl}$path';
   }
 
   // ─────────────────────────────────────────────
@@ -38,13 +51,11 @@ class ApiClient {
   void setTokens({required String accessToken, required String refreshToken}) {
     _accessToken = accessToken;
     _refreshToken = refreshToken;
-    // TODO: Persist to flutter_secure_storage
   }
 
   void clearTokens() {
     _accessToken = null;
     _refreshToken = null;
-    // TODO: Clear from flutter_secure_storage
   }
 
   Map<String, String> get _headers {
@@ -67,7 +78,7 @@ class ApiClient {
     int? port,
     String? token,
   }) async {
-    final url = port != null ? 'http://${Uri.parse(baseUrl).host}:$port$path' : '$baseUrl$path';
+    final url = _buildUrl(path, port);
     final hdrs = _buildHeaders(token);
     final response = await http.get(Uri.parse(url), headers: hdrs);
     return _handleRawResponse(response);
@@ -79,7 +90,7 @@ class ApiClient {
     int? port,
     String? token,
   }) async {
-    final url = port != null ? 'http://${Uri.parse(baseUrl).host}:$port$path' : '$baseUrl$path';
+    final url = _buildUrl(path, port);
     final hdrs = _buildHeaders(token);
     final response = await http.post(
       Uri.parse(url),
@@ -95,7 +106,7 @@ class ApiClient {
     int? port,
     String? token,
   }) async {
-    final url = port != null ? 'http://${Uri.parse(baseUrl).host}:$port$path' : '$baseUrl$path';
+    final url = _buildUrl(path, port);
     final hdrs = _buildHeaders(token);
     final response = await http.put(
       Uri.parse(url),
@@ -111,7 +122,7 @@ class ApiClient {
     int? port,
     String? token,
   }) async {
-    final url = port != null ? 'http://${Uri.parse(baseUrl).host}:$port$path' : '$baseUrl$path';
+    final url = _buildUrl(path, port);
     final hdrs = _buildHeaders(token);
     final response = await http.patch(
       Uri.parse(url),
@@ -126,7 +137,7 @@ class ApiClient {
     int? port,
     String? token,
   }) async {
-    final url = port != null ? 'http://${Uri.parse(baseUrl).host}:$port$path' : '$baseUrl$path';
+    final url = _buildUrl(path, port);
     final hdrs = _buildHeaders(token);
     final response = await http.delete(Uri.parse(url), headers: hdrs);
     return _handleRawResponse(response);

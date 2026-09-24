@@ -15,23 +15,30 @@ import styles from './Page.module.css';
 const STATUS_OPTIONS: { value: PrescriptionStatus | ''; label: string }[] = [
   { value: '',          label: 'Semua Status' },
   { value: 'ISSUED',    label: 'Diterbitkan' },
+  { value: 'SENT_TO_PHARMACY', label: 'Dikirim ke Apotek' },
   { value: 'CONFIRMED', label: 'Dikonfirmasi' },
-  { value: 'DISPENSED', label: 'Disiapkan' },
+  { value: 'PREPARING', label: 'Disiapkan' },
+  { value: 'READY',     label: 'Siap' },
+  { value: 'DELIVERING', label: 'Sedang Diantar' },
   { value: 'DELIVERED', label: 'Dikirim' },
   { value: 'CANCELLED', label: 'Dibatalkan' },
 ];
 
 const STATUS_STYLE: Record<PrescriptionStatus, { bg: string; color: string }> = {
   ISSUED:    { bg: 'var(--color-info-bg)',    color: 'var(--color-primary)' },
+  SENT_TO_PHARMACY: { bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
   CONFIRMED: { bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
-  DISPENSED: { bg: '#ede7f6',                 color: '#7b1fa2' },
+  PREPARING: { bg: '#ede7f6',                 color: '#7b1fa2' },
+  READY:     { bg: 'var(--color-success-bg)', color: 'var(--color-success)' },
+  DELIVERING: { bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
   DELIVERED: { bg: 'var(--color-success-bg)', color: 'var(--color-success)' },
   CANCELLED: { bg: 'var(--color-danger-bg)',  color: 'var(--color-danger)' },
 };
 
 const STATUS_LABEL: Record<PrescriptionStatus, string> = {
-  ISSUED: 'Diterbitkan', CONFIRMED: 'Dikonfirmasi',
-  DISPENSED: 'Disiapkan', DELIVERED: 'Dikirim', CANCELLED: 'Dibatalkan',
+  ISSUED: 'Diterbitkan', SENT_TO_PHARMACY: 'Dikirim ke Apotek',
+  CONFIRMED: 'Dikonfirmasi', PREPARING: 'Disiapkan', READY: 'Siap',
+  DELIVERING: 'Sedang Diantar', DELIVERED: 'Diterima', CANCELLED: 'Dibatalkan',
 };
 
 const FULFILLMENT_LABEL: Record<string, string> = {

@@ -10,7 +10,7 @@ This directory contains all infrastructure-as-code for deploying HealthSync to p
 infra/
 ├── docker/
 │   ├── docker-compose.dev.yml   # Local dev — all services + dependencies
-│   └── .env.dev                 # Local dev environment variables
+│   └── .env.dev.example         # Safe template; copy to .env.dev
 ├── k8s/                         # Kubernetes manifests (production)
 │   ├── namespace.yaml
 │   ├── secrets.yaml             # ⚠️  Replace placeholder values before deploying
@@ -36,9 +36,10 @@ infra/
 ## Local Development
 
 ```bash
+cp infra/docker/.env.dev.example infra/docker/.env.dev
 # Start all services
 cd infra/docker
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml --env-file .env.dev up -d
 
 # View logs
 docker compose -f docker-compose.dev.yml logs -f auth-service
@@ -89,6 +90,7 @@ stringData:
   jwt-secret: "your-strong-random-32-char-secret"
   database-url: "postgresql://healthsync:PASSWORD@your-rds-endpoint:5432/healthsync"
   redis-url: "redis://:PASSWORD@your-elasticache-endpoint:6379"
+  cors-origins: "https://admin.example.com,https://command-center.example.com"
   fcm-server-key: "your-firebase-server-key"
   satusehat-client-id: "your-satusehat-client-id"
   satusehat-client-secret: "your-satusehat-client-secret"

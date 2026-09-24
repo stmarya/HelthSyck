@@ -39,6 +39,11 @@ class StatusBadge extends StatelessWidget {
     final map = <String, String>{
       'PENDING':             'Menunggu',
       'PROCESSING':          'Diproses',
+      'ISSUED':              'Diterbitkan',
+      'SENT_TO_PHARMACY':    'Dikirim ke Apotek',
+      'CONFIRMED':           'Dikonfirmasi',
+      'PREPARING':           'Disiapkan',
+      'DELIVERING':          'Sedang Diantar',
       'READY':               'Siap Ambil',
       'COMPLETED':           'Selesai',
       'CANCELLED':           'Dibatalkan',

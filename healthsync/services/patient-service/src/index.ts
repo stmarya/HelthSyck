@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { z, ZodError } from 'zod';
@@ -9,7 +9,9 @@ import { Pool } from 'pg';
 // Config
 // ─────────────────────────────────────────────
 const PORT = parseInt(process.env['PORT'] ?? '3002', 10);
-const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
 const SERVICE_NAME = 'patient-service';
 
 // ─────────────────────────────────────────────
@@ -134,14 +136,58 @@ async function writeAuditLog(
 ): Promise<void> {
   try {
     await getPool().query(
-      `INSERT INTO medical_audit_logs (patient_id, actor_id, event, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4::inet, $5)
-       ON CONFLICT DO NOTHING`,
-      [patientId, actorId, event, req.ip ?? null, req.headers['user-agent'] ?? null],
+      `INSERT INTO medical_audit_logs
+         (accessor_id, accessor_role, patient_id, action, resource_type, ip_address, user_agent, request_id)
+       SELECT $1, u.role, $2, $3, 'patient', $4::inet, $5, $6
+       FROM users u
+       WHERE u.id = $1`,
+      [
+        actorId,
+        patientId,
+        event,
+        req.ip ?? null,
+        req.headers['user-agent'] ?? null,
+        req.headers['x-request-id'] ?? crypto.randomUUID(),
+      ],
     );
-  } catch {
-    // Audit failures must not break the main flow
+  } catch (err) {
+    console.error(`[${SERVICE_NAME}] Audit log write failed:`, err);
   }
+}
+
+async function assertPatientAccess(
+  req: Request,
+  res: Response,
+  patientId: string,
+  write = false,
+): Promise<boolean> {
+  const actor = (req as AuthRequest).user;
+  if (actor.role === 'ADMIN' || (!write && actor.role === 'COMMAND_CENTER')) {
+    return true;
+  }
+
+  if (actor.role === 'PATIENT') {
+    const result = await getPool().query<{ id: string }>(
+      'SELECT id FROM patients WHERE id = $1 AND user_id = $2',
+      [patientId, actor.sub],
+    );
+    if (result.rows[0]) return true;
+  }
+
+  if (!write && actor.role === 'DOCTOR') {
+    const result = await getPool().query<{ id: string }>(
+      `SELECT c.id
+       FROM consultations c
+       JOIN doctors d ON d.id = c.doctor_id
+       WHERE c.patient_id = $1 AND d.user_id = $2
+       LIMIT 1`,
+      [patientId, actor.sub],
+    );
+    if (result.rows[0]) return true;
+  }
+
+  res.status(403).json(buildProblem(403, 'Forbidden', 'You are not authorized for this patient', req.path));
+  return false;
 }
 
 // ─────────────────────────────────────────────
@@ -176,8 +222,22 @@ function requireRole(...roles: string[]) {
 // ─────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -212,6 +272,11 @@ app.post('/v1/patients', authenticate, async (req: Request, res: Response, next:
       userId, nik, name, dateOfBirth, bloodType, gender,
       phone, address, emergencyContactName, emergencyContactPhone,
     } = parsed.data;
+    const actor = (req as AuthRequest).user;
+    if (actor.role !== 'ADMIN' && userId !== actor.sub) {
+      res.status(403).json(buildProblem(403, 'Forbidden', 'You may only create your own patient profile', req.path));
+      return;
+    }
 
     const pool = getPool();
 
@@ -245,13 +310,13 @@ app.post('/v1/patients', authenticate, async (req: Request, res: Response, next:
       created_at: string;
     }>(
       `INSERT INTO patients
-         (id, user_id, nik, nik_token, name, date_of_birth, blood_type, gender,
+         (id, user_id, nik_token, name, date_of_birth, blood_type, gender,
           phone, address, emergency_contact_name, emergency_contact_phone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7::blood_type,$8::gender,$9,$10,$11,$12)
+       VALUES ($1,$2,$3,$4,$5,$6::blood_type,$7::gender,$8,$9,$10,$11)
        RETURNING id, user_id, name, date_of_birth, blood_type, gender,
                  phone, address, emergency_contact_name, emergency_contact_phone, created_at`,
       [
-        patientId, userId, nik, nikToken, name, dateOfBirth,
+        patientId, userId, nikToken, name, dateOfBirth,
         bloodType, gender, phone ?? null, address ?? null,
         emergencyContactName ?? null, emergencyContactPhone ?? null,
       ],
@@ -260,7 +325,6 @@ app.post('/v1/patients', authenticate, async (req: Request, res: Response, next:
     const patient = result.rows[0];
     if (!patient) throw new Error('Insert failed unexpectedly');
 
-    const actor = (req as AuthRequest).user;
     await writeAuditLog(patient.id, actor.sub, 'CREATE_PATIENT_PROFILE', req);
 
     ok(res, patient, 201);
@@ -337,7 +401,10 @@ app.get('/v1/patients/:id', authenticate, async (req: Request, res: Response, ne
     const pool = getPool();
 
     const patientResult = await pool.query(
-      `SELECT p.*, u.email, u.phone AS user_phone
+      `SELECT p.id, p.user_id, p.name, p.date_of_birth, p.gender, p.blood_type,
+              p.phone, p.address, p.emergency_contact_name, p.emergency_contact_phone,
+              p.profile_photo_url, p.created_at, p.updated_at,
+              u.email, u.phone AS user_phone
        FROM patients p
        JOIN users u ON u.id = p.user_id
        WHERE p.id = $1`,
@@ -349,6 +416,7 @@ app.get('/v1/patients/:id', authenticate, async (req: Request, res: Response, ne
       res.status(404).json(buildProblem(404, 'Not Found', 'Patient not found', req.path));
       return;
     }
+    if (!(await assertPatientAccess(req, res, id))) return;
 
     const [conditionsResult, allergiesResult, devicesResult] = await Promise.all([
       pool.query(
@@ -385,6 +453,7 @@ app.get('/v1/patients/:id', authenticate, async (req: Request, res: Response, ne
 app.put('/v1/patients/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    if (!(await assertPatientAccess(req, res, id, true))) return;
     const parsed = UpdatePatientSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
@@ -461,6 +530,7 @@ app.post('/v1/patients/:id/vitals', authenticate, async (req: Request, res: Resp
       res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
       return;
     }
+    if (!(await assertPatientAccess(req, res, patientId, true))) return;
 
     const pool = getPool();
 
@@ -502,6 +572,7 @@ app.post('/v1/patients/:id/vitals', authenticate, async (req: Request, res: Resp
 app.get('/v1/patients/:id/vitals', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id: patientId } = req.params;
+    if (!(await assertPatientAccess(req, res, patientId))) return;
     const parsed = VitalsQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid query', req.path));
@@ -556,6 +627,7 @@ app.get('/v1/patients/:id/vitals', authenticate, async (req: Request, res: Respo
 app.get('/v1/patients/:id/vitals/latest', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id: patientId } = req.params;
+    if (!(await assertPatientAccess(req, res, patientId))) return;
     const pool = getPool();
 
     const patientCheck = await pool.query<{ id: string }>('SELECT id FROM patients WHERE id = $1', [patientId]);
@@ -586,6 +658,7 @@ app.get('/v1/patients/:id/vitals/latest', authenticate, async (req: Request, res
 app.post('/v1/patients/:id/conditions', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id: patientId } = req.params;
+    if (!(await assertPatientAccess(req, res, patientId, true))) return;
     const parsed = AddConditionSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
@@ -625,6 +698,7 @@ app.post('/v1/patients/:id/conditions', authenticate, async (req: Request, res: 
 app.post('/v1/patients/:id/allergies', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id: patientId } = req.params;
+    if (!(await assertPatientAccess(req, res, patientId, true))) return;
     const parsed = AddAllergySchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
@@ -660,6 +734,7 @@ app.post('/v1/patients/:id/allergies', authenticate, async (req: Request, res: R
 app.post('/v1/patients/:id/devices', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id: patientId } = req.params;
+    if (!(await assertPatientAccess(req, res, patientId, true))) return;
     const parsed = PairDeviceSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
@@ -705,6 +780,7 @@ app.post('/v1/patients/:id/devices', authenticate, async (req: Request, res: Res
 app.delete('/v1/patients/:id/devices/:deviceId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id: patientId, deviceId } = req.params;
+    if (!(await assertPatientAccess(req, res, patientId, true))) return;
     const pool = getPool();
 
     const result = await pool.query(

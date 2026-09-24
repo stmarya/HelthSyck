@@ -20,13 +20,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ROOT = Split-Path -Parent $PSScriptRoot
+$ENV_FILE = Join-Path $ROOT "infra\docker\.env.dev"
 
 function Write-Step  { param($msg) Write-Host "`n▶  $msg" -ForegroundColor Cyan }
 function Write-OK    { param($msg) Write-Host "   ✓  $msg" -ForegroundColor Green }
 function Write-Fail  { param($msg) Write-Host "   ✗  $msg" -ForegroundColor Red; exit 1 }
 function Write-Info  { param($msg) Write-Host "   •  $msg" -ForegroundColor Gray }
 
-$COMPOSE_CMD = "docker compose -f `"$ROOT\infra\docker\docker-compose.dev.yml`" --env-file `"$ROOT\infra\docker\.env.dev`""
+if (-not (Test-Path $ENV_FILE)) {
+  Write-Fail "File $ENV_FILE belum ada. Jalankan: Copy-Item infra/docker/.env.dev.example infra/docker/.env.dev"
+}
+
+$COMPOSE_CMD = "docker compose -f `"$ROOT\infra\docker\docker-compose.dev.yml`" --env-file `"$ENV_FILE`""
 
 # ── Matikan dulu jika diminta ──────────────────────────────
 if ($Down) {

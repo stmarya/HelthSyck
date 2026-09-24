@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { z, ZodError } from 'zod';
@@ -9,7 +9,9 @@ import { Pool, PoolClient } from 'pg';
 // Config
 // ─────────────────────────────────────────────
 const PORT = parseInt(process.env['PORT'] ?? '3007', 10);
-const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
 const SERVICE_NAME = 'hospital-service';
 
 // ─────────────────────────────────────────────
@@ -104,6 +106,10 @@ const UpdateHospitalSchema = z.object({
   longitude:       z.number().min(-180).max(180).optional(),
 });
 
+const UpdateDoctorAvailabilitySchema = z.object({
+  isAvailable: z.boolean(),
+});
+
 const ListHospitalQuerySchema = z.object({
   page:   z.coerce.number().int().min(1).default(1),
   limit:  z.coerce.number().int().min(1).max(100).default(20),
@@ -196,8 +202,22 @@ function requireRole(...roles: string[]) {
 // ─────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use((req: Request, _res: Response, next: NextFunction) => {
   req.headers['x-request-id'] = req.headers['x-request-id'] ?? crypto.randomUUID();
@@ -690,6 +710,71 @@ app.delete(
       }
       ok(res, { ...result.rows[0], message: 'Rumah sakit berhasil dinonaktifkan' });
     } catch (err) { next(err); }
+  },
+);
+
+// ─────────────────────────────────────────────
+// GET /v1/doctors/me — Doctor profile for the doctor app
+// ─────────────────────────────────────────────
+app.get(
+  '/v1/doctors/me',
+  authenticate,
+  requireRole('DOCTOR'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = (req as AuthRequest).user;
+      const result = await getPool().query(
+        `SELECT d.id, d.user_id, d.str_number, d.sip_number, d.specialization,
+                d.sub_specialization, d.hospital_id, d.years_experience,
+                d.education, d.bio, d.consultation_fee, d.is_available,
+                d.rating_avg, d.rating_count, d.str_verified_at, d.sip_verified_at,
+                u.email, u.phone, u.status AS user_status, h.name AS hospital_name
+         FROM doctors d
+         JOIN users u ON u.id = d.user_id
+         LEFT JOIN hospitals h ON h.id = d.hospital_id
+         WHERE d.user_id = $1`,
+        [user.sub],
+      );
+      if (!result.rows[0]) {
+        res.status(404).json(buildProblem(404, 'Not Found', 'Doctor profile not found', req.path));
+        return;
+      }
+      ok(res, result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─────────────────────────────────────────────
+// PATCH /v1/doctors/me/availability
+// ─────────────────────────────────────────────
+app.patch(
+  '/v1/doctors/me/availability',
+  authenticate,
+  requireRole('DOCTOR'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const parsed = UpdateDoctorAvailabilitySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json(buildProblem(422, 'Validation Error', 'isAvailable must be boolean', req.path));
+      return;
+    }
+    try {
+      const user = (req as AuthRequest).user;
+      const result = await getPool().query(
+        `UPDATE doctors SET is_available = $1, updated_at = NOW()
+         WHERE user_id = $2
+         RETURNING id, user_id, is_available, updated_at`,
+        [parsed.data.isAvailable, user.sub],
+      );
+      if (!result.rows[0]) {
+        res.status(404).json(buildProblem(404, 'Not Found', 'Doctor profile not found', req.path));
+        return;
+      }
+      ok(res, result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
   },
 );
 

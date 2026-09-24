@@ -34,7 +34,7 @@ class ConsultationMessage with _$ConsultationMessage {
     required String senderId,
     required String senderRole,
     required String content,
-    required String messageType, // text|image|file
+    required String messageType, // TEXT|IMAGE|FILE
     required DateTime createdAt,
   }) = _ConsultationMessage;
 

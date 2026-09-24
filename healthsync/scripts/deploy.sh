@@ -24,6 +24,7 @@ set -euo pipefail
 # ── Resolve root dir ────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$ROOT/infra/docker/.env.dev"
 
 # ── Warna helper ────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'
@@ -43,6 +44,8 @@ banner() {
 }
 
 banner
+
+[[ -f "$ENV_FILE" ]] || fail "File $ENV_FILE belum ada. Jalankan: cp infra/docker/.env.dev.example infra/docker/.env.dev"
 
 # ═══════════════════════════════════════════════════════════
 # STEP 1 — Cek prasyarat
@@ -87,7 +90,7 @@ cd "$ROOT"
 
 docker compose \
   -f infra/docker/docker-compose.dev.yml \
-  --env-file infra/docker/.env.dev \
+  --env-file "$ENV_FILE" \
   up -d --build 2>&1 | grep -E "Container|Error|Warning|=>| ✓" | tail -20
 
 ok "Semua Docker containers dimulai"
@@ -120,7 +123,7 @@ wait_healthy hs-emqx
 # ═══════════════════════════════════════════════════════════
 # STEP 6 — Tunggu migrasi selesai
 # ═══════════════════════════════════════════════════════════
-step "STEP 6/7 — Menunggu migrasi database (V001-V007) selesai"
+step "STEP 6/7 — Menunggu migrasi database (V001-V012) selesai"
 
 elapsed=0
 while true; do
@@ -132,7 +135,7 @@ done
 
 exit_code=$(docker inspect --format='{{.State.ExitCode}}' hs-migrate 2>/dev/null || echo "1")
 [[ "$exit_code" == "0" ]] || fail "Migrasi database gagal (exit code: $exit_code). Cek: docker logs hs-migrate"
-ok "Migrasi database V001-V007 berhasil"
+ok "Migrasi database V001-V012 berhasil"
 
 # ═══════════════════════════════════════════════════════════
 # STEP 7 — Verifikasi semua services

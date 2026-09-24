@@ -223,7 +223,9 @@ describe('GET /v1/auth/me', () => {
         },
       ],
       rowCount: 1,
-    });
+    })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // patient profile
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }); // doctor profile
 
     const res = await request(app)
       .get('/v1/auth/me')

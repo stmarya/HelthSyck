@@ -8,6 +8,7 @@ const config: Config = {
   moduleNameMapper: {
     '^@healthsync/shared$': '<rootDir>/../../packages/shared/src/index.ts',
   },
+  setupFiles: ['<rootDir>/test-setup.ts'],
   setupFilesAfterEnv: [],
   clearMocks: true,
   coverageDirectory: 'coverage',

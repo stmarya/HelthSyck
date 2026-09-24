@@ -38,7 +38,16 @@ jest.mock('pg', () => {
     if (s.includes('FROM REFERRALS') && s.includes('= $1')) {
       const id = params?.[0];
       if (id === 'ref-uuid-1') {
-        return { rows: [{ id: 'ref-uuid-1', status: 'DRAFT', created_at: new Date() }], rowCount: 1 };
+        return {
+          rows: [{
+            id: 'ref-uuid-1',
+            status: 'DRAFT',
+            patient_id: 'patient-uuid-1',
+            referring_doctor_id: 'doctor-uuid-1',
+            created_at: new Date(),
+          }],
+          rowCount: 1,
+        };
       }
       return { rows: [], rowCount: 0 };
     }

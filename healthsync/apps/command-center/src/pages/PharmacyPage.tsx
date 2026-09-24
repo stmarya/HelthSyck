@@ -13,7 +13,7 @@ interface Prescription {
   id: string;
   patient_id: string;
   doctor_id: string;
-  status: 'PENDING' | 'DISPENSED' | 'CANCELLED' | 'EXPIRED';
+  status: 'ISSUED' | 'SENT_TO_PHARMACY' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'DELIVERING' | 'DELIVERED' | 'CANCELLED';
   created_at: string;
   notes: string | null;
 }
@@ -37,8 +37,13 @@ interface PharmaciesMeta {
 // ─── Konfigurasi badge status resep ───────────────────────────────────────
 
 const RESEP_STATUS: Record<string, { label: string; cls: string; color: string }> = {
-  PENDING:   { label: 'Menunggu',    cls: styles.badgeWarning,  color: '#f59e0b' },
-  DISPENSED: { label: 'Selesai',     cls: styles.badgeOk,       color: '#10b981' },
+  ISSUED:    { label: 'Diterbitkan', cls: styles.badgeWarning,  color: '#f59e0b' },
+  SENT_TO_PHARMACY: { label: 'Ke Apotek', cls: styles.badgeWarning, color: '#f59e0b' },
+  CONFIRMED: { label: 'Dikonfirmasi', cls: styles.badgeWarning, color: '#d97706' },
+  PREPARING: { label: 'Disiapkan',   cls: styles.badgeWarning,  color: '#ea580c' },
+  READY:     { label: 'Siap',        cls: styles.badgeOk,       color: '#16a34a' },
+  DELIVERING:{ label: 'Sedang Diantar', cls: styles.badgeOk,    color: '#2563eb' },
+  DELIVERED: { label: 'Diterima',    cls: styles.badgeOk,       color: '#10b981' },
   CANCELLED: { label: 'Dibatalkan',  cls: styles.badgeCritical, color: '#ef4444' },
   EXPIRED:   { label: 'Kedaluwarsa', cls: styles.badgeCritical, color: '#dc2626' },
 };
@@ -108,8 +113,8 @@ function TabResep() {
   for (const p of prescriptions) {
     statusCounts[p.status] = (statusCounts[p.status] ?? 0) + 1;
   }
-  const pending   = statusCounts['PENDING']   ?? 0;
-  const dispensed = statusCounts['DISPENSED'] ?? 0;
+  const pending   = (statusCounts['ISSUED'] ?? 0) + (statusCounts['SENT_TO_PHARMACY'] ?? 0);
+  const dispensed = statusCounts['DELIVERED'] ?? 0;
   const cancelled = statusCounts['CANCELLED'] ?? 0;
   const expired   = statusCounts['EXPIRED']   ?? 0;
 
@@ -222,8 +227,8 @@ function TabResep() {
                   return (
                     <tr
                       key={p.id}
-                      style={p.status === 'EXPIRED' ? { background: 'var(--color-danger-bg)' }
-                        : p.status === 'PENDING' ? { background: 'rgba(245,158,11,0.05)' }
+                      style={p.status === 'CANCELLED' ? { background: 'var(--color-danger-bg)' }
+                        : (p.status === 'ISSUED' || p.status === 'SENT_TO_PHARMACY') ? { background: 'rgba(245,158,11,0.05)' }
                         : undefined}
                     >
                       <td style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--color-muted)' }}>{p.id.slice(0, 8)}…</td>
@@ -236,15 +241,13 @@ function TabResep() {
                         {new Date(p.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td>
-                        {p.status === 'PENDING' ? (
+                        {p.status === 'ISSUED' || p.status === 'SENT_TO_PHARMACY' ? (
                           <DurasiAktif
                             isoString={p.created_at}
                             warnAfterMinutes={30}
                             criticalAfterMinutes={60}
                             prefix="⏳ "
                           />
-                        ) : p.status === 'EXPIRED' ? (
-                          <span style={{ color: 'var(--color-danger)', fontSize: 11, fontWeight: 700 }}>Kedaluwarsa</span>
                         ) : (
                           <span style={{ color: 'var(--color-disabled)', fontStyle: 'italic', fontSize: 11 }}>—</span>
                         )}
