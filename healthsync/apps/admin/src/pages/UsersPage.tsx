@@ -178,13 +178,12 @@ interface AddUserModalProps {
 
 function AddUserModal({ onClose, onSubmit, submitting }: AddUserModalProps) {
   const [form, setForm] = useState<CreateUserForm>({
-    name: '', email: '', password: '', role: 'PATIENT', phone: '',
+    email: '', password: '', role: 'PATIENT', phone: '',
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CreateUserForm, string>>>({});
 
   const validate = (): boolean => {
     const errs: Partial<Record<keyof CreateUserForm, string>> = {};
-    if (!form.name.trim()) errs.name = 'Nama lengkap wajib diisi';
     if (!form.email.trim()) errs.email = 'Email wajib diisi';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Format email tidak valid';
     if (!form.password) errs.password = 'Password wajib diisi';
@@ -210,11 +209,6 @@ function AddUserModal({ onClose, onSubmit, submitting }: AddUserModalProps) {
     <Modal open title="Tambah Pengguna Baru" onClose={onClose} width={500}>
       <form onSubmit={handleSubmit} noValidate>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <InputField
-            label="Nama Lengkap" required value={form.name}
-            onChange={(e) => set('name', e.target.value)}
-            error={errors.name} placeholder="Masukkan nama lengkap"
-          />
           <InputField
             label="Email" required type="email" value={form.email}
             onChange={(e) => set('email', e.target.value)}

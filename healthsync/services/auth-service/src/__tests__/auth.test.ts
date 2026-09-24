@@ -11,6 +11,8 @@ jest.mock('ioredis', () => {
     set: jest.fn().mockResolvedValue('OK'),
     setex: jest.fn().mockResolvedValue('OK'),
     get: jest.fn().mockResolvedValue(null),
+    incr: jest.fn().mockResolvedValue(1),
+    expire: jest.fn().mockResolvedValue(1),
     del: jest.fn().mockResolvedValue(1),
     ping: jest.fn().mockResolvedValue('PONG'),
     disconnect: jest.fn(),
@@ -34,9 +36,9 @@ function getMockPool(): { query: jest.Mock } {
   return pg.__pool;
 }
 
-function getMockRedis(): { get: jest.Mock; set: jest.Mock; setex: jest.Mock; del: jest.Mock; ping: jest.Mock } {
+function getMockRedis(): { get: jest.Mock; set: jest.Mock; setex: jest.Mock; incr: jest.Mock; expire: jest.Mock; del: jest.Mock; ping: jest.Mock } {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const Ctor = require('ioredis') as { __redis: { get: jest.Mock; set: jest.Mock; setex: jest.Mock; del: jest.Mock; ping: jest.Mock } };
+  const Ctor = require('ioredis') as { __redis: { get: jest.Mock; set: jest.Mock; setex: jest.Mock; incr: jest.Mock; expire: jest.Mock; del: jest.Mock; ping: jest.Mock } };
   return Ctor.__redis;
 }
 
@@ -307,7 +309,6 @@ describe('Admin endpoints', () => {
         email: 'operator@example.com',
         password: 'Admin@1234',
         role: 'ADMIN',
-        name: 'Operator',
         phone: '081234567890',
       });
 

@@ -105,7 +105,7 @@ const VerifyOtpSchema = z.object({
   purpose: z.enum(['PHONE_VERIFY', 'PASSWORD_RESET']),
 });
 
-const AdminCreateUserSchema = RegisterSchema.extend({
+const AdminCreateUserSchema = RegisterSchema.omit({ name: true }).extend({
   role: z.enum(['PATIENT', 'DOCTOR', 'COMMAND_CENTER', 'PHARMACIST', 'AMBULANCE_DRIVER', 'ADMIN']),
 });
 
@@ -183,14 +183,15 @@ function createRateLimitMiddleware(keyPrefix: string, maxRequests: number, windo
       const actor = (req as AuthRequest).user?.sub ?? req.ip ?? 'anonymous';
       const key = `rate_limit:${keyPrefix}:${actor}`;
       const redis = getRedis();
-      const current = parseInt((await redis.get(key)) ?? '0', 10);
+      const current = await redis.incr(key);
+      if (current === 1) {
+        await redis.expire(key, windowSeconds);
+      }
 
-      if (current >= maxRequests) {
+      if (current > maxRequests) {
         res.status(429).json(buildProblem(429, 'Too Many Requests', 'Too many requests. Please try again later.', req.path));
         return;
       }
-
-      await redis.set(key, String(current + 1), 'EX', windowSeconds);
       next();
     } catch {
       next();
@@ -878,7 +879,7 @@ app.post('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-
       return;
     }
 
-    const { email, password, role, name, phone } = parsed.data;
+    const { email, password, role, phone } = parsed.data;
     const adminUser = (req as AuthRequest).user;
     const pool = getPool();
 
@@ -909,7 +910,6 @@ app.post('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-
       targetUserId: user.id,
       targetEmail: user.email,
       targetRole: user.role,
-      displayName: name,
       status: 'SUCCESS',
     });
 

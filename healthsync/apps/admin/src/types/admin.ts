@@ -41,7 +41,6 @@ export interface UserDetail extends User {
 // ── User CRUD forms ───────────────────────────────────────────────────────────
 
 export interface CreateUserForm {
-  name: string;
   email: string;
   password: string;
   role: UserRole;
