@@ -111,4 +111,4 @@ jobs:
         run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
 
       - name: Service tests
-        run: npm exec --workspace=${{ matrix.workspace }} -- jest --passWithNoTests --forceExit
+        run: npm exec --workspace=${{ matrix.workspace }} -- jest --passWithNoTests

@@ -87,6 +87,7 @@ function TabSpesialisasi() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
 
   const fetchSpesialisasi = useCallback(async () => {
     setLoading(true);
@@ -95,6 +96,7 @@ function TabSpesialisasi() {
     try {
       const res = await hospitalClient.get<{ data: DoctorRowRingkas[] }>('/v1/doctors?limit=100');
       const doctors = res.data.data ?? [];
+      const fetchedTimestamp = new Date().toISOString();
       const countBySpecialization = new Map<string, number>();
 
       for (const doctor of doctors) {
@@ -109,10 +111,11 @@ function TabSpesialisasi() {
           code,
           name: formatSpecializationName(code),
           doctorCount,
-          createdAt: new Date().toISOString(),
+          createdAt: fetchedTimestamp,
         }));
 
       setItems(specializationList);
+      setFetchedAt(fetchedTimestamp);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Gagal memuat data spesialisasi';
       setError(message);
@@ -141,8 +144,8 @@ function TabSpesialisasi() {
 
   const handleExportCsv = () => {
     exportCsv(
-      ['Kode', 'Nama Spesialisasi', 'Jumlah Dokter', 'Terlihat Pada'],
-      filteredItems.map((item) => [item.code, item.name, item.doctorCount, fmtDate(item.createdAt)]),
+      ['Kode', 'Nama Spesialisasi', 'Jumlah Dokter', 'Terakhir Diambil'],
+      filteredItems.map((item) => [item.code, item.name, item.doctorCount, fmtDate(fetchedAt ?? item.createdAt)]),
       `spesialisasi-${new Date().toISOString().slice(0, 10)}.csv`,
     );
     showToast('CSV spesialisasi berhasil diunduh.', 'success');
@@ -238,7 +241,7 @@ function TabSpesialisasi() {
               <th>Nama Spesialisasi</th>
               <th>Kode</th>
               <th style={{ textAlign: 'center' }}>Jumlah Dokter</th>
-              <th>Terlihat Pada</th>
+              <th>Terakhir Diambil</th>
               <th style={{ textAlign: 'center', width: 140 }}>Aksi</th>
             </tr>
           </thead>
@@ -261,7 +264,7 @@ function TabSpesialisasi() {
                   </code>
                 </td>
                 <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.doctorCount}</td>
-                <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>{fmtDate(item.createdAt)}</td>
+                <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>{fmtDate(fetchedAt ?? item.createdAt)}</td>
                 <td style={{ textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
                     <GuardedActionButton
@@ -289,7 +292,7 @@ function TabSpesialisasi() {
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8 }}>
-        * Ringkasan spesialisasi dihitung langsung dari dokter terdaftar. Tidak ada data referensi lokal atau simulasi yang disimpan di Admin.
+        * Ringkasan spesialisasi dihitung langsung dari dokter terdaftar. Kolom waktu menunjukkan kapan Admin terakhir mengambil data dari backend.
       </div>
     </div>
   );

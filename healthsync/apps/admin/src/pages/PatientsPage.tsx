@@ -209,7 +209,7 @@ export default function PatientsPage() {
           <div>
             <div className={styles.cardTitle} style={{ marginBottom: 4 }}>Ringkasan Kualitas Data</div>
             <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-              Dihitung dari data pasien yang sedang terlihat sesuai filter dan halaman aktif.
+              Dihitung dari data pasien pada halaman yang sedang terlihat sesuai filter yang aktif.
             </div>
           </div>
         </div>
@@ -269,7 +269,7 @@ export default function PatientsPage() {
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p) => (
+                {visiblePatients.map((p) => (
                   <tr
                     key={p.id}
                     onClick={() => void handleSelectPatient(p)}
@@ -280,6 +280,8 @@ export default function PatientsPage() {
                       }
                     }}
                     tabIndex={0}
+                    role="button"
+                    aria-label={`Buka detail pasien ${p.name}`}
                   >
                     <td style={{ fontWeight: 600 }}>{p.name}</td>
                     <td>{GENDER_LABEL[p.gender] ?? p.gender}</td>
