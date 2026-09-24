@@ -157,7 +157,7 @@ function UserDetailModal({
               disabled={statusUpdating || user.status === status}
               onClick={() => onUpdateStatus(status)}
             >
-              {statusUpdating && user.status !== status ? 'Menyimpan…' : STATUS_LABEL[status]}
+              {STATUS_LABEL[status]}
             </button>
           ))}
         </div>

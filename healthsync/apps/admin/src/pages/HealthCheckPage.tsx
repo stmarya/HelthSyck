@@ -77,8 +77,12 @@ export default function HealthCheckPage() {
         try {
           const res = await fetch(svc.url, { signal: makeTimeoutSignal(5000) });
           const lat = Date.now() - start;
-          const payload = await res.json() as HealthResponse;
-          if (!res.ok || !isHealthyResponse(payload)) return { ...svc, status: 'OFFLINE' as const, lastChecked: new Date() };
+          if (!res.ok) return { ...svc, status: 'OFFLINE' as const, lastChecked: new Date() };
+          const contentType = res.headers.get('content-type') ?? '';
+          const payload = contentType.includes('application/json')
+            ? await res.json() as HealthResponse
+            : {};
+          if (!isHealthyResponse(payload)) return { ...svc, status: 'OFFLINE' as const, lastChecked: new Date() };
           return { ...svc, status: 'ONLINE' as const, latency: lat, lastChecked: new Date() };
         } catch {
           return { ...svc, status: 'OFFLINE' as const, lastChecked: new Date() };

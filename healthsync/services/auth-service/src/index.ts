@@ -177,6 +177,27 @@ async function writeAuditLog(
   }
 }
 
+function createRateLimitMiddleware(keyPrefix: string, maxRequests: number, windowSeconds: number) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const actor = (req as AuthRequest).user?.sub ?? req.ip ?? 'anonymous';
+      const key = `rate_limit:${keyPrefix}:${actor}`;
+      const redis = getRedis();
+      const current = parseInt((await redis.get(key)) ?? '0', 10);
+
+      if (current >= maxRequests) {
+        res.status(429).json(buildProblem(429, 'Too Many Requests', 'Too many requests. Please try again later.', req.path));
+        return;
+      }
+
+      await redis.set(key, String(current + 1), 'EX', windowSeconds);
+      next();
+    } catch {
+      next();
+    }
+  };
+}
+
 // ─────────────────────────────────────────────
 // Middleware — JWT Authentication
 // ─────────────────────────────────────────────
@@ -763,7 +784,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
 // GET /v1/auth/admin/users — paginated user list for Admin Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+app.get('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-users-read', 120, 60), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page  = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10));
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '20'), 10)));
@@ -849,7 +870,7 @@ app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response
 // POST /v1/auth/admin/users — create user from Admin Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.post('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+app.post('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-users-create', 20, 60), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = AdminCreateUserSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -912,7 +933,7 @@ app.post('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Respons
 // PATCH /v1/auth/admin/users/:id — update status safely from Admin Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.patch('/v1/auth/admin/users/:id', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+app.patch('/v1/auth/admin/users/:id', requireAdmin, createRateLimitMiddleware('admin-users-update', 30, 60), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parsed = AdminUpdateUserSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -922,13 +943,13 @@ app.patch('/v1/auth/admin/users/:id', requireAdmin, async (req: Request, res: Re
 
     const { id } = req.params;
     if (!id || !z.string().uuid().safeParse(id).success) {
-      res.status(422).json(buildProblem(422, 'Validation Error', 'User ID tidak valid', req.path));
+      res.status(422).json(buildProblem(422, 'Validation Error', 'User ID is invalid', req.path));
       return;
     }
 
     const adminUser = (req as AuthRequest).user;
     if (adminUser.sub === id && parsed.data.status !== 'ACTIVE') {
-      res.status(409).json(buildProblem(409, 'Conflict', 'Admin tidak dapat menonaktifkan atau menangguhkan akun sendiri', req.path));
+      res.status(409).json(buildProblem(409, 'Conflict', 'Admins cannot deactivate or suspend their own account', req.path));
       return;
     }
 
@@ -1014,7 +1035,7 @@ app.patch('/v1/auth/admin/users/:id', requireAdmin, async (req: Request, res: Re
 // GET /v1/auth/admin/logs — paginated audit log feed for Admin Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.get('/v1/auth/admin/logs', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+app.get('/v1/auth/admin/logs', requireAdmin, createRateLimitMiddleware('admin-logs-read', 120, 60), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10));
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '25'), 10)));

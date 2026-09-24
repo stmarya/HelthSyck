@@ -412,8 +412,12 @@ export default function DashboardPage() {
         const start = Date.now();
         try {
           const res = await fetch(svc.url, { signal: makeTimeoutSignal(3000) });
-          const payload = await res.json() as HealthResponse;
-          if (!res.ok || !isHealthyResponse(payload)) return { ...svc, status: 'OFFLINE' as const };
+          if (!res.ok) return { ...svc, status: 'OFFLINE' as const };
+          const contentType = res.headers.get('content-type') ?? '';
+          const payload = contentType.includes('application/json')
+            ? await res.json() as HealthResponse
+            : {};
+          if (!isHealthyResponse(payload)) return { ...svc, status: 'OFFLINE' as const };
           return { ...svc, status: 'ONLINE' as const, latency: Date.now() - start };
         } catch {
           return { ...svc, status: 'OFFLINE' as const };

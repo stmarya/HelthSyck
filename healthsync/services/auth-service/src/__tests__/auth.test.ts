@@ -217,7 +217,7 @@ describe('GET /v1/auth/me', () => {
   it('returns 401 when token is malformed', async () => {
     const res = await request(app)
       .get('/v1/auth/me')
-      .set('Authorization', '******');
+      .set('Authorization', 'Bearer ' + 'malformed-token');
     expect(res.status).toBe(401);
   });
 

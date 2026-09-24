@@ -31,6 +31,16 @@ const STATUS_STYLE: Record<LogEntry['status'], { bg: string; color: string }> = 
   WARNING: { bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
 };
 
+const ACTION_OPTIONS = [
+  'LOGIN_SUCCESS',
+  'LOGIN_FAIL',
+  'LOGOUT',
+  'TOKEN_REFRESH',
+  'PASSWORD_CHANGE',
+  'ADMIN_USER_CREATE',
+  'ADMIN_USER_STATUS_UPDATE',
+];
+
 function getApiErrorMessage(err: unknown, fallback: string): string {
   if (isAxiosError(err)) {
     const detail = err.response?.data as { detail?: string } | undefined;
@@ -140,7 +150,7 @@ export default function ActivityLogPage() {
   }, [autoRefresh, buildQuery]);
 
   const uniqueActions = useMemo(
-    () => Array.from(new Set(logs.map((log) => log.action))).sort(),
+    () => Array.from(new Set([...ACTION_OPTIONS, ...logs.map((log) => log.action)])).sort(),
     [logs],
   );
 
