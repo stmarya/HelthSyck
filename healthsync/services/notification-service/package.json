@@ -1,0 +1,42 @@
+{
+  "name": "@healthsync/notification-service",
+  "version": "1.0.0",
+  "description": "HealthSync push notifications, SMS, and email delivery",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "jest --passWithNoTests --forceExit",
+    "lint": "eslint 'src/**/*.ts' --max-warnings 0"
+  },
+  "dependencies": {
+    "@healthsync/shared": "file:../../packages/shared",
+    "@types/cors": "^2.8.19",
+    "cors": "^2.8.6",
+    "express": "^4.18.2",
+    "firebase-admin": "^12.0.0",
+    "ioredis": "^5.3.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.3",
+    "uuid": "^9.0.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9",
+    "@types/supertest": "^6.0.3",
+    "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4",
+    "ts-jest": "^29.1.1",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.2"
+  }
+}

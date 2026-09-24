@@ -1,0 +1,237 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   NotificationBell.module.css
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Wrapper (relative untuk positioning dropdown) ── */
+.wrapper {
+  position: relative;
+}
+
+/* ── Tombol bell ── */
+.bellBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.bellBtn:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border);
+}
+
+.bellBtnActive {
+  background: var(--color-accent-light);
+  border-color: transparent;
+}
+
+/* ── Ikon bell ── */
+.bellIcon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* ── Badge merah (unread count) ── */
+.badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #DC2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ── Dropdown panel ── */
+.dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header dropdown ── */
+.dropdownHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.dropdownTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.markReadBtn {
+  font-size: 11px;
+  color: var(--color-primary, #3b82d4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.markReadBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Daftar notifikasi ── */
+.list {
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── Satu item notifikasi ── */
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--transition-fast);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item:hover {
+  background: var(--color-surface-hover);
+}
+
+/* ── Titik warna prioritas ── */
+.itemDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+/* ── Body teks item ── */
+.itemBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.itemTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemMsg {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 2px;
+  line-height: 1.4;
+  /* Batasi 2 baris */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.itemTime {
+  font-size: 11px;
+  color: var(--color-disabled, #aaa);
+  margin-top: 4px;
+}
+
+/* ── Badge prioritas kanan ── */
+.priorityBadge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── State kosong ── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+/* ── Skeleton loading ── */
+.skeletonItem {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.skeletonLine {
+  height: 11px;
+  border-radius: 4px;
+  background: var(--color-border);
+  animation: pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
+
+/* ── Footer ── */
+.dropdownFooter {
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.footerLink {
+  font-size: 12px;
+  color: var(--color-primary, #3b82d4);
+  text-decoration: none;
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+}
+
+/* ── Mobile: dropdown lebih sempit ── */
+@media (max-width: 640px) {
+  .dropdown {
+    width: 290px;
+    right: -40px;
+  }
+}

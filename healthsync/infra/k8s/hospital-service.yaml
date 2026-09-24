@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hospital-service-config
+  namespace: healthsync
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  REDIS_URL: "redis://redis:6379"
+  KAFKA_BROKERS: "kafka:29092"
+  MQTT_BROKER: "tcp://emqx:1883"
+  PORT: "3007"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hospital-service
+  namespace: healthsync
+  labels:
+    app: hospital-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hospital-service
+  template:
+    metadata:
+      labels:
+        app: hospital-service
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: hospital-service
+          image: healthsync/hospital-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3007
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: hospital-service-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: jwt-secret
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3007
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3007
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hospital-service
+  namespace: healthsync
+  labels:
+    app: hospital-service
+spec:
+  selector:
+    app: hospital-service
+  ports:
+    - name: http
+      port: 3007
+      targetPort: 3007
+      protocol: TCP
+  type: ClusterIP

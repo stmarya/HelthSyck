@@ -1,0 +1,178 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TopBar.module.css — Mengikuti referensi HackerEarth:
+   background putih, breadcrumb kiri, ikon notif + avatar foto kanan,
+   border-bottom tipis, tanpa glassmorphism berlebihan
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-topbar);
+  height: var(--topbar-height);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-6);
+  gap: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-normal);
+}
+
+/* ── Kiri: breadcrumb ── */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.breadcrumbItem {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.breadcrumbItem:hover {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.breadcrumbSep {
+  font-size: var(--text-base);
+  color: var(--color-disabled);
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
+}
+
+.breadcrumbCurrent {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Kanan: actions ── */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ── Tombol icon (notifikasi, theme toggle) ── */
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  font-size: 18px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  position: relative;
+}
+
+.iconBtn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+/* Tombol dark mode aktif */
+.iconBtnActive {
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  border-color: rgba(124,58,237,0.15);
+}
+
+.iconBtnActive:hover {
+  background: var(--color-accent-light);
+  color: var(--color-accent-dark);
+}
+
+/* ── Divider vertikal ── */
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+/* ── User chip di topbar ── */
+.userChip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: default;
+  transition: background var(--transition-fast);
+}
+
+.userChip:hover {
+  background: var(--color-surface-hover);
+}
+
+/* Avatar bulat — identik foto profil HackerEarth */
+.userAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-primary) 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+  border: 2px solid var(--color-border);
+}
+
+.userMeta {
+  display: flex;
+  flex-direction: column;
+}
+
+.userName {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.userRole {
+  font-size: 10px;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  line-height: 1.2;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0 var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .userMeta {
+    display: none;
+  }
+
+  .breadcrumb {
+    gap: 4px;
+  }
+}

@@ -1,0 +1,1155 @@
+{
+  "info": {
+    "name": "HealthSync Indonesia API",
+    "_postman_id": "healthsync-v1-collection",
+    "description": "Complete API test collection for HealthSync. Run flows in order. Auth flow must run first to populate tokens.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_auth", "value": "http://localhost:3001" },
+    { "key": "base_patient", "value": "http://localhost:3002" },
+    { "key": "base_consultation", "value": "http://localhost:3003" },
+    { "key": "base_prescription", "value": "http://localhost:3004" },
+    { "key": "base_ambulance", "value": "http://localhost:3005" },
+    { "key": "base_referral", "value": "http://localhost:3006" },
+    { "key": "base_hospital", "value": "http://localhost:3007" },
+    { "key": "base_pharmacy", "value": "http://localhost:3008" },
+    { "key": "base_notification", "value": "http://localhost:3009" },
+    { "key": "base_alert", "value": "http://localhost:4002" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "doctor_access_token", "value": "" },
+    { "key": "patient_id", "value": "" },
+    { "key": "consultation_id", "value": "" },
+    { "key": "prescription_id", "value": "" },
+    { "key": "alert_id", "value": "" },
+    { "key": "ambulance_id", "value": "" },
+    { "key": "referral_id", "value": "" },
+    { "key": "hospital_id", "value": "a0000000-0000-0000-0000-000000000001" }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth Flow",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_auth}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Patient",
+          "request": {
+            "method": "POST",
+            "url": "{{base_auth}}/v1/auth/register",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pasien.test@healthsync.id\",\n  \"password\": \"Test@1234\",\n  \"name\": \"Budi Santoso\",\n  \"role\": \"PATIENT\",\n  \"phone\": \"08123456789\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });",
+                  "pm.test(\"Has accessToken\", () => { pm.expect(pm.response.json().data?.accessToken).to.be.a('string'); });",
+                  "pm.test(\"Has refreshToken\", () => { pm.expect(pm.response.json().data?.refreshToken).to.be.a('string'); });",
+                  "const d = pm.response.json().data;",
+                  "pm.collectionVariables.set(\"access_token\", d?.accessToken);",
+                  "pm.collectionVariables.set(\"refresh_token\", d?.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register Doctor",
+          "request": {
+            "method": "POST",
+            "url": "{{base_auth}}/v1/auth/register",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"dokter.test@healthsync.id\",\n  \"password\": \"Test@1234\",\n  \"name\": \"Dr. Siti Rahayu\",\n  \"role\": \"DOCTOR\",\n  \"phone\": \"08234567890\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });",
+                  "pm.test(\"Has doctor accessToken\", () => { pm.expect(pm.response.json().data?.accessToken).to.be.a('string'); });",
+                  "pm.collectionVariables.set(\"doctor_access_token\", pm.response.json().data?.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "url": "{{base_auth}}/v1/auth/login",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pasien.test@healthsync.id\",\n  \"password\": \"Test@1234\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"Role is PATIENT\", () => { pm.expect(pm.response.json().data?.role).to.eql(\"PATIENT\"); });",
+                  "const d = pm.response.json().data;",
+                  "pm.collectionVariables.set(\"access_token\", d?.accessToken);",
+                  "pm.collectionVariables.set(\"refresh_token\", d?.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_auth}}/v1/auth/me",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data.userId exists\", () => { pm.expect(pm.response.json().data?.userId).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "url": "{{base_auth}}/v1/auth/refresh",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "const d = pm.response.json().data;",
+                  "if (d?.accessToken) pm.collectionVariables.set(\"access_token\", d.accessToken);",
+                  "if (d?.refreshToken) pm.collectionVariables.set(\"refresh_token\", d.refreshToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "👤 Patient Flow",
+      "item": [
+        {
+          "name": "Create Patient Profile",
+          "request": {
+            "method": "POST",
+            "url": "{{base_patient}}/v1/patients",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{$randomUUID}}\",\n  \"nik\": \"3201234567890001\",\n  \"name\": \"Budi Santoso\",\n  \"dateOfBirth\": \"1990-05-15\",\n  \"gender\": \"MALE\",\n  \"bloodType\": \"O+\",\n  \"phone\": \"08123456789\",\n  \"address\": \"Jl. Sudirman No. 10, Jakarta Selatan\",\n  \"emergencyContactName\": \"Siti Santoso\",\n  \"emergencyContactPhone\": \"08987654321\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.add({ key: 'Authorization', value: 'Bearer ' + pm.collectionVariables.get('access_token') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });",
+                  "pm.test(\"data.id exists\", () => { pm.expect(pm.response.json().data?.id).to.be.a('string'); });",
+                  "pm.collectionVariables.set(\"patient_id\", pm.response.json().data?.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Patient Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{base_patient}}/v1/patients/{{patient_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.add({ key: 'Authorization', value: 'Bearer ' + pm.collectionVariables.get('access_token') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Record Vital Signs",
+          "request": {
+            "method": "POST",
+            "url": "{{base_patient}}/v1/patients/{{patient_id}}/vitals",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"heartRate\": 75,\n  \"spo2\": 98,\n  \"temperature\": 36.5,\n  \"systolicBp\": 120,\n  \"diastolicBp\": 80,\n  \"activityLevel\": \"resting\",\n  \"source\": \"MANUAL\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.add({ key: 'Authorization', value: 'Bearer ' + pm.collectionVariables.get('access_token') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Vitals History",
+          "request": {
+            "method": "GET",
+            "url": "{{base_patient}}/v1/patients/{{patient_id}}/vitals",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.add({ key: 'Authorization', value: 'Bearer ' + pm.collectionVariables.get('access_token') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data is array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Latest Vitals",
+          "request": {
+            "method": "GET",
+            "url": "{{base_patient}}/v1/patients/{{patient_id}}/vitals/latest",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.add({ key: 'Authorization', value: 'Bearer ' + pm.collectionVariables.get('access_token') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => { pm.expect([200, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Medical Condition",
+          "request": {
+            "method": "POST",
+            "url": "{{base_patient}}/v1/patients/{{patient_id}}/conditions",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"icd10Code\": \"I10\",\n  \"description\": \"Hipertensi primer\",\n  \"diagnosedAt\": \"2020-01-15\",\n  \"isActive\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.add({ key: 'Authorization', value: 'Bearer ' + pm.collectionVariables.get('access_token') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pair IoT Device",
+          "request": {
+            "method": "POST",
+            "url": "{{base_patient}}/v1/patients/{{patient_id}}/devices",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"GW6-TEST-001\",\n  \"deviceType\": \"SAMSUNG_GALAXY_WATCH_4\",\n  \"firmwareVersion\": \"2.1.3\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.add({ key: 'Authorization', value: 'Bearer ' + pm.collectionVariables.get('access_token') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "💬 Consultation Flow",
+      "item": [
+        {
+          "name": "Create Consultation",
+          "request": {
+            "method": "POST",
+            "url": "{{base_consultation}}/v1/consultations",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patient_id}}\",\n  \"chiefComplaint\": \"Merasa pusing dan mual sejak 2 hari yang lalu\",\n  \"symptomData\": {\n    \"symptoms\": [\"headache\", \"nausea\"],\n    \"duration\": \"2 days\",\n    \"severity\": \"moderate\"\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });",
+                  "pm.test(\"data.status is PENDING\", () => { pm.expect(pm.response.json().data?.status).to.eql(\"PENDING\"); });",
+                  "pm.collectionVariables.set(\"consultation_id\", pm.response.json().data?.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Available Doctors",
+          "request": {
+            "method": "GET",
+            "url": "{{base_consultation}}/v1/doctors/available",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data is array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Doctor Accepts Consultation",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_consultation}}/v1/consultations/{{consultation_id}}/accept",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{doctor_access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data.status is ACCEPTED\", () => { pm.expect(pm.response.json().data?.status).to.eql(\"ACCEPTED\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Patient Message",
+          "request": {
+            "method": "POST",
+            "url": "{{base_consultation}}/v1/consultations/{{consultation_id}}/messages",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Dokter, saya merasa pusing sejak kemarin pagi. Apakah perlu periksa darah?\",\n  \"messageType\": \"TEXT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Doctor Reply",
+          "request": {
+            "method": "POST",
+            "url": "{{base_consultation}}/v1/consultations/{{consultation_id}}/messages",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctor_access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Baik pak Budi, saya sarankan untuk cek tekanan darah dan pemeriksaan darah lengkap. Saya akan buatkan e-resep.\",\n  \"messageType\": \"TEXT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "GET",
+            "url": "{{base_consultation}}/v1/consultations/{{consultation_id}}/messages",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data length >= 2\", () => { pm.expect(pm.response.json().data.length).to.be.at.least(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Doctor Completes Consultation",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_consultation}}/v1/consultations/{{consultation_id}}/complete",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctor_access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnosis\": \"Tension headache, kemungkinan terkait tekanan darah tinggi\",\n  \"notes\": \"Disarankan cek tekanan darah rutin\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data.status is COMPLETED\", () => { pm.expect(pm.response.json().data?.status).to.eql(\"COMPLETED\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "💊 Prescription Flow",
+      "item": [
+        {
+          "name": "Doctor Issues Prescription",
+          "request": {
+            "method": "POST",
+            "url": "{{base_prescription}}/v1/prescriptions",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctor_access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consultationId\": \"{{consultation_id}}\",\n  \"patientId\": \"{{patient_id}}\",\n  \"items\": [\n    {\n      \"drugId\": \"d0000000-0000-0000-0000-000000000002\",\n      \"drugName\": \"Paracetamol 500mg\",\n      \"dosage\": \"1 tablet 3x/hari sesudah makan\",\n      \"quantity\": 10,\n      \"instructions\": \"Minum saat sakit kepala\"\n    },\n    {\n      \"drugId\": \"d0000000-0000-0000-0000-000000000004\",\n      \"drugName\": \"Amlodipine 5mg\",\n      \"dosage\": \"1 tablet 1x/hari pagi hari\",\n      \"quantity\": 30,\n      \"instructions\": \"Minum teratur setiap hari\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", () => { pm.response.to.have.status(201); });",
+                  "pm.test(\"data.status is ISSUED\", () => { pm.expect(pm.response.json().data?.status).to.eql(\"ISSUED\"); });",
+                  "pm.collectionVariables.set(\"prescription_id\", pm.response.json().data?.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Prescription Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{base_prescription}}/v1/prescriptions/{{prescription_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data.items length is 2\", () => { pm.expect(pm.response.json().data?.items.length).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patient Selects Pharmacy",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_prescription}}/v1/prescriptions/{{prescription_id}}/pharmacy",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pharmacyId\": \"{{$randomUUID}}\",\n  \"fulfillmentType\": \"DELIVERY\",\n  \"deliveryAddress\": \"Jl. Sudirman No. 10, Jakarta Selatan\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 422\", () => { pm.expect([200, 422]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🏥 Hospital Search Flow",
+      "item": [
+        {
+          "name": "Search Hospitals Nearby",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_hospital}}/v1/hospitals/search?lat=-6.2088&lng=106.8456&radius_km=20",
+              "host": ["{{base_hospital}}"],
+              "path": ["v1", "hospitals", "search"],
+              "query": [
+                { "key": "lat", "value": "-6.2088" },
+                { "key": "lng", "value": "106.8456" },
+                { "key": "radius_km", "value": "20" }
+              ]
+            },
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data is array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Hospital Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{base_hospital}}/v1/hospitals/{{hospital_id}}",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => { pm.expect([200, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Hospital Capacity",
+          "request": {
+            "method": "GET",
+            "url": "{{base_hospital}}/v1/hospitals/{{hospital_id}}/capacity",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => { pm.expect([200, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🚑 Alert & Emergency Flow",
+      "item": [
+        {
+          "name": "Get Active Alerts",
+          "request": {
+            "method": "GET",
+            "url": "{{base_alert}}/v1/alerts/active",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data is array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List All Alerts",
+          "request": {
+            "method": "GET",
+            "url": "{{base_alert}}/v1/alerts",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Alert Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_alert}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ambulances Nearby",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_ambulance}}/v1/ambulances/nearby?lat=-6.2088&lng=106.8456",
+              "host": ["{{base_ambulance}}"],
+              "path": ["v1", "ambulances", "nearby"],
+              "query": [
+                { "key": "lat", "value": "-6.2088" },
+                { "key": "lng", "value": "106.8456" }
+              ]
+            },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"data is array\", () => { pm.expect(pm.response.json().data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔄 Referral Flow",
+      "item": [
+        {
+          "name": "Create Referral",
+          "request": {
+            "method": "POST",
+            "url": "{{base_referral}}/v1/referrals",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctor_access_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patient_id}}\",\n  \"toHospitalId\": \"a0000000-0000-0000-0000-000000000001\",\n  \"reason\": \"Pasien membutuhkan penanganan spesialis kardiologi untuk evaluasi lebih lanjut tekanan darah tinggi yang tidak terkontrol\",\n  \"urgencyLevel\": \"URGENT\",\n  \"requiredSpecialization\": \"CARDIOLOGY\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201 or 422\", () => { pm.expect([201, 422]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"referral_id\", pm.response.json().data?.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Referrals",
+          "request": {
+            "method": "GET",
+            "url": "{{base_referral}}/v1/referrals",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{doctor_access_token}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🔧 Service Health Checks",
+      "item": [
+        {
+          "name": "Health — Auth Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_auth}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Patient Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_patient}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Consultation Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_consultation}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Prescription Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_prescription}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Ambulance Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_ambulance}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Referral Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_referral}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Hospital Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_hospital}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Pharmacy Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_pharmacy}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Notification Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_notification}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — IoT Service",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:4001/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health — Alert Service",
+          "request": {
+            "method": "GET",
+            "url": "{{base_alert}}/health",
+            "header": []
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", () => { pm.response.to.have.status(200); });",
+                  "pm.test(\"status ok\", () => { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

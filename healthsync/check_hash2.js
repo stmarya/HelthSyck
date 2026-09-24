@@ -1,0 +1,12 @@
+﻿const bcrypt = require('/app/node_modules/bcryptjs');
+const hash1 = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHXO';
+const hash2 = '$2a$12$ncFqTz6rSMrkv7SPhRfZd.4tjWxIm5qq7WBxNNjYuQ1875cYycVrm';
+const hash3 = '$2a$12$drm5auduwFD/a8WC1/ngSOtRQriH5CghmmE30cCCKZ0uNowlQySZi';
+const candidates = ['Password@123','password','Admin@123','Demo@12345','Test@1234','Test@12345','Healthsync@1','Operator@123','Command@123','HealthSync123'];
+console.log('=== Hash V008 ($2a$10$...) ===');
+candidates.forEach(p => { const ok = bcrypt.compareSync(p, hash1); if(ok) console.log('MATCH: '+p); });
+console.log('=== Hash pasien.test ($2a$12$ncF...) ===');
+candidates.forEach(p => { const ok = bcrypt.compareSync(p, hash2); if(ok) console.log('MATCH: '+p); });
+console.log('=== Hash operator.test ($2a$12$drm...) ===');
+candidates.forEach(p => { const ok = bcrypt.compareSync(p, hash3); if(ok) console.log('MATCH: '+p); });
+console.log('done');

@@ -1,0 +1,22 @@
+{
+  "name": "@healthsync/iot-simulator",
+  "version": "1.0.0",
+  "description": "MQTT smartwatch simulator untuk testing HealthSync IoT pipeline",
+  "main": "simulate.js",
+  "scripts": {
+    "start": "node simulate.js",
+    "normal": "node simulate.js --scenario=normal",
+    "level1": "node simulate.js --scenario=level1",
+    "level2": "node simulate.js --scenario=level2",
+    "critical": "node simulate.js --scenario=critical",
+    "recovery": "node simulate.js --scenario=recovery",
+    "stress": "node simulate.js --scenario=stress"
+  },
+  "dependencies": {
+    "mqtt": "^5.3.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,886 @@
+openapi: "3.1.0"
+info:
+  title: HealthSync Indonesia API
+  version: "1.0.0"
+  description: |
+    Platform kesehatan terpadu — IoT, Telemedicine, Emergency Response.
+    
+    **Authentication**: Bearer JWT required on all endpoints except `/health` and `/v1/auth/register|login|refresh`.
+    
+    **Error Format**: RFC 7807 Problem Details (`application/problem+json`)
+    
+    **Rate Limits**: 100 req/min per user token, 1000 req/min per service token.
+  contact:
+    name: HealthSync Engineering
+    email: engineering@healthsync.id
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.healthsync.id/v1
+    description: Production
+  - url: https://api-staging.healthsync.id/v1
+    description: Staging
+  - url: http://localhost:3001/v1
+    description: Local (auth-service)
+
+tags:
+  - name: Auth
+    description: Authentication & token management
+  - name: Patients
+    description: Patient profiles, medical history, vital signs
+  - name: Consultations
+    description: Doctor-patient consultations (chat)
+  - name: Prescriptions
+    description: e-Prescriptions and pharmacy fulfillment
+  - name: Hospitals
+    description: Hospital info, capacity, beds
+  - name: Ambulances
+    description: Ambulance dispatch and GPS tracking
+  - name: Referrals
+    description: Inter-hospital patient referrals
+  - name: Pharmacy
+    description: Drug search and inventory management
+  - name: Alerts
+    description: IoT health alert management
+  - name: Notifications
+    description: Push, SMS, and in-app notifications
+
+# ─────────────────────────────────────────────────────────────
+# Components
+# ─────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Standard response wrapper
+    SuccessResponse:
+      type: object
+      properties:
+        data:
+          description: Response payload
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+
+    # RFC 7807 Problem Detail
+    ProblemDetail:
+      type: object
+      required: [type, title, status, detail, instance, requestId]
+      properties:
+        type:
+          type: string
+          example: "https://errors.healthsync.id/validation-error"
+        title:
+          type: string
+          example: "Validation Error"
+        status:
+          type: integer
+          example: 422
+        detail:
+          type: string
+          example: "Field heart_rate must be between 30-250"
+        instance:
+          type: string
+          example: "/v1/patients/xxx/vitals"
+        requestId:
+          type: string
+          format: uuid
+
+    # User roles
+    UserRole:
+      type: string
+      enum: [PATIENT, DOCTOR, COMMAND_CENTER, PHARMACIST, AMBULANCE_DRIVER, ADMIN]
+
+    # Patient
+    Patient:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        name: { type: string }
+        dateOfBirth: { type: string, format: date }
+        gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+        bloodType: { type: string, enum: ["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"] }
+        phone: { type: string }
+        address: { type: string }
+        emergencyContactName: { type: string }
+        emergencyContactPhone: { type: string }
+        conditions: { type: array, items: { $ref: "#/components/schemas/MedicalCondition" } }
+        allergies: { type: array, items: { $ref: "#/components/schemas/Allergy" } }
+        devices: { type: array, items: { $ref: "#/components/schemas/IoTDevice" } }
+        createdAt: { type: string, format: date-time }
+
+    MedicalCondition:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        icd10Code: { type: string }
+        description: { type: string }
+        diagnosedAt: { type: string, format: date }
+        isActive: { type: boolean }
+
+    Allergy:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        allergen: { type: string }
+        reaction: { type: string }
+        severity: { type: string, enum: [MILD, MODERATE, SEVERE] }
+
+    IoTDevice:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        deviceId: { type: string }
+        deviceType: { type: string }
+        firmwareVersion: { type: string }
+        lastSeenAt: { type: string, format: date-time }
+        isActive: { type: boolean }
+
+    VitalSign:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        patientId: { type: string, format: uuid }
+        heartRate: { type: integer, minimum: 20, maximum: 300, description: "bpm" }
+        spo2: { type: number, minimum: 50, maximum: 100, description: "%" }
+        systolicBp: { type: integer, description: "mmHg" }
+        diastolicBp: { type: integer, description: "mmHg" }
+        temperature: { type: number, description: "°C" }
+        activityLevel: { type: string, enum: [resting, walking, running] }
+        source: { type: string, enum: [MANUAL, IOT_DEVICE, WEARABLE] }
+        recordedAt: { type: string, format: date-time }
+
+    Consultation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        patientId: { type: string, format: uuid }
+        doctorId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED, EXPIRED]
+        chiefComplaint: { type: string }
+        diagnosis: { type: string }
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    ConsultationMessage:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        consultationId: { type: string, format: uuid }
+        senderId: { type: string, format: uuid }
+        senderEmail: { type: string }
+        messageType: { type: string, enum: [TEXT, IMAGE, FILE, SYSTEM] }
+        content: { type: string }
+        fileUrl: { type: string }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    Prescription:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        consultationId: { type: string, format: uuid }
+        patientId: { type: string, format: uuid }
+        doctorId: { type: string, format: uuid }
+        pharmacyId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [ISSUED, SENT_TO_PHARMACY, CONFIRMED, PREPARING, READY, DELIVERING, DELIVERED, CANCELLED]
+        items: { type: array, items: { $ref: "#/components/schemas/PrescriptionItem" } }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+
+    PrescriptionItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        drugId: { type: string, format: uuid }
+        drugName: { type: string }
+        dosage: { type: string, example: "1 tablet 3x/day" }
+        quantity: { type: integer, minimum: 1 }
+        instructions: { type: string }
+
+    Hospital:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string, enum: [TYPE_A, TYPE_B, TYPE_C, TYPE_D, CLINIC, PUSKESMAS] }
+        address: { type: string }
+        city: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        phone: { type: string }
+        igdPhone: { type: string }
+        totalBeds: { type: integer }
+        availableBeds: { type: integer }
+        icuTotal: { type: integer }
+        icuAvailable: { type: integer }
+        specializations: { type: array, items: { type: string } }
+        distanceKm: { type: number, description: "Only present in search results" }
+
+    Ambulance:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        plateNumber: { type: string }
+        type: { type: string, enum: [BLS, ALS, NICU] }
+        status:
+          type: string
+          enum: [OFFLINE, AVAILABLE, DISPATCHED, EN_ROUTE, AT_SCENE, TRANSPORTING, RETURNING]
+        latitude: { type: number }
+        longitude: { type: number }
+        distanceKm: { type: number, description: "Only present in nearby results" }
+        etaMinutes: { type: number }
+
+    Referral:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        patientId: { type: string, format: uuid }
+        patientName: { type: string }
+        fromHospitalName: { type: string }
+        toHospitalName: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, SENT, ACCEPTED, REJECTED, IN_TRANSIT, ARRIVED, CANCELLED]
+        reason: { type: string }
+        urgencyLevel: { type: string, enum: [CRITICAL, URGENT, NORMAL] }
+        createdAt: { type: string, format: date-time }
+
+    Alert:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        patientId: { type: string, format: uuid }
+        patientName: { type: string }
+        level: { type: string, enum: [LEVEL_1, LEVEL_2, LEVEL_3] }
+        status: { type: string, enum: [ACTIVE, ACKNOWLEDGED, RESOLVED, FALSE_POSITIVE] }
+        triggerMetric: { type: string, example: "heart_rate" }
+        triggerValue: { type: number, example: 185 }
+        thresholdValue: { type: number, example: 180 }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+        timestamp: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []
+
+# ─────────────────────────────────────────────────────────────
+# Paths
+# ─────────────────────────────────────────────────────────────
+paths:
+
+  # ── AUTH ─────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, role]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, description: "Must contain uppercase, lowercase, number, special char" }
+                name: { type: string, minLength: 2 }
+                role: { $ref: "#/components/schemas/UserRole" }
+                phone: { type: string }
+      responses:
+        "201":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          userId: { type: string, format: uuid }
+                          email: { type: string }
+                          role: { $ref: "#/components/schemas/UserRole" }
+                          accessToken: { type: string }
+                          refreshToken: { type: string }
+        "409": { description: Email already registered }
+        "422": { description: Validation error, content: { application/problem+json: { schema: { $ref: "#/components/schemas/ProblemDetail" } } } }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Login with email + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          userId: { type: string, format: uuid }
+                          email: { type: string }
+                          role: { $ref: "#/components/schemas/UserRole" }
+                          accessToken: { type: string }
+                          refreshToken: { type: string }
+        "401": { description: Invalid credentials }
+        "429": { description: Too many failed attempts }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Rotate tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: Tokens rotated
+        "401": { description: Refresh token invalid or expired }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (revoke refresh token)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200": { description: Logged out }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user
+        "401": { description: Unauthorized }
+
+  # ── PATIENTS ─────────────────────────────────────────────────
+  /patients:
+    get:
+      tags: [Patients]
+      summary: List patients (DOCTOR/COMMAND_CENTER/ADMIN)
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+        - in: query
+          name: search
+          schema: { type: string }
+          description: Search by name (trigram)
+      responses:
+        "200":
+          description: Paginated patient list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Patient" } }
+                  meta: { $ref: "#/components/schemas/Pagination" }
+        "403": { description: Insufficient role }
+
+    post:
+      tags: [Patients]
+      summary: Create patient profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, nik, name, dateOfBirth, gender, bloodType, phone, address]
+              properties:
+                userId: { type: string, format: uuid }
+                nik: { type: string, minLength: 16, maxLength: 16 }
+                name: { type: string }
+                dateOfBirth: { type: string, format: date }
+                gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+                bloodType: { type: string, enum: ["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"] }
+                phone: { type: string }
+                address: { type: string }
+                emergencyContactName: { type: string }
+                emergencyContactPhone: { type: string }
+      responses:
+        "201": { description: Patient created, content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/SuccessResponse" }, { type: object, properties: { data: { $ref: "#/components/schemas/Patient" } } }] } } } }
+        "409": { description: NIK already registered }
+
+  /patients/{id}:
+    get:
+      tags: [Patients]
+      summary: Get patient detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Patient detail, content: { application/json: { schema: { allOf: [{ $ref: "#/components/schemas/SuccessResponse" }, { type: object, properties: { data: { $ref: "#/components/schemas/Patient" } } }] } } } }
+        "404": { description: Patient not found }
+
+    put:
+      tags: [Patients]
+      summary: Update patient profile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Updated }
+
+  /patients/{id}/vitals:
+    get:
+      tags: [Patients]
+      summary: Get vital signs history
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+          description: Default last 24 hours
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 100, maximum: 1000 }
+      responses:
+        "200":
+          description: Vital signs array
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/VitalSign" } }
+
+    post:
+      tags: [Patients]
+      summary: Record vital signs (manual entry)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [heartRate, spo2]
+              properties:
+                heartRate: { type: integer, minimum: 20, maximum: 300 }
+                spo2: { type: number, minimum: 50, maximum: 100 }
+                temperature: { type: number }
+                systolicBp: { type: integer }
+                diastolicBp: { type: integer }
+                source: { type: string, enum: [MANUAL, IOT_DEVICE, WEARABLE], default: MANUAL }
+      responses:
+        "201": { description: Vitals recorded }
+
+  /patients/{id}/vitals/latest:
+    get:
+      tags: [Patients]
+      summary: Get latest vital sign
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Latest vital sign }
+        "404": { description: No vitals recorded }
+
+  # ── CONSULTATIONS ─────────────────────────────────────────────
+  /consultations:
+    post:
+      tags: [Consultations]
+      summary: Create consultation request (PATIENT)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patientId, chiefComplaint]
+              properties:
+                patientId: { type: string, format: uuid }
+                chiefComplaint: { type: string, minLength: 10 }
+                symptomData: { type: object }
+      responses:
+        "201": { description: Consultation created }
+        "409": { description: Active consultation already exists }
+
+    get:
+      tags: [Consultations]
+      summary: List consultations (role-scoped)
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED, EXPIRED] }
+      responses:
+        "200": { description: Paginated consultation list }
+
+  /consultations/{id}/accept:
+    put:
+      tags: [Consultations]
+      summary: Accept consultation (DOCTOR)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Accepted }
+        "409": { description: Invalid state transition }
+
+  /consultations/{id}/messages:
+    post:
+      tags: [Consultations]
+      summary: Send message in consultation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, messageType]
+              properties:
+                content: { type: string, maxLength: 5000 }
+                messageType: { type: string, enum: [TEXT, IMAGE, FILE] }
+                fileUrl: { type: string }
+      responses:
+        "201": { description: Message sent }
+
+    get:
+      tags: [Consultations]
+      summary: Get consultation messages (cursor-paginated)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: after
+          schema: { type: string, format: date-time }
+          description: Cursor — messages after this timestamp
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, maximum: 200 }
+      responses:
+        "200": { description: Messages array }
+
+  # ── ALERTS ─────────────────────────────────────────────────────
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: List alerts (paginated + filtered)
+      parameters:
+        - in: query
+          name: patientId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: status
+          schema: { type: string, enum: [ACTIVE, ACKNOWLEDGED, RESOLVED, FALSE_POSITIVE] }
+        - in: query
+          name: level
+          schema: { type: string, enum: [LEVEL_1, LEVEL_2, LEVEL_3] }
+      responses:
+        "200": { description: Alert list }
+
+  /alerts/active:
+    get:
+      tags: [Alerts]
+      summary: All active alerts — Command Center (COMMAND_CENTER/ADMIN)
+      responses:
+        "200":
+          description: Active alerts with patient info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Alert" } }
+
+  /alerts/{id}/acknowledge:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge alert
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Acknowledged }
+
+  /alerts/{id}/resolve:
+    post:
+      tags: [Alerts]
+      summary: Resolve alert
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Resolved }
+
+  # ── HOSPITALS ─────────────────────────────────────────────────
+  /hospitals/search:
+    get:
+      tags: [Hospitals]
+      summary: Smart hospital search (distance + capacity + specialization)
+      parameters:
+        - in: query
+          name: lat
+          schema: { type: number }
+        - in: query
+          name: lng
+          schema: { type: number }
+        - in: query
+          name: radius_km
+          schema: { type: integer, default: 20 }
+        - in: query
+          name: specialization
+          schema: { type: string }
+        - in: query
+          name: hasIcu
+          schema: { type: boolean }
+        - in: query
+          name: minAvailableBeds
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Hospitals ordered by distance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Hospital" } }
+
+  /hospitals/{id}/capacity:
+    get:
+      tags: [Hospitals]
+      summary: Real-time bed capacity by ward
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Capacity breakdown by ward }
+
+  # ── AMBULANCES ─────────────────────────────────────────────────
+  /ambulances/nearby:
+    get:
+      tags: [Ambulances]
+      summary: Find nearest available ambulances
+      parameters:
+        - in: query
+          name: lat
+          required: true
+          schema: { type: number }
+        - in: query
+          name: lng
+          required: true
+          schema: { type: number }
+        - in: query
+          name: hospitalId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: maxResults
+          schema: { type: integer, default: 5, maximum: 20 }
+      responses:
+        "200":
+          description: Available ambulances ordered by distance + ETA
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Ambulance" } }
+
+  /ambulances/{id}/dispatch:
+    post:
+      tags: [Ambulances]
+      summary: Dispatch ambulance (COMMAND_CENTER)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patientId, destination]
+              properties:
+                patientId: { type: string, format: uuid }
+                destination: { type: string }
+                notes: { type: string }
+      responses:
+        "200": { description: Dispatched }
+        "409": { description: Ambulance not available }
+
+  /ambulances/{id}/location:
+    post:
+      tags: [Ambulances]
+      summary: Update ambulance GPS location (AMBULANCE_DRIVER)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [latitude, longitude]
+              properties:
+                latitude: { type: number, minimum: -90, maximum: 90 }
+                longitude: { type: number, minimum: -180, maximum: 180 }
+                heading: { type: number, minimum: 0, maximum: 360 }
+                speedKmh: { type: number, minimum: 0, maximum: 200 }
+      responses:
+        "204": { description: Location updated }
+
+  # ── REFERRALS ─────────────────────────────────────────────────
+  /referrals:
+    post:
+      tags: [Referrals]
+      summary: Create referral (DOCTOR)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patientId, toHospitalId, reason, urgencyLevel]
+              properties:
+                patientId: { type: string, format: uuid }
+                toHospitalId: { type: string, format: uuid }
+                reason: { type: string, minLength: 20 }
+                diagnosis: { type: string }
+                urgencyLevel: { type: string, enum: [CRITICAL, URGENT, NORMAL] }
+                requiredSpecialization: { type: string }
+      responses:
+        "201": { description: Referral created }
+
+    get:
+      tags: [Referrals]
+      summary: List referrals (role-scoped)
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: urgencyLevel
+          schema: { type: string, enum: [CRITICAL, URGENT, NORMAL] }
+      responses:
+        "200": { description: Referral list }
+
+  /referrals/{id}/accept:
+    put:
+      tags: [Referrals]
+      summary: Accept referral (COMMAND_CENTER of receiving hospital)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Accepted }
+
+  /referrals/{id}/reject:
+    put:
+      tags: [Referrals]
+      summary: Reject referral
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rejectedReason]
+              properties:
+                rejectedReason: { type: string, minLength: 10 }
+      responses:
+        "200": { description: Rejected }

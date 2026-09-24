@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alert-service-config
+  namespace: healthsync
+data:
+  LOG_LEVEL: "info"
+  REDIS_URL: "redis://redis:6379"
+  KAFKA_BROKERS: "kafka:29092"
+  MQTT_BROKER: "tcp://emqx:1883"
+  PORT: "4002"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-service
+  namespace: healthsync
+  labels:
+    app: alert-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alert-service
+  template:
+    metadata:
+      labels:
+        app: alert-service
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: alert-service
+          image: healthsync/alert-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4002
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: alert-service-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: jwt-secret
+            - name: KAFKA_TOPIC_VITALS
+              value: "hs.vitals.ingested"
+            - name: KAFKA_TOPIC_ALERTS
+              value: "hs.alert.triggered"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4002
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-service
+  namespace: healthsync
+  labels:
+    app: alert-service
+spec:
+  selector:
+    app: alert-service
+  ports:
+    - name: http
+      port: 4002
+      targetPort: 4002
+      protocol: TCP
+  type: ClusterIP

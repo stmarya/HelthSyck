@@ -1,0 +1,213 @@
+name: HealthSync CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  GO_VERSION: "1.21"
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Lint & Test — Node.js Services
+  # ─────────────────────────────────────────────
+  lint-and-test-node:
+    name: "Node [${{ matrix.service }}]"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - auth-service
+          - patient-service
+          - consultation-service
+          - prescription-service
+          - ambulance-service
+          - referral-service
+          - hospital-service
+          - pharmacy-service
+          - notification-service
+          - integration-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: healthsync/package-lock.json
+
+      # Install from monorepo root so @healthsync/shared workspace dep resolves
+      - name: Install dependencies (monorepo root)
+        working-directory: healthsync
+        run: npm ci
+
+      # Build shared package first — services depend on its dist/
+      - name: Build @healthsync/shared
+        working-directory: healthsync
+        run: npm run build --workspace=packages/shared
+
+      - name: Type-check
+        working-directory: healthsync
+        run: npx tsc --project services/${{ matrix.service }}/tsconfig.json --noEmit
+
+      - name: Lint
+        working-directory: healthsync
+        run: npm run lint --workspace=services/${{ matrix.service }}
+        continue-on-error: true
+
+      - name: Test
+        working-directory: healthsync
+        run: npm test --workspace=services/${{ matrix.service }}
+        env:
+          NODE_ENV: test
+          PORT: "0"
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-test-secret-do-not-use-in-production
+          REDIS_URL: redis://localhost:6379
+
+  # ─────────────────────────────────────────────
+  # Lint & Test — Go Services
+  # ─────────────────────────────────────────────
+  lint-and-test-go:
+    name: "Go [${{ matrix.service }}]"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - iot-ingestion
+          - alert-service
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: healthsync/services/${{ matrix.service }}/go.sum
+
+      - name: Download modules
+        working-directory: healthsync/services/${{ matrix.service }}
+        run: go mod download
+
+      - name: Vet
+        working-directory: healthsync/services/${{ matrix.service }}
+        run: go vet ./...
+
+      - name: Test
+        working-directory: healthsync/services/${{ matrix.service }}
+        run: go test -v -race -coverprofile=coverage.out ./...
+        env:
+          PORT: "0"
+          KAFKA_BROKERS: "localhost:9092"
+          MQTT_BROKER: "tcp://localhost:1883"
+          DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-coverage-${{ matrix.service }}
+          path: healthsync/services/${{ matrix.service }}/coverage.out
+
+  # ─────────────────────────────────────────────
+  # Docker Build
+  # Node services: build context = monorepo root (healthsync/)
+  #   so @healthsync/shared can be resolved during npm ci
+  # Go services: build context = their own directory (self-contained)
+  # ─────────────────────────────────────────────
+  build-docker:
+    name: "Docker [${{ matrix.service }}]"
+    runs-on: ubuntu-latest
+    needs: [lint-and-test-node, lint-and-test-go]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Node services — context is the monorepo root; dockerfile path is relative to it
+          - service: auth-service
+            context: healthsync
+            dockerfile: healthsync/services/auth-service/Dockerfile
+          - service: patient-service
+            context: healthsync
+            dockerfile: healthsync/services/patient-service/Dockerfile
+          - service: consultation-service
+            context: healthsync
+            dockerfile: healthsync/services/consultation-service/Dockerfile
+          - service: prescription-service
+            context: healthsync
+            dockerfile: healthsync/services/prescription-service/Dockerfile
+          - service: ambulance-service
+            context: healthsync
+            dockerfile: healthsync/services/ambulance-service/Dockerfile
+          - service: referral-service
+            context: healthsync
+            dockerfile: healthsync/services/referral-service/Dockerfile
+          - service: hospital-service
+            context: healthsync
+            dockerfile: healthsync/services/hospital-service/Dockerfile
+          - service: pharmacy-service
+            context: healthsync
+            dockerfile: healthsync/services/pharmacy-service/Dockerfile
+          - service: notification-service
+            context: healthsync
+            dockerfile: healthsync/services/notification-service/Dockerfile
+          - service: integration-service
+            context: healthsync
+            dockerfile: healthsync/services/integration-service/Dockerfile
+          # Go services — self-contained, use their own directory as context
+          - service: iot-ingestion
+            context: healthsync/services/iot-ingestion
+            dockerfile: healthsync/services/iot-ingestion/Dockerfile
+          - service: alert-service
+            context: healthsync/services/alert-service
+            dockerfile: healthsync/services/alert-service/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: ghcr.io/healthsync-indonesia/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────────────────────────
+  # CI Status Gate
+  # ─────────────────────────────────────────────
+  ci-pass:
+    name: CI Pass
+    runs-on: ubuntu-latest
+    needs: [lint-and-test-node, lint-and-test-go]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.lint-and-test-node.result }}" != "success" ]] || \
+             [[ "${{ needs.lint-and-test-go.result }}" != "success" ]]; then
+            echo "One or more CI jobs failed."
+            exit 1
+          fi
+          echo "All CI jobs passed."

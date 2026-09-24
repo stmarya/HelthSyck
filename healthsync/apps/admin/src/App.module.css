@@ -1,0 +1,41 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   App.module.css — Layout root aplikasi admin
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Layout utama (sidebar + konten) ── */
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Area konten kanan (topbar + main) */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  /* Transisi saat sidebar collapse/expand */
+  transition: margin-left var(--transition-slow);
+}
+
+/* Area scrollable utama */
+.main {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Varian saat sidebar sedang collapsed — tidak ada perubahan margin karena
+   sidebar menggunakan position sticky, bukan fixed. Class ini disiapkan
+   untuk ekspansi future jika layout berubah ke sticky/fixed. */
+.layoutCollapsed .content {
+  /* kosong — sidebar collapse ditangani oleh width transition sidebar itu sendiri */
+}
+
+/* ── Responsif mobile ── */
+@media (max-width: 768px) {
+  .content {
+    margin-left: 0 !important;
+  }
+}

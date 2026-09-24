@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iot-ingestion-config
+  namespace: healthsync
+data:
+  LOG_LEVEL: "info"
+  REDIS_URL: "redis://redis:6379"
+  KAFKA_BROKERS: "kafka:29092"
+  MQTT_BROKER: "tcp://emqx:1883"
+  PORT: "4001"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iot-ingestion
+  namespace: healthsync
+  labels:
+    app: iot-ingestion
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: iot-ingestion
+  template:
+    metadata:
+      labels:
+        app: iot-ingestion
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: iot-ingestion
+          image: healthsync/iot-ingestion:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4001
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: iot-ingestion-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: jwt-secret
+            - name: KAFKA_TOPIC_VITALS
+              value: "hs.vitals.ingested"
+            - name: KAFKA_TOPIC_ALERTS
+              value: "hs.alert.triggered"
+            - name: MQTT_TOPIC
+              value: "hs/vitals/+"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4001
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iot-ingestion
+  namespace: healthsync
+  labels:
+    app: iot-ingestion
+spec:
+  selector:
+    app: iot-ingestion
+  ports:
+    - name: http
+      port: 4001
+      targetPort: 4001
+      protocol: TCP
+  type: ClusterIP

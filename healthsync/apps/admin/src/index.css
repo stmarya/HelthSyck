@@ -1,0 +1,253 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   HealthSync Admin — Global Design Tokens
+   Referensi: HackerEarth style — background putih bersih, sidebar dark navy,
+   card border minimal, radius kecil, tipografi moderat.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+*,
+*::before,
+*::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+img, video, svg { display: block; max-width: 100%; }
+button { font: inherit; cursor: pointer; }
+input, select, textarea { font: inherit; }
+
+/* ── Design Tokens — Light Mode ── */
+:root {
+  /* Warna Utama */
+  --color-primary:        #2563EB;
+  --color-primary-dark:   #1D4ED8;
+  --color-primary-light:  #DBEAFE;
+  --color-primary-glow:   rgba(37, 99, 235, 0.12);
+  --color-accent:         #7C3AED;
+  --color-accent-dark:    #6D28D9;
+  --color-accent-light:   #EDE9FE;
+  --color-accent-glow:    rgba(124, 58, 237, 0.12);
+
+  /* Semantik */
+  --color-success:        #16A34A;
+  --color-success-bg:     #F0FDF4;
+  --color-success-border: #BBF7D0;
+  --color-warning:        #D97706;
+  --color-warning-bg:     #FFFBEB;
+  --color-warning-border: #FDE68A;
+  --color-danger:         #DC2626;
+  --color-danger-bg:      #FEF2F2;
+  --color-danger-border:  #FECACA;
+  --color-danger-dark:    #B91C1C;
+  --color-critical:       #991B1B;
+  --color-info:           #0284C7;
+  --color-info-bg:        #F0F9FF;
+  --color-info-border:    #BAE6FD;
+
+  /* Latar & Surface — putih bersih seperti referensi */
+  --color-bg:             #FFFFFF;
+  --color-surface:        #FFFFFF;
+  --color-surface-2:      #F9FAFB;
+  --color-surface-hover:  #F3F4F6;
+  --color-surface-glass:  rgba(255, 255, 255, 0.95);
+  --color-border:         #E5E7EB;
+  --color-border-focus:   #2563EB;
+  --color-border-strong:  #D1D5DB;
+
+  /* Teks */
+  --color-text:           #111827;
+  --color-text-secondary: #374151;
+  --color-muted:          #6B7280;
+  --color-disabled:       #9CA3AF;
+  --color-placeholder:    #9CA3AF;
+
+  /* Sidebar dark chrome — identik referensi */
+  --sidebar-bg:           #1a1d2e;
+  --sidebar-text:         rgba(255,255,255,0.55);
+  --sidebar-text-hover:   rgba(255,255,255,0.90);
+  --sidebar-border:       rgba(255,255,255,0.07);
+  --sidebar-active-bg:    rgba(124,58,237,0.15);
+  --sidebar-active-text:  #a78bfa;
+  --sidebar-active-bar:   #7c5cd8;
+  --sidebar-hover-bg:     rgba(255,255,255,0.05);
+
+  /* Gradient */
+  --gradient-primary:     linear-gradient(135deg, #2563EB 0%, #7C3AED 100%);
+
+  /* Spacing */
+  --space-1:  4px;  --space-2:  8px;  --space-3: 12px;
+  --space-4: 16px;  --space-5: 20px;  --space-6: 24px;
+  --space-7: 28px;  --space-8: 32px;  --space-9: 36px;
+  --space-10:40px;  --space-11:44px;  --space-12:48px;
+
+  /* Tipografi */
+  --text-xs:   11px;  --text-sm:  12px;  --text-base: 14px;
+  --text-md:   15px;  --text-lg:  16px;  --text-xl:   18px;
+  --text-2xl:  22px;  --text-3xl: 26px;  --text-4xl:  32px;
+
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+  --font-weight-extrabold:800;
+
+  /* Border Radius — kecil seperti referensi */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:  10px;
+  --radius-2xl: 12px;
+  --radius-full: 9999px;
+
+  /* Shadow — minimal, sangat ringan */
+  --shadow-xs:  0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.04);
+  --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.07), 0 4px 6px -4px rgba(0,0,0,0.04);
+  --shadow-xl:  0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04);
+  --shadow-primary: 0 4px 12px rgba(37, 99, 235, 0.20);
+  --shadow-accent:  0 4px 12px rgba(124, 58, 237, 0.20);
+  --shadow-success: 0 4px 12px rgba(22, 163, 74, 0.20);
+  --shadow-danger:  0 4px 12px rgba(220, 38, 38, 0.20);
+
+  /* Transisi */
+  --transition-fast:   0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow:   0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Layout */
+  --topbar-height:           56px;
+  --sidebar-width:           240px;
+  --sidebar-collapsed-width: 60px;
+
+  /* Z-Index */
+  --z-sidebar:  100;
+  --z-topbar:   200;
+  --z-dropdown: 300;
+  --z-modal:    400;
+  --z-toast:    500;
+}
+
+/* ── Deteksi preferensi sistem — default dark jika sistem user dark ── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg:             #0f1117;
+    --color-surface:        #1a1d2e;
+    --color-surface-2:      #1f2336;
+    --color-surface-hover:  #252840;
+    --color-surface-glass:  rgba(26, 29, 46, 0.95);
+    --color-border:         rgba(255,255,255,0.09);
+    --color-border-focus:   #60a5fa;
+    --color-border-strong:  rgba(255,255,255,0.15);
+    --color-text:           #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-muted:          #94a3b8;
+    --color-disabled:       #475569;
+    --color-placeholder:    #64748b;
+    --color-primary:        #60a5fa;
+    --color-primary-dark:   #3b82f6;
+    --color-primary-light:  #1e3a5f;
+    --color-primary-glow:   rgba(96,165,250,0.12);
+    --color-accent:         #a78bfa;
+    --color-accent-dark:    #8b5cf6;
+    --color-accent-light:   #2d1f5e;
+    --color-accent-glow:    rgba(167,139,250,0.12);
+    --color-success:        #34d399;
+    --color-success-bg:     #052e16;
+    --color-success-border: #065f46;
+    --color-warning:        #fbbf24;
+    --color-warning-bg:     #1c1200;
+    --color-warning-border: #92400e;
+    --color-danger:         #f87171;
+    --color-danger-bg:      #2d0f0f;
+    --color-danger-border:  #7f1d1d;
+    --color-info:           #38bdf8;
+    --color-info-bg:        #0c1a2e;
+    --color-info-border:    #0c4a6e;
+    --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+    --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.5);
+    --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.6);
+  }
+}
+
+/* ── Dark Mode (manual toggle via data-theme="dark") ── */
+[data-theme="dark"] {
+  --color-bg:             #0f1117;
+  --color-surface:        #1a1d2e;
+  --color-surface-2:      #1f2336;
+  --color-surface-hover:  #252840;
+  --color-surface-glass:  rgba(26, 29, 46, 0.95);
+  --color-border:         rgba(255,255,255,0.09);
+  --color-border-focus:   #60a5fa;
+  --color-border-strong:  rgba(255,255,255,0.15);
+  --color-text:           #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-muted:          #94a3b8;
+  --color-disabled:       #475569;
+  --color-placeholder:    #64748b;
+  --color-primary:        #60a5fa;
+  --color-primary-dark:   #3b82f6;
+  --color-primary-light:  #1e3a5f;
+  --color-primary-glow:   rgba(96,165,250,0.12);
+  --color-accent:         #a78bfa;
+  --color-accent-dark:    #8b5cf6;
+  --color-accent-light:   #2d1f5e;
+  --color-accent-glow:    rgba(167,139,250,0.12);
+  --color-success:        #34d399;
+  --color-success-bg:     #052e16;
+  --color-success-border: #065f46;
+  --color-warning:        #fbbf24;
+  --color-warning-bg:     #1c1200;
+  --color-warning-border: #92400e;
+  --color-danger:         #f87171;
+  --color-danger-bg:      #2d0f0f;
+  --color-danger-border:  #7f1d1d;
+  --color-info:           #38bdf8;
+  --color-info-bg:        #0c1a2e;
+  --color-info-border:    #0c4a6e;
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.5);
+  --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.6);
+}
+
+/* ── Base ── */
+body {
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.6;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: var(--color-primary); text-decoration: none; transition: color var(--transition-fast); }
+a:hover { color: var(--color-primary-dark); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+/* Scrollbar tipis */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+
+/* Sidebar scrollbar */
+.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+.sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+/* ── Animasi ── */
+@keyframes fadeIn        { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fadeInUp      { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
+@keyframes slideInLeft   { from { opacity:0; transform:translateX(-16px) } to { opacity:1; transform:translateX(0) } }
+@keyframes slideInUp     { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
+@keyframes scaleIn       { from { opacity:0; transform:scale(0.95) } to { opacity:1; transform:scale(1) } }
+@keyframes spin          { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+@keyframes pulse         { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+@keyframes pulseDot      { 0%,100% { transform:scale(1);opacity:1 } 50% { transform:scale(1.35);opacity:0.7 } }
+@keyframes shimmer       { 0% { background-position:-200% 0 } 100% { background-position:200% 0 } }
+@keyframes countUp       { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
+@keyframes slideInRight  { from { opacity:0; transform:translateX(100%) } to { opacity:1; transform:translateX(0) } }
+@keyframes fadeInDark    { from { opacity:0 } to { opacity:1 } }
+@keyframes pulseBadge    { 0%,100% { transform:scale(1); box-shadow:0 0 0 0 rgba(220,38,38,0.5) } 50% { transform:scale(1.1); box-shadow:0 0 0 4px rgba(220,38,38,0) } }
+
+/* ── Utilities ── */
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

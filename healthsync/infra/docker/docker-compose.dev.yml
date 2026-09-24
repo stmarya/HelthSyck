@@ -1,0 +1,647 @@
+# ══════════════════════════════════════════════════════════════════
+#  HealthSync — Development Docker Compose
+#
+#  Usage (from repo root / healthsync/ directory):
+#    docker compose -f infra/docker/docker-compose.dev.yml \
+#                   --env-file infra/docker/.env.dev up -d
+#
+#  Services start order:
+#    1. postgres (TimescaleDB) + redis + emqx + zookeeper + kafka
+#    2. migrate  (run V001–V007 SQL migrations, then exit)
+#    3. All application services (depend on migrate completing)
+#    4. mailhog  (local SMTP catcher, no credentials needed)
+# ══════════════════════════════════════════════════════════════════
+
+networks:
+  healthsync-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  emqx_data:
+  emqx_log:
+  kafka_data:
+  zookeeper_data:
+  zookeeper_log:
+
+# ─────────────────────────────────────────────────────────────────
+# Shared service defaults anchor (restart + network only)
+# ─────────────────────────────────────────────────────────────────
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - healthsync-network
+
+services:
+
+  # ═══════════════════════════════════════════════════════════════
+  # INFRASTRUCTURE
+  # ═══════════════════════════════════════════════════════════════
+
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: hs-postgres
+    <<: *service-defaults
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: hs-redis
+    <<: *service-defaults
+    command: redis-server --save 60 1 --loglevel warning --requirepass ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  emqx:
+    image: emqx/emqx:5.8
+    container_name: hs-emqx
+    <<: *service-defaults
+    environment:
+      EMQX_NAME: healthsync-emqx
+      EMQX_HOST: 0.0.0.0
+      EMQX_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "1883:1883"    # MQTT
+      - "8083:8083"    # MQTT over WebSocket
+      - "18083:18083"  # EMQX Dashboard (admin/public)
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: hs-zookeeper
+    <<: *service-defaults
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | timeout 2 bash -c 'cat > /dev/tcp/localhost/2181' && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: hs-kafka
+    <<: *service-defaults
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_CREATE_TOPICS: "hs.vitals.ingested:3:1,hs.alert.triggered:3:1,hs.notifications:3:1"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────
+  # MailHog — local SMTP catcher (view emails at localhost:8025)
+  # ─────────────────────────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: hs-mailhog
+    <<: *service-defaults
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+
+  # ═══════════════════════════════════════════════════════════════
+  # MIGRATION RUNNER
+  # ═══════════════════════════════════════════════════════════════
+  migrate:
+    image: postgres:15-alpine
+    container_name: hs-migrate
+    networks:
+      - healthsync-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ../../infra/db/migrations:/migrations:ro
+    command: >
+      sh -c "
+        echo '=== HealthSync DB Migration Runner ===' &&
+        psql $$DATABASE_URL -c \"CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\" &&
+        for f in /migrations/V*.sql; do
+          v=$$(basename $$f .sql);
+          applied=$$(psql $$DATABASE_URL -t -c \"SELECT COUNT(*) FROM schema_migrations WHERE version='$$v';\" | tr -d ' ');
+          if [ \"$$applied\" = \"1\" ]; then
+            echo \"  ✓ $$v (already applied)\";
+          else
+            echo \"  → Applying $$v...\";
+            psql $$DATABASE_URL -f $$f && psql $$DATABASE_URL -c \"INSERT INTO schema_migrations (version) VALUES ('$$v');\" && echo \"  ✓ $$v done\";
+          fi;
+        done &&
+        echo '=== All migrations complete ==='
+      "
+    restart: "no"
+
+  # ═══════════════════════════════════════════════════════════════
+  # NODE.JS APPLICATION SERVICES
+  # All env vars are listed explicitly (no double-anchor YAML trick)
+  # ═══════════════════════════════════════════════════════════════
+
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: services/auth-service/Dockerfile
+    container_name: hs-auth
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      PORT: ${AUTH_PORT:-3001}
+    ports:
+      - "${AUTH_PORT:-3001}:3001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  patient-service:
+    build:
+      context: ../..
+      dockerfile: services/patient-service/Dockerfile
+    container_name: hs-patient
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      PORT: ${PATIENT_PORT:-3002}
+    ports:
+      - "${PATIENT_PORT:-3002}:3002"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3002/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  consultation-service:
+    build:
+      context: ../..
+      dockerfile: services/consultation-service/Dockerfile
+    container_name: hs-consultation
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS}
+      KAFKA_TOPIC_ALERTS: ${KAFKA_TOPIC_ALERTS}
+      PORT: ${CONSULTATION_PORT:-3003}
+    ports:
+      - "${CONSULTATION_PORT:-3003}:3003"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3003/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  prescription-service:
+    build:
+      context: ../..
+      dockerfile: services/prescription-service/Dockerfile
+    container_name: hs-prescription
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS}
+      KAFKA_TOPIC_ALERTS: ${KAFKA_TOPIC_ALERTS}
+      PORT: ${PRESCRIPTION_PORT:-3004}
+    ports:
+      - "${PRESCRIPTION_PORT:-3004}:3004"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3004/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ambulance-service:
+    build:
+      context: ../..
+      dockerfile: services/ambulance-service/Dockerfile
+    container_name: hs-ambulance
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS}
+      KAFKA_TOPIC_ALERTS: ${KAFKA_TOPIC_ALERTS}
+      PORT: ${AMBULANCE_PORT:-3005}
+    ports:
+      - "${AMBULANCE_PORT:-3005}:3005"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3005/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  referral-service:
+    build:
+      context: ../..
+      dockerfile: services/referral-service/Dockerfile
+    container_name: hs-referral
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      PORT: ${REFERRAL_PORT:-3006}
+    ports:
+      - "${REFERRAL_PORT:-3006}:3006"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3006/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  hospital-service:
+    build:
+      context: ../..
+      dockerfile: services/hospital-service/Dockerfile
+    container_name: hs-hospital
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      PORT: ${HOSPITAL_PORT:-3007}
+    ports:
+      - "${HOSPITAL_PORT:-3007}:3007"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3007/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  pharmacy-service:
+    build:
+      context: ../..
+      dockerfile: services/pharmacy-service/Dockerfile
+    container_name: hs-pharmacy
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      PORT: ${PHARMACY_PORT:-3008}
+    ports:
+      - "${PHARMACY_PORT:-3008}:3008"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3008/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  notification-service:
+    build:
+      context: ../..
+      dockerfile: services/notification-service/Dockerfile
+    container_name: hs-notification
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS}
+      KAFKA_TOPIC_ALERTS: ${KAFKA_TOPIC_ALERTS}
+      PORT: ${NOTIFICATION_PORT:-3009}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL:-}
+      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY:-}
+      SMS_API_KEY: ${SMS_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-noreply@healthsync.local}
+      SMTP_PASS: ${SMTP_PASS:-}
+    ports:
+      - "${NOTIFICATION_PORT:-3009}:3009"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3009/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  integration-service:
+    build:
+      context: ../..
+      dockerfile: services/integration-service/Dockerfile
+    container_name: hs-integration
+    <<: *service-defaults
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      PORT: ${INTEGRATION_PORT:-3010}
+      SATUSEHAT_BASE_URL: ${SATUSEHAT_BASE_URL:-https://api-satusehat.kemkes.go.id}
+      SATUSEHAT_CLIENT_ID: ${SATUSEHAT_CLIENT_ID:-dev-client-id}
+      SATUSEHAT_CLIENT_SECRET: ${SATUSEHAT_CLIENT_SECRET:-dev-client-secret}
+      SATUSEHAT_ORGANIZATION_ID: ${SATUSEHAT_ORGANIZATION_ID:-dev-org-id}
+      BPJS_BASE_URL: ${BPJS_BASE_URL:-https://apijkn.bpjs-kesehatan.go.id}
+      BPJS_CONS_ID: ${BPJS_CONS_ID:-dev-cons-id}
+      BPJS_SECRET_KEY: ${BPJS_SECRET_KEY:-dev-secret-key}
+      BPJS_USER_KEY: ${BPJS_USER_KEY:-dev-user-key}
+    ports:
+      - "${INTEGRATION_PORT:-3010}:3010"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3010/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ═══════════════════════════════════════════════════════════════
+  # GO SERVICES
+  # ═══════════════════════════════════════════════════════════════
+
+  iot-ingestion:
+    build:
+      context: ../..
+      dockerfile: services/iot-ingestion/Dockerfile
+    container_name: hs-iot-ingestion
+    <<: *service-defaults
+    environment:
+      PORT: ${IOT_PORT:-4001}
+      DATABASE_URL: ${DATABASE_URL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS}
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-iot-ingestion-01}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${IOT_PORT:-4001}:4001"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  alert-service:
+    build:
+      context: ../..
+      dockerfile: services/alert-service/Dockerfile
+    container_name: hs-alert
+    <<: *service-defaults
+    environment:
+      PORT: ${ALERT_PORT:-4002}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      KAFKA_BROKERS: ${KAFKA_BROKERS}
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS}
+      KAFKA_TOPIC_ALERTS: ${KAFKA_TOPIC_ALERTS}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID_ALERT:-alert-service-group}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${ALERT_PORT:-4002}:4002"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4002/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ═══════════════════════════════════════════════════════════════
+  # SWAGGER UI — serves OpenAPI docs at http://localhost:4010/docs
+  # ═══════════════════════════════════════════════════════════════
+
+  swagger-ui:
+    image: node:20-alpine
+    container_name: hs-swagger-ui
+    <<: *service-defaults
+    working_dir: /app
+    command: ["node", "server.js"]
+    volumes:
+      - ../../tools/swagger-ui:/app:ro
+      - ../../docs:/docs:ro
+    environment:
+      PORT: 4010
+      OPENAPI_SPEC_PATH: /docs/openapi.yaml
+    ports:
+      - "4010:4010"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4010/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ═══════════════════════════════════════════════════════════════
+  # FRONTEND APPS (Vite dev servers)
+  # ═══════════════════════════════════════════════════════════════
+
+  command-center:
+    build:
+      context: ../..
+      dockerfile: apps/command-center/Dockerfile
+    container_name: hs-command-center
+    <<: *service-defaults
+    environment:
+      # VITE_*_TARGET — target proxy server-side (nama service Docker)
+      VITE_AUTH_TARGET:         http://auth-service:3001
+      VITE_PATIENT_TARGET:      http://patient-service:3002
+      VITE_CONSULTATION_TARGET: http://consultation-service:3003
+      VITE_PRESCRIPTION_TARGET: http://prescription-service:3004
+      VITE_AMBULANCE_TARGET:    http://ambulance-service:3005
+      VITE_REFERRAL_TARGET:     http://referral-service:3006
+      VITE_HOSPITAL_TARGET:     http://hospital-service:3007
+      VITE_PHARMACY_TARGET:     http://pharmacy-service:3008
+      VITE_NOTIFICATION_TARGET: http://notification-service:3009
+      VITE_IOT_TARGET:          http://iot-ingestion:4001
+      VITE_ALERT_TARGET:        http://alert-service:4002
+    ports:
+      - "5173:5173"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: apps/admin/Dockerfile
+    container_name: hs-admin
+    <<: *service-defaults
+    environment:
+      # VITE_*_TARGET — server-side proxy targets (Docker service names, not localhost)
+      VITE_AUTH_TARGET:         http://auth-service:3001
+      VITE_PATIENT_TARGET:      http://patient-service:3002
+      VITE_CONSULTATION_TARGET: http://consultation-service:3003
+      VITE_PRESCRIPTION_TARGET: http://prescription-service:3004
+      VITE_AMBULANCE_TARGET:    http://ambulance-service:3005
+      VITE_REFERRAL_TARGET:     http://referral-service:3006
+      VITE_HOSPITAL_TARGET:     http://hospital-service:3007
+      VITE_PHARMACY_TARGET:     http://pharmacy-service:3008
+      VITE_NOTIFICATION_TARGET: http://notification-service:3009
+      VITE_INTEGRATION_TARGET:  http://integration-service:3010
+      VITE_IOT_TARGET:          http://iot-ingestion:4001
+      VITE_ALERT_TARGET:        http://alert-service:4002
+    volumes:
+      # Bind-mount source so Vite hot-reload sees local code changes
+      - ../../apps/admin/src:/app/apps/admin/src:ro
+      - ../../apps/admin/vite.config.ts:/app/apps/admin/vite.config.ts:ro
+      - ../../apps/admin/index.html:/app/apps/admin/index.html:ro
+    ports:
+      - "5174:5174"
+    depends_on:
+      auth-service:
+        condition: service_healthy

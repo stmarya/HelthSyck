@@ -1,0 +1,35 @@
+# Exclude node_modules from all workspaces — Docker will run `npm install` fresh
+**/node_modules
+
+# Exclude local build artifacts
+**/dist
+**/.vite
+**/.turbo
+**/.next
+
+# Flutter
+apps/mobile/build
+apps/mobile/.dart_tool
+apps/mobile/.pub-cache
+
+# Go build artifacts
+services/iot-ingestion/iot-ingestion
+services/alert-service/alert-service
+
+# Test coverage
+**/coverage
+**/__tests__/snapshots
+
+# Env files with secrets (use docker-compose env_file instead)
+**/.env
+**/.env.local
+**/.env.production
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.log

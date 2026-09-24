@@ -1,0 +1,412 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Sidebar.module.css — Mengikuti referensi HackerEarth:
+   dark (#1a1d2e), nav flat tanpa rounded berlebihan, group header uppercase,
+   active bar kiri ungu, collapsed icon-only 60px
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Base Sidebar ── */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+  transition: width var(--transition-slow);
+  z-index: var(--z-sidebar);
+}
+
+/* ── Mode Collapsed (icon-only, lebar 60px) ── */
+.sidebarCollapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+/* ── Scrollable nav area ── */
+.nav {
+  flex: 1;
+  padding: var(--space-2) 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.nav::-webkit-scrollbar { width: 4px; }
+.nav::-webkit-scrollbar-track { background: transparent; }
+.nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 999px; }
+.nav::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+/* ── Logo ── */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4) var(--space-4);
+  border-bottom: 1px solid var(--sidebar-border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.logoIconWrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.logoIcon {
+  font-size: 16px;
+  color: #fff;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+  line-height: 1;
+}
+
+.logoText {
+  overflow: hidden;
+  transition: opacity var(--transition-normal), width var(--transition-slow);
+  white-space: nowrap;
+}
+
+.sidebarCollapsed .logoText {
+  opacity: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.logoTitle {
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-extrabold);
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+
+.logoSub {
+  font-size: var(--text-xs);
+  color: rgba(255,255,255,0.4);
+  margin-top: 1px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ── Collapse Toggle Button ── */
+.collapseBtn {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-3);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-sm);
+  color: rgba(255,255,255,0.5);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.collapseBtn:hover {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.9);
+}
+
+/* ── Nav Group ── */
+.group {
+  margin-bottom: 2px;
+}
+
+/* Header grup — label uppercase kecil, identik referensi */
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: rgba(255,255,255,0.4);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  transition: color var(--transition-fast);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.groupHeader:hover {
+  color: rgba(255,255,255,0.7);
+}
+
+.groupIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.groupLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--transition-normal);
+}
+
+.sidebarCollapsed .groupLabel {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+}
+
+.chevron {
+  font-size: 16px;
+  transition: transform var(--transition-normal);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.sidebarCollapsed .chevron {
+  display: none;
+}
+
+/* ── Group Items ── */
+.groupItems {
+  padding-bottom: var(--space-1);
+  overflow: hidden;
+}
+
+.sidebarCollapsed .groupItems {
+  display: none;
+}
+
+/* ── Nav Link — flat, border-left active, identik referensi ── */
+.navLink {
+  display: flex;
+  align-items: center;
+  padding: 7px var(--space-4) 7px 36px;
+  font-size: var(--text-base);
+  color: var(--sidebar-text);
+  transition: color var(--transition-fast), background var(--transition-fast);
+  border-left: 2px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.navLink:hover {
+  color: var(--sidebar-text-hover);
+  background: var(--sidebar-hover-bg);
+  text-decoration: none;
+}
+
+/* Active: bar kiri ungu + background subtle + teks ungu */
+.navLinkActive {
+  color: var(--sidebar-active-text);
+  background: var(--sidebar-active-bg);
+  border-left-color: var(--sidebar-active-bar);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ── Badge Counter di nav item ── */
+.navBadge {
+  margin-left: auto;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* ── Tooltip saat collapsed ── */
+.tooltipWrapper {
+  position: relative;
+}
+
+.tooltipWrapper:hover .tooltip {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+
+.tooltip {
+  position: absolute;
+  left: calc(100% + var(--space-2));
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  background: rgba(15,17,23,0.97);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  z-index: calc(var(--z-sidebar) + 10);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.tooltip::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: rgba(15,17,23,0.97);
+}
+
+/* ── Footer (user info + logout) ── */
+.footer {
+  border-top: 1px solid var(--sidebar-border);
+  padding: var(--space-3) var(--space-4);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  flex-shrink: 0;
+}
+
+.userDetails {
+  overflow: hidden;
+  transition: opacity var(--transition-normal);
+}
+
+.sidebarCollapsed .userDetails {
+  opacity: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.userName {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userRole {
+  font-size: var(--text-xs);
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.logoutBtn {
+  width: 100%;
+  padding: var(--space-2);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-sm);
+  color: rgba(255,255,255,0.6);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.logoutBtn:hover {
+  background: rgba(229,57,53,0.2);
+  color: #fc8181;
+  border-color: rgba(229,57,53,0.3);
+}
+
+.logoutBtnText {
+  transition: opacity var(--transition-normal);
+}
+
+.sidebarCollapsed .logoutBtnText {
+  display: none;
+}
+
+/* ── Overlay sidebar untuk mobile ── */
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: calc(var(--z-sidebar) - 1);
+  animation: fadeIn var(--transition-normal);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    transform: translateX(0);
+    transition: transform var(--transition-slow), width var(--transition-slow);
+  }
+
+  .sidebarCollapsed {
+    transform: translateX(calc(-1 * var(--sidebar-collapsed-width)));
+    width: var(--sidebar-width);
+  }
+
+  .sidebarMobileHidden {
+    transform: translateX(-100%);
+  }
+
+  .overlay {
+    display: block;
+  }
+}

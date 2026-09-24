@@ -1,0 +1,68 @@
+{
+  "name": "healthsync",
+  "version": "1.0.0",
+  "description": "HealthSync Indonesia — Integrated Health Platform Monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "services/auth-service",
+    "services/patient-service",
+    "services/consultation-service",
+    "services/prescription-service",
+    "services/ambulance-service",
+    "services/referral-service",
+    "services/hospital-service",
+    "services/pharmacy-service",
+    "services/notification-service",
+    "services/integration-service",
+    "apps/command-center",
+    "apps/admin"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "build:shared": "npm run build --workspace=packages/shared",
+    "build:services": "npm run build --workspaces --if-present",
+
+    "_comment_deploy": "── SKRIP UTAMA ─────────────────────────────────",
+    "deploy": "node -e \"const {execSync: e} = require('child_process'); e(process.platform==='win32' ? 'powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1' : 'bash scripts/deploy.sh', {stdio:'inherit'})\"",
+    "start":  "node -e \"const {execSync: e} = require('child_process'); e(process.platform==='win32' ? 'powershell -ExecutionPolicy Bypass -File scripts/start.ps1'  : 'bash scripts/start.sh',  {stdio:'inherit'})\"",
+    "stop":   "docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.dev down",
+    "test":   "node -e \"const {execSync: e} = require('child_process'); e(process.platform==='win32' ? 'powershell -ExecutionPolicy Bypass -File scripts/test.ps1'   : 'bash scripts/test.sh',   {stdio:'inherit'})\"",
+    "test:unit":        "node -e \"const {execSync: e} = require('child_process'); e(process.platform==='win32' ? 'powershell -ExecutionPolicy Bypass -File scripts/test.ps1 -Unit'      : 'bash scripts/test.sh --unit',      {stdio:'inherit'})\"",
+    "test:integration": "node -e \"const {execSync: e} = require('child_process'); e(process.platform==='win32' ? 'powershell -ExecutionPolicy Bypass -File scripts/test.ps1 -Integration' : 'bash scripts/test.sh --integration', {stdio:'inherit'})\"",
+    "test:coverage":    "node -e \"const {execSync: e} = require('child_process'); e(process.platform==='win32' ? 'powershell -ExecutionPolicy Bypass -File scripts/test.ps1 -Coverage'   : 'bash scripts/test.sh --coverage',   {stdio:'inherit'})\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+
+    "_comment_dev": "── DEV (per service) ────────────────────────────",
+    "dev:auth": "npm run dev --workspace=services/auth-service",
+    "dev:patient": "npm run dev --workspace=services/patient-service",
+    "dev:consultation": "npm run dev --workspace=services/consultation-service",
+    "dev:prescription": "npm run dev --workspace=services/prescription-service",
+    "dev:ambulance": "npm run dev --workspace=services/ambulance-service",
+    "dev:referral": "npm run dev --workspace=services/referral-service",
+    "dev:hospital": "npm run dev --workspace=services/hospital-service",
+    "dev:pharmacy": "npm run dev --workspace=services/pharmacy-service",
+    "dev:notification": "npm run dev --workspace=services/notification-service",
+    "dev:integration": "npm run dev --workspace=services/integration-service",
+
+    "_comment_docker": "── DOCKER helpers ───────────────────────────────",
+    "docker:up": "docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.dev up -d",
+    "docker:build": "docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.dev up -d --build",
+    "docker:down": "docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.dev down",
+    "docker:logs": "docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.dev logs -f",
+    "docker:infra": "docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.dev up -d postgres redis emqx zookeeper kafka mailhog",
+    "docker:migrate": "docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.dev run --rm migrate",
+
+    "_comment_misc": "── LAINNYA ──────────────────────────────────────",
+    "lint": "npm run lint --workspaces --if-present",
+    "docs": "node tools/swagger-ui/server.js",
+    "migrate:local": "bash infra/db/run_migrations.sh"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

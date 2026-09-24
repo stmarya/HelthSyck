@@ -1,0 +1,51 @@
+﻿# Bob AI artefak & file sementara
+.bob/
+*.html
+
+# Node modules (semua service)
+**/node_modules/
+
+# Build output
+**/dist/
+**/.next/
+**/build/
+**/.turbo/
+
+# Flutter/Dart generated files
+**/*.freezed.dart
+**/*.g.dart
+**/pubspec.lock
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.dart_tool/
+**/.packages
+**/android/.gradle/
+**/android/local.properties
+**/ios/Pods/
+**/ios/.symlinks/
+
+# Environment files (rahasia)
+healthsync/infra/docker/.env.dev
+**/.env
+**/.env.local
+**/.env.production
+*.env
+
+# Log files
+*.log
+**/logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes
+**/postgres-data/
+**/redis-data/
