@@ -110,9 +110,14 @@ class _PrescriptionsScreenState
 
   Color _statusColor(String status) {
     switch (status.toUpperCase()) {
-      case 'DISPENSED':
+      case 'CONFIRMED':
+      case 'READY':
+      case 'DELIVERING':
+      case 'DELIVERED':
         return Colors.green;
-      case 'PENDING':
+      case 'ISSUED':
+      case 'SENT_TO_PHARMACY':
+      case 'PREPARING':
         return Colors.orange;
       case 'CANCELLED':
         return Colors.red;

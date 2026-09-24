@@ -227,6 +227,7 @@ Common variables across all services:
 | `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_SECRET` | HS256 signing secret |
 | `REDIS_URL` | Redis connection URL |
+| `CORS_ORIGINS` | Comma-separated allowlist for Admin and Command Center origins |
 | `KAFKA_BROKERS` | Comma-separated broker list |
 | `NODE_ENV` | `development` \| `production` \| `test` |
 | `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` |
@@ -244,9 +245,15 @@ docker compose -f infra/docker/docker-compose.dev.yml up --build
 ### Kubernetes
 
 ```bash
-kubectl apply -f infra/k8s/namespace.yaml
-# Apply service manifests (coming soon)
+cp infra/k8s/secrets.yaml /tmp/healthsync-secrets.yaml
+# Isi /tmp/healthsync-secrets.yaml melalui secret manager.
+kubectl apply -f /tmp/healthsync-secrets.yaml
+./infra/k8s/deploy.sh apply
 ```
+
+The deployment script refuses to apply the repository template while any
+`REPLACE_WITH_*` secret placeholder remains. Run the database migration job and
+verify every rollout before exposing the ingress.
 
 ### AWS (Terraform)
 

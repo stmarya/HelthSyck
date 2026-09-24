@@ -46,6 +46,11 @@ spec:
                 secretKeyRef:
                   name: healthsync-secrets
                   key: jwt-secret
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: redis-url
             - name: KAFKA_TOPIC_VITALS
               value: "hs.vitals.ingested"
             - name: KAFKA_TOPIC_ALERTS

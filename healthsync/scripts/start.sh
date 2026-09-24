@@ -17,6 +17,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$ROOT/infra/docker/.env.dev"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'
 YELLOW='\033[1;33m'; GRAY='\033[0;90m'; NC='\033[0m'
@@ -26,6 +27,8 @@ ok()   { echo -e "   ${GREEN}✓  $1${NC}"; }
 fail() { echo -e "   ${RED}✗  $1${NC}"; exit 1; }
 info() { echo -e "   ${GRAY}•  $1${NC}"; }
 warn() { echo -e "   ${YELLOW}⚠  $1${NC}"; }
+
+[[ -f "$ENV_FILE" ]] || fail "File $ENV_FILE belum ada. Jalankan: cp infra/docker/.env.dev.example infra/docker/.env.dev"
 
 BUILD_FLAG=""
 SHOW_LOGS=false
@@ -39,7 +42,7 @@ for arg in "$@"; do
   esac
 done
 
-COMPOSE="docker compose -f \"$ROOT/infra/docker/docker-compose.dev.yml\" --env-file \"$ROOT/infra/docker/.env.dev\""
+COMPOSE="docker compose -f \"$ROOT/infra/docker/docker-compose.dev.yml\" --env-file \"$ENV_FILE\""
 
 # ── Matikan jika diminta ────────────────────────────────────
 if $DO_DOWN; then

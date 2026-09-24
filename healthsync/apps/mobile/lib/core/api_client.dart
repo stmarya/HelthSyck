@@ -51,13 +51,11 @@ class ApiClient {
   void setTokens({required String accessToken, required String refreshToken}) {
     _accessToken = accessToken;
     _refreshToken = refreshToken;
-    // TODO: Persist to flutter_secure_storage
   }
 
   void clearTokens() {
     _accessToken = null;
     _refreshToken = null;
-    // TODO: Clear from flutter_secure_storage
   }
 
   Map<String, String> get _headers {

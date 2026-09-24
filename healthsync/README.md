@@ -54,6 +54,9 @@ cd healthsync
 ### 2. Copy environment files
 
 ```bash
+cp infra/docker/.env.dev.example infra/docker/.env.dev
+# Change JWT_SECRET and database password before sharing the environment.
+
 # Copy env files for each service
 for svc in auth patient consultation prescription ambulance referral hospital pharmacy notification integration; do
   cp services/${svc}-service/.env.example services/${svc}-service/.env
@@ -67,7 +70,8 @@ done
 ### 3. Start all infrastructure + services
 
 ```bash
-docker compose -f infra/docker/docker-compose.dev.yml up --build
+docker compose -f infra/docker/docker-compose.dev.yml \
+  --env-file infra/docker/.env.dev up --build
 ```
 
 ### 4. Verify services are healthy
