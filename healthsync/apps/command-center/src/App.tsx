@@ -17,6 +17,7 @@ import ReportsPage from './pages/ReportsPage';
 import CommandCenterPage from './pages/CommandCenterPage';
 import LiveMapPage from './pages/LiveMapPage';
 import HospitalAvailabilityPage from './pages/HospitalAvailabilityPage';
+import IntegrationHealthPage from './pages/IntegrationHealthPage';
 import { useAuth } from './hooks/useAuth';
 import { useAlerts } from './hooks/useAlerts';
 import { useSessionExpiry } from './hooks/useSessionExpiry';
@@ -75,6 +76,7 @@ const NAV_BARIS_2 = [
   { to: '/command-center',           label: '🖥️ War Room',    end: false },
   { to: '/command-center/live-map',  label: '🗺️ Live Map',   end: false },
   { to: '/command-center/hospitals', label: '🏥 RS Live',     end: false },
+  { to: '/command-center/integrations', label: '🔌 Integrasi', end: false },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,6 +349,7 @@ function AppShell() {
               <Route path="/command-center"           element={<ErrorBoundary label="Command Center"><CommandCenterPage /></ErrorBoundary>} />
               <Route path="/command-center/live-map"  element={<ErrorBoundary label="Live Map"><LiveMapPage /></ErrorBoundary>} />
               <Route path="/command-center/hospitals" element={<ErrorBoundary label="Ketersediaan RS"><HospitalAvailabilityPage /></ErrorBoundary>} />
+              <Route path="/command-center/integrations" element={<ErrorBoundary label="Integration Health"><IntegrationHealthPage /></ErrorBoundary>} />
             </Routes>
           </main>
         </div>
