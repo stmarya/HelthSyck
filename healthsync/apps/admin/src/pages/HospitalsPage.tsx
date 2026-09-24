@@ -71,6 +71,11 @@ function isBpjs(h: HospitalRow): boolean {
   return !!(h.isBPJSProvider ?? h.is_bpjs_provider);
 }
 
+function getErrorMessage(err: unknown, fallback: string): string {
+  return (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    ?? (err instanceof Error ? err.message : fallback);
+}
+
 /** Warna ketersediaan bed berdasarkan persentase */
 function bedColor(available: number, total: number): string {
   if (total === 0) return 'var(--color-muted)';
@@ -237,7 +242,7 @@ function DetailPanel({ hospital, onEdit, onDeactivate }: DetailPanelProps) {
       {/* Kapasitas */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Kapasitas Tempat Tidur</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div className={styles.responsiveTwoCol} style={{ marginBottom: 12 }}>
           {([
             ['Total Bed',     h.total_beds],
             ['Tersedia',      h.available_beds],
@@ -314,12 +319,13 @@ interface HospitalFormModalProps {
   title: string;
   initial: CreateHospitalForm;
   onClose: () => void;
-  onSubmit: (form: CreateHospitalForm) => void;
+  onSubmit: (form: CreateHospitalForm) => Promise<void>;
 }
 
 function HospitalFormModal({ title, initial, onClose, onSubmit }: HospitalFormModalProps) {
   const [form, setForm] = useState<CreateHospitalForm>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof CreateHospitalForm, string>>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   const validate = (): boolean => {
     const errs: Partial<Record<keyof CreateHospitalForm, string>> = {};
@@ -329,13 +335,25 @@ function HospitalFormModal({ title, initial, onClose, onSubmit }: HospitalFormMo
     if (!form.type)           errs.type    = 'Tipe RS wajib dipilih';
     if (!form.kodeRS?.trim()) errs.kodeRS  = 'Kode/Nomor RS wajib diisi (unik)';
     if (form.totalBeds < 0)   errs.totalBeds = 'Jumlah bed tidak boleh negatif';
+    if (form.phone && form.phone.trim().length > 0 && form.phone.trim().length < 8) {
+      errs.phone = 'Nomor telepon minimal 8 karakter';
+    }
+    if (form.igdPhone && form.igdPhone.trim().length > 0 && form.igdPhone.trim().length < 8) {
+      errs.igdPhone = 'Nomor telepon IGD minimal 8 karakter';
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validate()) onSubmit(form);
+    if (!validate()) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(form);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const set = <K extends keyof CreateHospitalForm>(key: K, val: CreateHospitalForm[K]) =>
@@ -348,7 +366,7 @@ function HospitalFormModal({ title, initial, onClose, onSubmit }: HospitalFormMo
   return (
     <Modal open title={title} onClose={onClose} width={600}>
       <form onSubmit={handleSubmit} noValidate>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className={styles.responsiveTwoCol}>
           <div style={{ gridColumn: '1 / -1' }}>
             <InputField
               label="Nama Rumah Sakit" required value={form.name}
@@ -418,11 +436,11 @@ function HospitalFormModal({ title, initial, onClose, onSubmit }: HospitalFormMo
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={onClose}>
+          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={onClose} disabled={submitting}>
             Batal
           </button>
-          <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}>
-            Simpan
+          <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={submitting}>
+            {submitting ? 'Menyimpan…' : 'Simpan'}
           </button>
         </div>
       </form>
@@ -452,7 +470,7 @@ export default function HospitalsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter,  setTypeFilter]  = useState<HospitalType | ''>('');
-  const [bpjsOnly,    setBpjsOnly]    = useState(false);
+  const [bpjsOnly]                    = useState(false);
   const [page, setPage]               = useState(1);
   const LIMIT = 20;
 
@@ -477,20 +495,16 @@ export default function HospitalsPage() {
       if (typeFilter)  params.set('type', typeFilter);
       const res = await hospitalClient.get(`/v1/hospitals?${params.toString()}`);
       const body = res.data as { data: HospitalRow[]; meta: { total: number } };
-      let rows = body.data ?? [];
-      // Filter BPJS client-side jika diaktifkan (backend belum support filter ini)
-      if (bpjsOnly) rows = rows.filter((h) => isBpjs(h));
-      setHospitals(rows);
+      setHospitals(body.data ?? []);
       setTotal(body.meta?.total ?? 0);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        ?? 'Gagal memuat daftar rumah sakit. Silakan coba lagi.';
+      const msg = getErrorMessage(err, 'Gagal memuat daftar rumah sakit. Silakan coba lagi.');
       setError(msg);
       setHospitals([]);
     } finally {
       setLoading(false);
     }
-  }, [page, searchQuery, typeFilter, bpjsOnly]);
+  }, [page, searchQuery, typeFilter]);
 
   useEffect(() => { void fetchHospitals(); }, [fetchHospitals]);
 
@@ -504,7 +518,6 @@ export default function HospitalsPage() {
 
   // ── Handler CRUD ──
   const handleAddSubmit = async (form: CreateHospitalForm) => {
-    setShowAddModal(false);
     try {
       await hospitalClient.post('/v1/hospitals', {
         name:            form.name,
@@ -522,16 +535,16 @@ export default function HospitalsPage() {
         specializations: [],
         isEmtPartner:    false,
       });
+      setShowAddModal(false);
       showToast('Rumah sakit berhasil ditambahkan', 'success');
       void fetchHospitals();
-    } catch {
-      showToast('Gagal menambahkan rumah sakit', 'error');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Gagal menambahkan rumah sakit'), 'error');
     }
   };
 
   const handleEditSubmit = async (form: CreateHospitalForm) => {
     if (!editHospital) return;
-    setEditHospital(null);
     try {
       await hospitalClient.patch(`/v1/hospitals/${editHospital.id}`, {
         name:      form.name,
@@ -543,11 +556,12 @@ export default function HospitalsPage() {
         igdPhone:  form.igdPhone,
         totalBeds: form.totalBeds,
       });
+      setEditHospital(null);
       showToast('Data rumah sakit berhasil diperbarui', 'success');
       setSelectedHospital(null);
       void fetchHospitals();
-    } catch {
-      showToast('Gagal memperbarui data rumah sakit', 'error');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Gagal memperbarui data rumah sakit'), 'error');
     }
   };
 
@@ -560,8 +574,8 @@ export default function HospitalsPage() {
       await hospitalClient.delete(`/v1/hospitals/${id}`);
       showToast('Rumah sakit berhasil dinonaktifkan', 'success');
       void fetchHospitals();
-    } catch {
-      showToast('Gagal menonaktifkan rumah sakit', 'error');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Gagal menonaktifkan rumah sakit'), 'error');
     }
   };
 
@@ -644,12 +658,14 @@ export default function HospitalsPage() {
       </div>
 
       {/* ── Split View Layout ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: selectedHospital ? '1fr 360px' : '1fr',
-        gap: 16, alignItems: 'start',
-        transition: 'grid-template-columns 0.2s ease',
-      }}>
+      {bpjsOnly && (
+        <div className={styles.warningBanner}>
+          <span>⚠️</span>
+          <span>Filter khusus BPJS belum tersedia di backend Admin, sehingga dinonaktifkan agar pagination tetap akurat.</span>
+        </div>
+      )}
+
+      <div className={styles.contentSplit} style={!selectedHospital ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
         {/* ── Panel Kiri: Daftar RS ── */}
         <div className={styles.card} style={{ marginBottom: 0 }}>
           {/* Toolbar */}
@@ -674,7 +690,8 @@ export default function HospitalsPage() {
                 <input
                   type="checkbox"
                   checked={bpjsOnly}
-                  onChange={(e) => { setBpjsOnly(e.target.checked); setPage(1); }}
+                  disabled
+                  onChange={() => undefined}
                 />
                 BPJS saja
               </label>

@@ -121,6 +121,7 @@ const FindNearbySchema = z.object({
 
 const ListAmbulancesSchema = z.object({
   hospitalId: z.string().uuid().optional(),
+  status: z.enum(['OFFLINE', 'AVAILABLE', 'DISPATCHED', 'EN_ROUTE', 'AT_SCENE', 'TRANSPORTING', 'RETURNING']).optional(),
   page:       z.coerce.number().int().min(1).default(1),
   limit:      z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -243,7 +244,7 @@ app.get(
         return;
       }
 
-      const { hospitalId, page, limit } = filter.data;
+      const { hospitalId, status, page, limit } = filter.data;
       const offset = (page - 1) * limit;
       const pool = getPool();
 
@@ -251,6 +252,9 @@ app.get(
       const conditions: string[] = ['a.is_active = TRUE'];
       if (hospitalId) {
         conditions.push(`a.hospital_id = $${params.push(hospitalId)}`);
+      }
+      if (status) {
+        conditions.push(`a.status = $${params.push(status)}`);
       }
 
       const whereClause = conditions.join(' AND ');

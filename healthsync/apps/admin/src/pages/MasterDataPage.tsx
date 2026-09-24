@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { DoctorSpecialization, ServiceType, FacilityCategory, SystemConfig } from '../types/admin';
-import { ConfirmDialog } from '../components/Modal';
 import { Skeleton } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import PageHeader from '../components/PageHeader';
@@ -81,27 +80,15 @@ interface DoctorRowRingkas {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-komponen: Banner mode simulasi
+// Sub-komponen: Banner unavailable
 // ─────────────────────────────────────────────────────────────────────────────
 
 function BannerSimulasi() {
   return (
-    <div style={{
-      padding: '10px 14px',
-      background: 'var(--color-warning-bg)',
-      borderRadius: 8,
-      border: '1px solid var(--color-warning)',
-      marginBottom: 16,
-      fontSize: 13,
-      color: 'var(--color-warning)',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-    }}>
+    <div className={styles.warningBanner}>
       <span>⚠</span>
       <span>
-        Data ini berjalan dalam <strong>mode simulasi</strong> — perubahan tidak tersimpan ke database.
-        Endpoint backend untuk tipe layanan & fasilitas belum tersedia.
+        Endpoint backend Admin untuk master data ini belum tersedia. Data ditampilkan apa adanya dan aksi ubah/tambah/hapus dinonaktifkan.
       </span>
     </div>
   );
@@ -152,11 +139,6 @@ function TabSpesialisasi() {
   const [editingId, setEditingId]         = useState<string | null>(null);
   const [editingName, setEditingName]     = useState('');
   const [editingCode, setEditingCode]     = useState('');
-  const [deleteTarget, setDeleteTarget]   = useState<DoctorSpecialization | null>(null);
-  const [showAdd, setShowAdd]             = useState(false);
-  const [newName, setNewName]             = useState('');
-  const [newCode, setNewCode]             = useState('');
-  const idCounterRef                      = useRef(0);
 
   // Fungsi derive spesialisasi dari data dokter
   const fetchSpesialisasi = useCallback(async () => {
@@ -222,11 +204,6 @@ function TabSpesialisasi() {
       .join(' ');
   }
 
-  const mkIdLokal = () => {
-    idCounterRef.current += 1;
-    return `lokal-${Date.now()}-${idCounterRef.current}`;
-  };
-
   const itemsTerfilter = cari.trim()
     ? items.filter((i) =>
         i.name.toLowerCase().includes(cari.toLowerCase()) ||
@@ -240,31 +217,7 @@ function TabSpesialisasi() {
       i.id === id ? { ...i, name: editingName.trim(), code: editingCode.trim().toUpperCase() } : i,
     ));
     setEditingId(null);
-    showToast('Spesialisasi berhasil diperbarui (mode lokal)', 'success');
-  };
-
-  const handleHapus = () => {
-    if (!deleteTarget) return;
-    setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
-    setDeleteTarget(null);
-    showToast('Spesialisasi berhasil dihapus (mode lokal)', 'success');
-  };
-
-  const handleTambah = () => {
-    if (!newName.trim()) { showToast('Nama tidak boleh kosong', 'error'); return; }
-    const kode = newCode.trim().toUpperCase() || newName.toUpperCase().replace(/\s+/g, '_').slice(0, 20);
-    const item: DoctorSpecialization = {
-      id: mkIdLokal(),
-      code: kode,
-      name: newName.trim(),
-      doctorCount: 0,
-      createdAt: new Date().toISOString(),
-    };
-    setItems((prev) => [...prev, item]);
-    setNewName('');
-    setNewCode('');
-    setShowAdd(false);
-    showToast('Spesialisasi berhasil ditambahkan (mode lokal)', 'success');
+    showToast('Perubahan spesialisasi belum didukung backend Admin', 'info');
   };
 
   const handleEksporCsv = () => {
@@ -356,45 +309,11 @@ function TabSpesialisasi() {
           >
             ↓ Ekspor CSV
           </button>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setShowAdd(true)}>
+          <button className={`${styles.btn} ${styles.btnPrimary}`} disabled title="CRUD spesialisasi belum tersedia di backend Admin">
             + Tambah
           </button>
         </div>
       </div>
-
-      {/* ── Form tambah ── */}
-      {showAdd && (
-        <div style={{
-          display: 'flex', gap: 8, marginBottom: 12, padding: 14,
-          background: 'var(--color-surface-2)', borderRadius: 8,
-          border: '1px solid var(--color-border)',
-          flexWrap: 'wrap',
-        }}>
-          <input
-            className={styles.searchInput}
-            style={{ flex: '1 1 180px' }}
-            placeholder="Nama spesialisasi"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleTambah()}
-            autoFocus
-          />
-          <input
-            className={styles.searchInput}
-            style={{ width: 140 }}
-            placeholder="Kode (opsional)"
-            value={newCode}
-            onChange={(e) => setNewCode(e.target.value)}
-          />
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleTambah}>Simpan</button>
-          <button
-            className={`${styles.btn} ${styles.btnSecondary}`}
-            onClick={() => { setShowAdd(false); setNewName(''); setNewCode(''); }}
-          >
-            Batal
-          </button>
-        </div>
-      )}
 
       {/* ── Tabel ── */}
       <div className={styles.tableWrapper}>
@@ -478,13 +397,15 @@ function TabSpesialisasi() {
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
                       <button
                         className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                        onClick={() => { setEditingId(item.id); setEditingName(item.name); setEditingCode(item.code); }}
+                        disabled
+                        title="Perubahan spesialisasi belum didukung backend Admin"
                       >
                         Edit
                       </button>
                       <button
                         className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`}
-                        onClick={() => setDeleteTarget(item)}
+                        disabled
+                        title="Perubahan spesialisasi belum didukung backend Admin"
                       >
                         Hapus
                       </button>
@@ -499,18 +420,8 @@ function TabSpesialisasi() {
 
       {/* Catatan kaki */}
       <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8 }}>
-        * Data spesialisasi dihitung dari dokter terdaftar di sistem. Edit lokal tidak tersimpan ke database.
+        * Data spesialisasi dihitung dari dokter terdaftar di sistem. Endpoint CRUD khusus spesialisasi belum tersedia untuk Admin.
       </div>
-
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        title="Hapus Spesialisasi"
-        message={`Yakin ingin menghapus spesialisasi "${deleteTarget?.name ?? ''}"? Tindakan ini hanya berlaku di sesi ini.`}
-        confirmLabel="Hapus"
-        danger
-        onConfirm={handleHapus}
-        onCancel={() => setDeleteTarget(null)}
-      />
     </div>
   );
 }
@@ -535,7 +446,7 @@ interface PropsTabGenerik {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab Generik: Tipe Layanan & Fasilitas (mode simulasi)
+// Tab Generik: Tipe Layanan & Fasilitas (read-only fallback)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGenerik) {
@@ -545,17 +456,6 @@ function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGene
   const [editingId, setEditingId]       = useState<string | null>(null);
   const [editingName, setEditingName]   = useState('');
   const [editingCode, setEditingCode]   = useState('');
-  const [deleteTarget, setDeleteTarget] = useState<ItemGenerik | null>(null);
-  const [showAdd, setShowAdd]           = useState(false);
-  const [newName, setNewName]           = useState('');
-  const [newCode, setNewCode]           = useState('');
-  const idCounterRef                    = useRef(0);
-
-  const mkIdLokal = () => {
-    idCounterRef.current += 1;
-    return `lokal-${Date.now()}-${idCounterRef.current}`;
-  };
-
   const itemsTerfilter = cari.trim()
     ? items.filter((i) =>
         i.name.toLowerCase().includes(cari.toLowerCase()) ||
@@ -572,36 +472,7 @@ function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGene
       i.id === id ? { ...i, name: editingName.trim(), code: editingCode.trim().toUpperCase() } : i,
     ));
     setEditingId(null);
-    showToast('Data berhasil diperbarui (simulasi)', 'success');
-  };
-
-  const handleToggleAktif = (id: string) => {
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, isActive: !i.isActive } : i));
-    showToast('Status berhasil diubah (simulasi)', 'success');
-  };
-
-  const handleHapus = () => {
-    if (!deleteTarget) return;
-    setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
-    setDeleteTarget(null);
-    showToast('Data berhasil dihapus (simulasi)', 'success');
-  };
-
-  const handleTambah = () => {
-    if (!newName.trim()) { showToast('Nama tidak boleh kosong', 'error'); return; }
-    const kode = newCode.trim().toUpperCase() || newName.toUpperCase().replace(/\s+/g, '_').slice(0, 6);
-    const item: ItemGenerik = {
-      id: mkIdLokal(),
-      code: kode,
-      name: newName.trim(),
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    };
-    setItems((prev) => [...prev, item]);
-    setNewName('');
-    setNewCode('');
-    setShowAdd(false);
-    showToast('Data berhasil ditambahkan (simulasi)', 'success');
+    showToast('Perubahan master data belum didukung backend Admin', 'info');
   };
 
   return (
@@ -626,45 +497,13 @@ function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGene
         />
         <button
           className={`${styles.btn} ${styles.btnPrimary}`}
-          onClick={() => setShowAdd(true)}
+          disabled
+          title="CRUD master data belum tersedia di backend Admin"
           style={{ marginLeft: 'auto' }}
         >
           + {labelTambah}
         </button>
       </div>
-
-      {/* ── Form tambah ── */}
-      {showAdd && (
-        <div style={{
-          display: 'flex', gap: 8, marginBottom: 12, padding: 14,
-          background: 'var(--color-surface-2)', borderRadius: 8,
-          border: '1px solid var(--color-border)', flexWrap: 'wrap',
-        }}>
-          <input
-            className={styles.searchInput}
-            style={{ flex: '1 1 180px' }}
-            placeholder="Nama"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleTambah()}
-            autoFocus
-          />
-          <input
-            className={styles.searchInput}
-            style={{ width: 120 }}
-            placeholder="Kode"
-            value={newCode}
-            onChange={(e) => setNewCode(e.target.value)}
-          />
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleTambah}>Simpan</button>
-          <button
-            className={`${styles.btn} ${styles.btnSecondary}`}
-            onClick={() => { setShowAdd(false); setNewName(''); setNewCode(''); }}
-          >
-            Batal
-          </button>
-        </div>
-      )}
 
       {/* ── Tabel ── */}
       <div className={styles.tableWrapper}>
@@ -750,20 +589,22 @@ function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGene
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                       <button
                         className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                        onClick={() => { setEditingId(item.id); setEditingName(item.name); setEditingCode(item.code); }}
+                        disabled
+                        title="CRUD master data belum tersedia di backend Admin"
                       >
                         Edit
                       </button>
                       <button
                         className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                        onClick={() => handleToggleAktif(item.id)}
-                        title={item.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                        disabled
+                        title="CRUD master data belum tersedia di backend Admin"
                       >
                         {item.isActive ? 'Nonaktifkan' : 'Aktifkan'}
                       </button>
                       <button
                         className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`}
-                        onClick={() => setDeleteTarget(item)}
+                        disabled
+                        title="CRUD master data belum tersedia di backend Admin"
                       >
                         Hapus
                       </button>
@@ -776,15 +617,6 @@ function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGene
         </table>
       </div>
 
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        title="Hapus Data"
-        message={`Yakin ingin menghapus "${deleteTarget?.name ?? ''}"? Perubahan hanya berlaku di sesi ini.`}
-        confirmLabel="Hapus"
-        danger
-        onConfirm={handleHapus}
-        onCancel={() => setDeleteTarget(null)}
-      />
     </div>
   );
 }
@@ -795,7 +627,7 @@ function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGene
 
 function TabKonfigurasi() {
   const { showToast } = useToast();
-  const [configs, setConfigs]           = useState<SystemConfig[]>(INIT_CONFIGS);
+  const [configs]                       = useState<SystemConfig[]>(INIT_CONFIGS);
   const [editingKey, setEditingKey]     = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
 
@@ -825,28 +657,18 @@ function TabKonfigurasi() {
     if (!cfg) return;
     const errValidasi = validateNilai(cfg, editingValue);
     if (errValidasi) { showToast(errValidasi, 'error'); return; }
-
-    setConfigs((prev) => prev.map((c) =>
-      c.key === key ? { ...c, value: editingValue.trim(), updatedAt: new Date().toISOString() } : c,
-    ));
     setEditingKey(null);
-    showToast(`Konfigurasi "${key}" berhasil disimpan (simulasi)`, 'success');
+    showToast(`Perubahan konfigurasi "${key}" belum didukung backend Admin`, 'info');
   };
 
   return (
     <div>
       {/* Banner peringatan */}
-      <div style={{
-        padding: '10px 14px',
-        background: 'var(--color-warning-bg)',
-        borderRadius: 8,
-        border: '1px solid var(--color-warning)',
-        marginBottom: 12,
-        fontSize: 13,
-        color: 'var(--color-warning)',
-      }}>
-        ⚠ Perubahan konfigurasi hanya tersimpan di sesi ini (<strong>mode simulasi</strong>).
-        Untuk konfigurasi production, ubah melalui environment variables atau config server.
+      <div className={styles.warningBanner}>
+        <span>⚠</span>
+        <span>
+          Konfigurasi sistem belum memiliki endpoint Admin yang persisten. Untuk production, ubah melalui environment variables atau config server.
+        </span>
       </div>
 
       {/* Banner praktik terbaik */}
@@ -933,7 +755,8 @@ function TabKonfigurasi() {
                   ) : (
                     <button
                       className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                      onClick={() => { setEditingKey(cfg.key); setEditingValue(cfg.value); }}
+                      disabled
+                      title="Perubahan konfigurasi belum didukung backend Admin"
                     >
                       Edit
                     </button>
@@ -958,14 +781,14 @@ interface DefinisiTab {
   id: TabId;
   label: string;
   icon: string;
-  badge?: string; // "Simulasi" atau "Real"
+  badge?: string;
 }
 
 const TABS: DefinisiTab[] = [
   { id: 'spesialisasi', label: 'Spesialisasi Dokter', icon: '⚕',  badge: 'Data Real' },
-  { id: 'layanan',      label: 'Tipe Layanan',        icon: '🩺', badge: 'Simulasi' },
-  { id: 'fasilitas',    label: 'Fasilitas',            icon: '🏗', badge: 'Simulasi' },
-  { id: 'konfigurasi',  label: 'Konfigurasi Sistem',   icon: '⚙️', badge: 'Simulasi' },
+  { id: 'layanan',      label: 'Tipe Layanan',        icon: '🩺', badge: 'Read-only' },
+  { id: 'fasilitas',    label: 'Fasilitas',           icon: '🏗', badge: 'Read-only' },
+  { id: 'konfigurasi',  label: 'Konfigurasi Sistem',  icon: '⚙️', badge: 'Read-only' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

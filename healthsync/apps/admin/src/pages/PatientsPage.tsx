@@ -45,8 +45,11 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-function calcAge(dob: string): number {
-  return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+function calcAge(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const parsed = new Date(dob).getTime();
+  if (Number.isNaN(parsed)) return null;
+  return Math.floor((Date.now() - parsed) / (1000 * 60 * 60 * 24 * 365.25));
 }
 
 const GENDER_LABEL: Record<string, string> = { MALE: 'Laki-laki', FEMALE: 'Perempuan' };
@@ -89,17 +92,13 @@ export default function PatientsPage() {
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) params.set('search', search.trim());
       const res = await patientClient.get<{
         data: { patients: Patient[]; meta: PaginationMeta };
         meta: { timestamp: string };
       }>(`/v1/patients?${params.toString()}`);
 
-      let data: Patient[] = res.data.data?.patients ?? [];
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        data = data.filter((p) => p.name.toLowerCase().includes(q));
-      }
-      setPatients(data);
+      setPatients(res.data.data?.patients ?? []);
       setMeta(res.data.data?.meta ?? null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Gagal memuat data pasien';
@@ -195,7 +194,7 @@ export default function PatientsPage() {
                     <td style={{ fontWeight: 600 }}>{p.name}</td>
                     <td>{GENDER_LABEL[p.gender] ?? p.gender}</td>
                     <td>{formatDate(p.date_of_birth)}</td>
-                    <td>{calcAge(p.date_of_birth)} th</td>
+                    <td>{calcAge(p.date_of_birth) != null ? `${calcAge(p.date_of_birth)} th` : '—'}</td>
                     <td>
                       <span className={styles.badge} style={{
                         background: BLOOD_COLOR[p.blood_type] + '20',
@@ -252,7 +251,10 @@ export default function PatientsPage() {
                     { label: 'ID Pengguna', value: <code style={{ fontSize: 11 }}>{selected.user_id}</code> },
                     { label: 'Nama', value: selected.name },
                     { label: 'Jenis Kelamin', value: GENDER_LABEL[selected.gender] ?? selected.gender },
-                    { label: 'Tanggal Lahir', value: `${formatDate(selected.date_of_birth)} (${calcAge(selected.date_of_birth)} tahun)` },
+                    {
+                      label: 'Tanggal Lahir',
+                      value: `${formatDate(selected.date_of_birth)}${calcAge(selected.date_of_birth) != null ? ` (${calcAge(selected.date_of_birth)} tahun)` : ''}`,
+                    },
                     { label: 'Golongan Darah', value: (
                       <span className={styles.badge} style={{ background: BLOOD_COLOR[selected.blood_type] + '20', color: BLOOD_COLOR[selected.blood_type] }}>
                         {selected.blood_type}

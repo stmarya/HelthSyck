@@ -82,14 +82,25 @@ export default function HospitalSearchPage() {
   const [results,  setResults]  = useState<SearchResult[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [searched, setSearched] = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
   // ── Detail panel ──
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
 
   const handleSearch = async () => {
+    const minBeds = minAvailableBeds.trim();
+    if (minBeds) {
+      const parsed = Number(minBeds);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        setError('Minimal bed tersedia harus berupa angka bulat 0 atau lebih.');
+        setSearched(false);
+        return;
+      }
+    }
     setLoading(true);
     setSearched(true);
     setSelectedResult(null);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (city.trim())                   params.set('city', city.trim());
@@ -101,8 +112,10 @@ export default function HospitalSearchPage() {
         `/v1/hospitals/search?${params}`
       );
       setResults(res.data.data ?? []);
-    } catch {
-      showToast('Gagal melakukan pencarian rumah sakit', 'error');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Gagal melakukan pencarian rumah sakit';
+      showToast(msg, 'error');
+      setError(msg);
       setResults([]);
     } finally {
       setLoading(false);
@@ -111,7 +124,7 @@ export default function HospitalSearchPage() {
 
   const handleReset = () => {
     setCity(''); setSpecialization(''); setMinAvailableBeds(''); setHasIcu(false);
-    setResults([]); setSearched(false); setSelectedResult(null);
+    setResults([]); setSearched(false); setSelectedResult(null); setError(null);
   };
 
   return (
@@ -185,8 +198,15 @@ export default function HospitalSearchPage() {
         </div>
       </div>
 
+      {error && (
+        <div className={styles.errorState}>
+          <span className={styles.errorStateIcon}>⚠</span>
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* ── Hasil Pencarian ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: selectedResult ? '1fr 380px' : '1fr', gap: 16 }}>
+      <div className={styles.contentSplit} style={!selectedResult ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
 
         {/* Tabel hasil */}
         <div className={styles.card} style={{ padding: 0 }}>

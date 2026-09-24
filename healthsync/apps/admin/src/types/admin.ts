@@ -97,9 +97,11 @@ export interface WeeklyStats {
 
 export type ConsultationStatus =
   | 'PENDING'
+  | 'ACCEPTED'
   | 'IN_PROGRESS'
   | 'COMPLETED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'EXPIRED';
 
 export interface Consultation {
   id: string;
@@ -310,6 +312,7 @@ export type AmbulanceStatus =
 export interface Ambulance {
   id: string;
   plate_number: string | null;
+  type: 'BLS' | 'ALS' | 'NICU' | null;
   status: AmbulanceStatus;
   hospital_id: string | null;
   driver_id: string | null;

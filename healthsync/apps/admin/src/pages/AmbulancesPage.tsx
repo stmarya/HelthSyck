@@ -49,6 +49,8 @@ const TYPE_OPTIONS = [
   { value: 'NICU', label: 'NICU — Neonatal ICU' },
 ];
 
+const PLATE_NUMBER_PATTERN = /^[A-Z0-9\s-]{3,20}$/;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Form shape
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,16 +131,14 @@ export default function AmbulancesPage() {
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (status) params.set('status', status);
 
       const res = await ambulanceClient.get<{
         data: Ambulance[];
         meta?: PaginationMeta;
       }>(`/v1/ambulances?${params.toString()}`);
 
-      let data: Ambulance[] = res.data.data ?? [];
-      if (status) data = data.filter((a) => a.status === status);
-
-      setRows(data);
+      setRows(res.data.data ?? []);
       setMeta(res.data.meta ?? null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Gagal memuat data ambulans';
@@ -163,7 +163,7 @@ export default function AmbulancesPage() {
     setForm({
       hospitalId:  row.hospital_id ?? '',
       plateNumber: row.plate_number ?? '',
-      type:        'BLS',
+      type:        row.type ?? 'BLS',
       driverId:    row.driver_id ?? '',
     });
     setEditRow(row);
@@ -171,15 +171,20 @@ export default function AmbulancesPage() {
 
   // ── Submit tambah ──
   const handleAddSubmit = async () => {
+    const normalizedPlate = form.plateNumber.trim().toUpperCase();
     if (!form.hospitalId || !form.plateNumber) {
       showToast('ID Rumah Sakit dan Plat Nomor wajib diisi', 'error');
+      return;
+    }
+    if (!PLATE_NUMBER_PATTERN.test(normalizedPlate)) {
+      showToast('Format plat nomor tidak valid', 'error');
       return;
     }
     setSaving(true);
     try {
       await ambulanceClient.post('/v1/ambulances', {
         hospitalId:  form.hospitalId,
-        plateNumber: form.plateNumber.toUpperCase(),
+        plateNumber: normalizedPlate,
         type:        form.type,
         ...(form.driverId ? { driverId: form.driverId } : {}),
       });
@@ -197,13 +202,26 @@ export default function AmbulancesPage() {
   // ── Submit edit ──
   const handleEditSubmit = async () => {
     if (!editRow) return;
+    const normalizedPlate = form.plateNumber.trim().toUpperCase();
+    if (!form.hospitalId) {
+      showToast('ID Rumah Sakit wajib diisi', 'error');
+      return;
+    }
+    if (!PLATE_NUMBER_PATTERN.test(normalizedPlate)) {
+      showToast('Format plat nomor tidak valid', 'error');
+      return;
+    }
+    if (!form.driverId.trim() && editRow.driver_id) {
+      showToast('Melepas driver ambulans belum didukung backend.', 'warning');
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, string> = {};
       if (form.hospitalId  && form.hospitalId  !== editRow.hospital_id)  payload['hospitalId']  = form.hospitalId;
-      if (form.plateNumber && form.plateNumber !== editRow.plate_number) payload['plateNumber'] = form.plateNumber.toUpperCase();
-      if (form.type)                                                       payload['type']        = form.type;
-      if (form.driverId    !== (editRow.driver_id ?? ''))                  payload['driverId']    = form.driverId || null as unknown as string;
+      if (normalizedPlate !== (editRow.plate_number ?? ''))                payload['plateNumber'] = normalizedPlate;
+      if (form.type !== (editRow.type ?? 'BLS'))                           payload['type']        = form.type;
+      if (form.driverId.trim() && form.driverId !== (editRow.driver_id ?? '')) payload['driverId'] = form.driverId.trim();
 
       await ambulanceClient.patch(`/v1/ambulances/${editRow.id}`, payload);
       showToast('Ambulans berhasil diperbarui', 'success');
@@ -435,7 +453,7 @@ export default function AmbulancesPage() {
             </tbody>
           </table>
           <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-            <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => { setSelected(null); openEdit(selected); }}>
+            <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => { openEdit(selected); setSelected(null); }}>
               Edit
             </button>
             <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => setSelected(null)}>Tutup</button>
@@ -500,11 +518,17 @@ export default function AmbulancesPage() {
             options={TYPE_OPTIONS}
           />
           <InputField
-            label="ID Pengemudi (kosongkan untuk hapus)"
+            label="ID Pengemudi"
             value={form.driverId}
             onChange={(e) => setForm((f) => ({ ...f, driverId: e.target.value }))}
             placeholder="UUID pengemudi…"
           />
+          {editRow?.driver_id && (
+            <div className={styles.warningBanner} style={{ marginBottom: 0 }}>
+              <span>⚠️</span>
+              <span>Melepas driver yang sudah terhubung belum didukung endpoint Admin. Isi UUID baru untuk mengganti driver.</span>
+            </div>
+          )}
         </div>
         <div style={{ marginTop: 'var(--space-5)', display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
           <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => setEditRow(null)} disabled={saving}>Batal</button>

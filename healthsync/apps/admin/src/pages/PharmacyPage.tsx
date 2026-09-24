@@ -184,6 +184,18 @@ export default function PharmacyPage() {
     if (!fName.trim()) { showToast('Nama apotek wajib diisi', 'warning'); return; }
     if (!fSIA.trim())  { showToast('Nomor SIA wajib diisi', 'warning'); return; }
     if (!fAddress.trim()) { showToast('Alamat wajib diisi', 'warning'); return; }
+    if (fPhone.trim() && fPhone.trim().length < 8) { showToast('Nomor telepon minimal 8 karakter', 'warning'); return; }
+
+    const latitude = fLat.trim() ? Number(fLat) : undefined;
+    const longitude = fLng.trim() ? Number(fLng) : undefined;
+    if (latitude !== undefined && (Number.isNaN(latitude) || latitude < -90 || latitude > 90)) {
+      showToast('Latitude harus berada di antara -90 dan 90', 'warning');
+      return;
+    }
+    if (longitude !== undefined && (Number.isNaN(longitude) || longitude < -180 || longitude > 180)) {
+      showToast('Longitude harus berada di antara -180 dan 180', 'warning');
+      return;
+    }
 
     const payload: Record<string, unknown> = {
       name:           fName.trim(),
@@ -191,8 +203,8 @@ export default function PharmacyPage() {
       address:        fAddress.trim(),
     };
     if (fPhone.trim())  payload['phone']     = fPhone.trim();
-    if (fLat.trim())    payload['latitude']  = parseFloat(fLat);
-    if (fLng.trim())    payload['longitude'] = parseFloat(fLng);
+    if (latitude !== undefined)  payload['latitude']  = latitude;
+    if (longitude !== undefined) payload['longitude'] = longitude;
 
     setSavingPharmacy(true);
     try {

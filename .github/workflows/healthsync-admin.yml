@@ -1,0 +1,92 @@
+name: HealthSync Admin Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  DATABASE_URL: ******localhost:5432/healthsync_test
+  JWT_SECRET: ci-test-secret-do-not-use-in-production
+  REDIS_URL: redis://localhost:6379
+  PORT: '0'
+  NODE_ENV: test
+
+jobs:
+  admin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: healthsync
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: healthsync/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+
+      - name: Admin typecheck
+        working-directory: healthsync/apps/admin
+        run: npm run typecheck
+
+      - name: Admin lint
+        working-directory: healthsync/apps/admin
+        run: npm run lint
+
+      - name: Admin build
+        working-directory: healthsync/apps/admin
+        run: npm run build
+
+  services:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace:
+          - services/auth-service
+          - services/consultation-service
+          - services/hospital-service
+          - services/patient-service
+          - services/ambulance-service
+          - services/referral-service
+    defaults:
+      run:
+        working-directory: healthsync
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: healthsync/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+
+      - name: Service typecheck
+        run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
+
+      - name: Service tests
+        run: npm test --workspace=${{ matrix.workspace }}

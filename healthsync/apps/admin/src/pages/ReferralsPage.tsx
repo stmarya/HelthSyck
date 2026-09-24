@@ -116,20 +116,22 @@ export default function ReferralsPage() {
   useEffect(() => { void fetchData(); }, [fetchData]);
   useEffect(() => { setPage(1); }, [status, urgency]);
 
-  // ── Statistik status ──
-  const stats = STATUS_OPTIONS.slice(1).map((opt) => ({
-    label: opt.label,
-    count: rows.filter((r) => r.status === opt.value).length,
-    style: STATUS_STYLE[opt.value as ReferralStatus],
-  }));
-
   // ── Aksi transisi status ──
   const doAction = async () => {
     if (!actionTarget) return;
+    const note = actionNote.trim();
+    if (actionTarget.action === 'reject' && note.length < 10) {
+      showToast('Alasan penolakan minimal 10 karakter', 'warning');
+      return;
+    }
     setActionBusy(true);
     try {
       const { id, action } = actionTarget;
-      const body = actionNote.trim() ? { notes: actionNote, rejectedReason: actionNote } : {};
+      const body = action === 'reject'
+        ? { rejectedReason: note }
+        : note
+          ? { notes: note }
+          : {};
       await referralClient.put(`/v1/referrals/${id}/${action}`, body);
       showToast(`Rujukan berhasil diperbarui`, 'success');
       setActionTarget(null);
@@ -151,19 +153,9 @@ export default function ReferralsPage() {
         breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Rujukan' }]}
       />
 
-      {/* ── Stat Cards ── */}
-      <div className={styles.statGrid} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className={styles.statCard}
-            style={{ cursor: 'pointer', borderLeft: `3px solid ${s.style.color}` }}
-            onClick={() => { setStatus(STATUS_OPTIONS.find((o) => o.label === s.label)?.value as ReferralStatus ?? ''); setPage(1); }}
-          >
-            <div className={styles.statValue} style={{ fontSize: 26, color: s.style.color }}>{s.count}</div>
-            <div className={styles.statLabel}>{s.label}</div>
-          </div>
-        ))}
+      <div className={styles.infoBanner}>
+        <span>ℹ️</span>
+        <span>Statistik agregat rujukan belum tersedia dari backend Admin. Halaman ini hanya menampilkan data paginasi dan filter server-side yang valid.</span>
       </div>
 
       {/* ── Filter ── */}
