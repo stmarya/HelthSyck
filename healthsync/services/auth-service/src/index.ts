@@ -438,7 +438,7 @@ app.post('/v1/auth/register', async (req: Request, res: Response, next: NextFunc
 
     const { accessToken, refreshToken, tokenHash } = issueTokens(user.id, user.role);
     await storeRefreshToken(user.id, user.role, tokenHash);
-    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req, { method: 'register' });
+    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req, { method: 'register', status: 'SUCCESS' });
 
     res.status(201).json({
       data: { userId: user.id, email: user.email, name, role: user.role, accessToken, refreshToken },
@@ -492,7 +492,7 @@ app.post('/v1/auth/login', async (req: Request, res: Response, next: NextFunctio
         .incr(failKey)
         .expire(failKey, 15 * 60)
         .exec();
-      await writeAuditLog(user.id, 'LOGIN_FAIL', req);
+      await writeAuditLog(user.id, 'LOGIN_FAIL', req, { status: 'FAILURE' });
       res.status(401).json(buildProblem(401, 'Unauthorized', 'Invalid email or password', req.path));
       return;
     }
@@ -506,7 +506,7 @@ app.post('/v1/auth/login', async (req: Request, res: Response, next: NextFunctio
     // Update last_login_at
     await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
-    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req);
+    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req, { status: 'SUCCESS' });
 
     res.json({
       data: { userId: user.id, email: user.email, role: user.role, accessToken, refreshToken },
@@ -546,7 +546,7 @@ app.post('/v1/auth/refresh', async (req: Request, res: Response, next: NextFunct
     const { accessToken: newAccessToken, refreshToken: newRefreshToken, tokenHash: newHash } = issueTokens(userId, role);
     await storeRefreshToken(userId, role, newHash);
 
-    await writeAuditLog(userId, 'TOKEN_REFRESH', req);
+    await writeAuditLog(userId, 'TOKEN_REFRESH', req, { status: 'SUCCESS' });
 
     res.json({
       data: { accessToken: newAccessToken, refreshToken: newRefreshToken },
@@ -570,7 +570,7 @@ app.post('/v1/auth/logout', authenticate, async (req: Request, res: Response, ne
       await getRedis().del(`refresh:${hash}`);
     }
 
-    await writeAuditLog(user.sub, 'LOGOUT', req);
+    await writeAuditLog(user.sub, 'LOGOUT', req, { status: 'SUCCESS' });
 
     res.json({ data: { message: 'Logged out successfully' }, meta: { timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -659,7 +659,7 @@ app.post('/v1/auth/change-password', authenticate, async (req: Request, res: Res
       await redis.del(`refresh:${hashToken(refreshToken)}`);
     }
 
-    await writeAuditLog(sub, 'PASSWORD_CHANGE', req);
+    await writeAuditLog(sub, 'PASSWORD_CHANGE', req, { status: 'SUCCESS' });
 
     res.json({ data: { message: 'Password changed successfully' }, meta: { timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -757,7 +757,7 @@ app.post('/v1/auth/otp/verify', async (req: Request, res: Response, next: NextFu
       await pool.query('UPDATE users SET phone_verified = TRUE WHERE id = $1', [userId]);
     }
 
-    await writeAuditLog(userId, 'OTP_VERIFIED', req, { purpose });
+    await writeAuditLog(userId, 'OTP_VERIFIED', req, { purpose, status: 'SUCCESS' });
 
     res.json({ data: { verified: true }, meta: { timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -910,6 +910,7 @@ app.post('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-
       targetEmail: user.email,
       targetRole: user.role,
       displayName: name,
+      status: 'SUCCESS',
     });
 
     res.status(201).json({
@@ -1009,6 +1010,7 @@ app.patch('/v1/auth/admin/users/:id', requireAdmin, createRateLimitMiddleware('a
       targetEmail: user.email,
       previousStatus: currentUser.status,
       nextStatus: user.status,
+      status: 'SUCCESS',
     });
 
     res.json({
@@ -1045,9 +1047,10 @@ app.get('/v1/auth/admin/logs', requireAdmin, createRateLimitMiddleware('admin-lo
     const offset = (page - 1) * limit;
 
     const statusExpr = `CASE
-      WHEN l.event LIKE '%FAIL%' THEN 'FAILURE'
-      WHEN l.event LIKE '%WARN%' THEN 'WARNING'
-      ELSE 'SUCCESS'
+      WHEN COALESCE(l.metadata->>'status', '') IN ('SUCCESS', 'FAILURE', 'WARNING') THEN l.metadata->>'status'
+      WHEN l.event = 'LOGIN_FAIL' THEN 'FAILURE'
+      WHEN l.event = 'LOGIN_SUCCESS' THEN 'SUCCESS'
+      ELSE 'WARNING'
     END`;
 
     const conditions: string[] = [];

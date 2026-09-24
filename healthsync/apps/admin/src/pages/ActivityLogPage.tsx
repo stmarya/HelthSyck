@@ -80,6 +80,7 @@ export default function ActivityLogPage() {
   const [pageCount, setPageCount] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef(0);
   const LIMIT = 25;
 
   const buildQuery = useCallback(() => {
@@ -109,22 +110,23 @@ export default function ActivityLogPage() {
     let cancelled = false;
 
     const loadLogs = async () => {
+      const requestId = ++requestIdRef.current;
       setLoading(true);
       setError(null);
       try {
         const res = await authClient.get<LogsResponse>('/v1/auth/admin/logs?' + buildQuery());
-        if (cancelled) return;
+        if (cancelled || requestId !== requestIdRef.current) return;
         setLogs(res.data.data ?? []);
         setTotal(res.data.meta?.total ?? 0);
         setPageCount(Math.max(1, res.data.meta?.totalPages ?? 1));
       } catch (err) {
-        if (cancelled) return;
+        if (cancelled || requestId !== requestIdRef.current) return;
         setLogs([]);
         setTotal(0);
         setPageCount(1);
         setError(getApiErrorMessage(err, 'Gagal memuat log aktivitas.'));
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && requestId === requestIdRef.current) setLoading(false);
       }
     };
 
@@ -135,14 +137,17 @@ export default function ActivityLogPage() {
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(() => {
+      const requestId = ++requestIdRef.current;
       void authClient.get<LogsResponse>('/v1/auth/admin/logs?' + buildQuery())
         .then((res) => {
+          if (requestId !== requestIdRef.current) return;
           setLogs(res.data.data ?? []);
           setTotal(res.data.meta?.total ?? 0);
           setPageCount(Math.max(1, res.data.meta?.totalPages ?? 1));
           setError(null);
         })
         .catch((err) => {
+          if (requestId !== requestIdRef.current) return;
           setError(getApiErrorMessage(err, 'Gagal menyegarkan log aktivitas.'));
         });
     }, 30_000);

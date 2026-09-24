@@ -32,14 +32,11 @@ export function useAnalytics() {
       setLoading(true);
       setError(null);
 
-      const [consultResult, usersResult, kpiResult, pendingResult, inProgressResult, completedResult, cancelledResult] = await Promise.allSettled([
+      const [consultResult, usersResult, kpiResult, consultStatusResult] = await Promise.allSettled([
         consultationClient.get<{ data: DayCount[] }>('/v1/consultations/stats/weekly'),
         authClient.get<{ data: RoleCount[] }>('/v1/auth/users/stats/by-role'),
         authClient.get<{ data: KpiRow[] }>('/v1/admin/kpis'),
-        consultationClient.get<{ meta?: { total?: number } }>('/v1/consultations?page=1&limit=1&status=PENDING'),
-        consultationClient.get<{ meta?: { total?: number } }>('/v1/consultations?page=1&limit=1&status=IN_PROGRESS'),
-        consultationClient.get<{ meta?: { total?: number } }>('/v1/consultations?page=1&limit=1&status=COMPLETED'),
-        consultationClient.get<{ meta?: { total?: number } }>('/v1/consultations?page=1&limit=1&status=CANCELLED'),
+        consultationClient.get<{ data: Array<{ status: string; count: number }> }>('/v1/consultations/stats/status'),
       ]);
 
       if (cancelled) return;
@@ -65,18 +62,21 @@ export function useAnalytics() {
           ? (kpiResult.value.data.data ?? [])
           : [];
 
-      const consultStatusResults = [pendingResult, inProgressResult, completedResult, cancelledResult];
-      const hasConsultationStatus = consultStatusResults.every((result) => result.status === 'fulfilled');
-      const getStatusTotal = (
-        result: PromiseSettledResult<{ data: { meta?: { total?: number } } }>,
-      ) => (result.status === 'fulfilled' ? result.value.data.meta?.total ?? 0 : 0);
+      const hasConsultationStatus = consultStatusResult.status === 'fulfilled';
       const consultationStatus = hasConsultationStatus
-        ? [
-            { name: 'Menunggu', value: getStatusTotal(pendingResult) },
-            { name: 'Sedang Berjalan', value: getStatusTotal(inProgressResult) },
-            { name: 'Selesai', value: getStatusTotal(completedResult) },
-            { name: 'Dibatalkan', value: getStatusTotal(cancelledResult) },
-          ]
+        ? (consultStatusResult.value.data.data ?? []).map((entry) => ({
+            name:
+              entry.status === 'PENDING'
+                ? 'Menunggu'
+                : entry.status === 'IN_PROGRESS'
+                  ? 'Sedang Berjalan'
+                  : entry.status === 'COMPLETED'
+                    ? 'Selesai'
+                    : entry.status === 'CANCELLED'
+                      ? 'Dibatalkan'
+                      : entry.status,
+            value: entry.count,
+          }))
         : [];
 
       const allFailed =

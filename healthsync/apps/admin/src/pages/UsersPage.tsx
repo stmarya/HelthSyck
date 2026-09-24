@@ -404,6 +404,12 @@ export default function UsersPage({ defaultRole, title }: UsersPageProps) {
     const nextStatus = nextStatusMap[confirmBulk.action];
     if (!nextStatus) return;
     const selectedUsers = users.filter((user) => selectedIds.has(user.id) && user.status !== nextStatus);
+    if (selectedUsers.length === 0) {
+      setConfirmBulk((prev) => ({ ...prev, open: false }));
+      setSelectedIds(new Set());
+      showToast('Semua pengguna terpilih sudah memiliki status tersebut.', 'info');
+      return;
+    }
     setBulkSubmitting(true);
     setConfirmBulk((prev) => ({ ...prev, open: false }));
     try {
