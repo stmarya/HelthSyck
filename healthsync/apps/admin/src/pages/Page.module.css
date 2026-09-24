@@ -154,6 +154,12 @@
   transition: background var(--transition-fast);
 }
 
+.tableClickable tbody tr:focus-visible td {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  background: var(--color-primary-light);
+}
+
 .tableRowSelected td {
   background: var(--color-accent-light) !important;
 }
@@ -226,6 +232,17 @@
   opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+.btn:focus-visible,
+.pageBtn:focus-visible,
+.searchInput:focus-visible,
+.filterSelect:focus-visible,
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .btnSm {
@@ -627,6 +644,27 @@
   to   { transform: rotate(360deg); }
 }
 
+@media (max-width: 360px) {
+  .page {
+    padding: var(--space-3);
+  }
+
+  .card,
+  .cardElevated {
+    padding: var(--space-4);
+  }
+
+  .statGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table th,
+  .table td {
+    padding: var(--space-2);
+    font-size: var(--text-sm);
+  }
+}
+
 @media (max-width: 768px) {
   .page {
     padding: var(--space-4);
@@ -640,5 +678,32 @@
 
   .statGrid {
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .page {
+    padding: var(--space-5);
+  }
+
+  .statGrid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .page {
+    padding: var(--space-6);
+  }
+}
+
+@media (min-width: 1440px) {
+  .page {
+    padding: var(--space-8);
+  }
+
+  .card,
+  .cardElevated {
+    padding: var(--space-6);
   }
 }

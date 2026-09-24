@@ -1,102 +1,34 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import type { DoctorSpecialization, ServiceType, FacilityCategory, SystemConfig } from '../types/admin';
+import { useCallback, useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
+import type { DoctorSpecialization } from '../types/admin';
 import { Skeleton } from '../components/Skeleton';
 import { useToast } from '../components/Toast';
 import PageHeader from '../components/PageHeader';
+import { ActionGuardNotice, GuardedActionButton } from '../components/ActionGuard';
 import { hospitalClient } from '../api/client';
 import styles from './Page.module.css';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper — format tanggal ke Bahasa Indonesia
-// ─────────────────────────────────────────────────────────────────────────────
-
-function fmtDate(s: string | undefined | null): string {
-  if (!s) return '—';
-  return new Date(s).toLocaleDateString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
+function fmtDate(value: string | undefined | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper — ekspor array ke CSV dan trigger download
-// ─────────────────────────────────────────────────────────────────────────────
-
-function eksporCsv(header: string[], rows: (string | number)[][], namaFile: string) {
-  const csvBaris = [header, ...rows]
-    .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+function exportCsv(header: string[], rows: (string | number)[][], filename: string) {
+  const csv = [header, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
     .join('\n');
-  const blob = new Blob(['\uFEFF' + csvBaris], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = namaFile;
-  a.click();
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
   URL.revokeObjectURL(url);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mock data fallback — digunakan saat backend tidak mengembalikan data
-// (Layanan & Fasilitas belum ada endpoint backend)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MOCK_SERVICE_TYPES: ServiceType[] = [
-  { id: 'st-1', code: 'RJ',   name: 'Rawat Jalan',  isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-2', code: 'RI',   name: 'Rawat Inap',   isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-3', code: 'IGD',  name: 'IGD',          isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-4', code: 'LAB',  name: 'Laboratorium', isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-5', code: 'RAD',  name: 'Radiologi',    isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-6', code: 'FARM', name: 'Farmasi',      isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-7', code: 'FT',   name: 'Fisioterapi',  isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'st-8', code: 'OP',   name: 'Operasi',      isActive: false, createdAt: new Date().toISOString() },
-];
-
-const MOCK_FACILITIES: FacilityCategory[] = [
-  { id: 'fc-1', code: 'PARKIR',  name: 'Parkir',   isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-2', code: 'WIFI',    name: 'WiFi',      isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-3', code: 'MUSHOLA', name: 'Mushola',  isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-4', code: 'ATM',     name: 'ATM',       isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-5', code: 'KANTIN',  name: 'Kantin',   isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-6', code: 'AMBU',    name: 'Ambulans', isActive: true,  createdAt: new Date().toISOString() },
-  { id: 'fc-7', code: 'HELIPAD', name: 'Helipad',  isActive: false, createdAt: new Date().toISOString() },
-  { id: 'fc-8', code: 'BPJS',    name: 'BPJS',      isActive: true,  createdAt: new Date().toISOString() },
-];
-
-const INIT_CONFIGS: SystemConfig[] = [
-  { key: 'MAX_CONSULTATION_DURATION', value: '60',    type: 'number',  description: 'Durasi maksimum konsultasi (menit)', updatedAt: new Date().toISOString() },
-  { key: 'DEFAULT_REMINDER_MINUTES',  value: '30',    type: 'number',  description: 'Pengingat default sebelum jadwal (menit)', updatedAt: new Date().toISOString() },
-  { key: 'ENABLE_VIDEO_CALL',         value: 'true',  type: 'boolean', description: 'Aktifkan fitur video call', updatedAt: new Date().toISOString() },
-  { key: 'MAINTENANCE_MODE',          value: 'false', type: 'boolean', description: 'Mode pemeliharaan sistem', updatedAt: new Date().toISOString() },
-  { key: 'MAX_FILE_UPLOAD_MB',        value: '10',    type: 'number',  description: 'Batas ukuran file upload (MB)', updatedAt: new Date().toISOString() },
-  { key: 'SESSION_TIMEOUT_MINUTES',   value: '30',    type: 'number',  description: 'Batas waktu sesi pengguna (menit)', updatedAt: new Date().toISOString() },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipe — DoctorRow dari GET /v1/doctors
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface DoctorRowRingkas {
-  specialization: string;
-  is_available: boolean;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-komponen: Banner unavailable
-// ─────────────────────────────────────────────────────────────────────────────
-
-function BannerSimulasi() {
-  return (
-    <div className={styles.warningBanner}>
-      <span>⚠</span>
-      <span>
-        Endpoint backend Admin untuk master data ini belum tersedia. Data ditampilkan apa adanya dan aksi ubah/tambah/hapus dinonaktifkan.
-      </span>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-komponen: Stat Card ringkas
-// ─────────────────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color }: { label: string; value: number | string; color?: string }) {
   return (
@@ -109,138 +41,118 @@ function StatCard({ label, value, color }: { label: string; value: number | stri
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-komponen: Empty State
-// ─────────────────────────────────────────────────────────────────────────────
-
-function KosongState({ pesan }: { pesan: string }) {
+function EmptyState({ message, description }: { message: string; description?: string }) {
   return (
     <div className={styles.emptyState}>
       <div className={styles.emptyStateIcon}>📋</div>
-      <div className={styles.emptyStateTitle}>{pesan}</div>
+      <div className={styles.emptyStateTitle}>{message}</div>
+      {description && <div className={styles.emptyStateDesc}>{description}</div>}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab: Spesialisasi Dokter — Data REAL dari GET /v1/doctors
-// ─────────────────────────────────────────────────────────────────────────────
+interface DoctorRowRingkas {
+  specialization: string;
+  is_available: boolean;
+}
+
+function formatSpecializationName(code: string): string {
+  const map: Record<string, string> = {
+    CARDIOLOGY: 'Kardiologi',
+    NEUROLOGY: 'Neurologi',
+    ORTHOPEDICS: 'Ortopedi',
+    OPHTHALMOLOGY: 'Mata',
+    ENT: 'THT',
+    DERMATOLOGY: 'Dermatologi',
+    PEDIATRIC: 'Pediatri / Anak',
+    OBSTETRICS: 'Obstetri & Ginekologi',
+    INTERNAL_MEDICINE: 'Penyakit Dalam',
+    GENERAL_MEDICINE: 'Umum',
+    ONCOLOGY: 'Onkologi',
+    PSYCHIATRY: 'Psikiatri',
+    RADIOLOGY: 'Radiologi',
+    SURGERY: 'Bedah',
+    UROLOGY: 'Urologi',
+  };
+
+  return map[code] ?? code.replace(/_/g, ' ').toLowerCase()
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 function TabSpesialisasi() {
   const { showToast } = useToast();
-
-  // State data (derived dari /v1/doctors)
-  const [items, setItems]   = useState<DoctorSpecialization[]>([]);
+  const [items, setItems] = useState<DoctorSpecialization[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
-  // State UI
-  const [cari, setCari]                   = useState('');
-  const [editingId, setEditingId]         = useState<string | null>(null);
-  const [editingName, setEditingName]     = useState('');
-  const [editingCode, setEditingCode]     = useState('');
-
-  // Fungsi derive spesialisasi dari data dokter
   const fetchSpesialisasi = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
-      // Ambil semua dokter (limit tinggi agar dapat semua)
       const res = await hospitalClient.get<{ data: DoctorRowRingkas[] }>('/v1/doctors?limit=100');
       const doctors = res.data.data ?? [];
+      const countBySpecialization = new Map<string, number>();
 
-      // Hitung jumlah dokter per spesialisasi
-      const hitungMap = new Map<string, number>();
-      for (const doc of doctors) {
-        const sp = doc.specialization ?? 'LAINNYA';
-        hitungMap.set(sp, (hitungMap.get(sp) ?? 0) + 1);
+      for (const doctor of doctors) {
+        const specialization = doctor.specialization ?? 'LAINNYA';
+        countBySpecialization.set(specialization, (countBySpecialization.get(specialization) ?? 0) + 1);
       }
 
-      // Konversi ke DoctorSpecialization[]
-      const spesialisasiList: DoctorSpecialization[] = Array.from(hitungMap.entries())
+      const specializationList: DoctorSpecialization[] = Array.from(countBySpecialization.entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([kode, jumlah], idx) => ({
-          id: `sp-${idx}`,
-          code: kode,
-          name: formatNamaSpesialisasi(kode),
-          doctorCount: jumlah,
+        .map(([code, doctorCount], index) => ({
+          id: `sp-${index}`,
+          code,
+          name: formatSpecializationName(code),
+          doctorCount,
           createdAt: new Date().toISOString(),
         }));
 
-      setItems(spesialisasiList);
+      setItems(specializationList);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal memuat data spesialisasi';
-      setError(msg);
-      showToast(msg, 'error');
+      const message = err instanceof Error ? err.message : 'Gagal memuat data spesialisasi';
+      setError(message);
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
   }, [showToast]);
 
-  useEffect(() => { void fetchSpesialisasi(); }, [fetchSpesialisasi]);
+  useEffect(() => {
+    void fetchSpesialisasi();
+  }, [fetchSpesialisasi]);
 
-  // Format kode spesialisasi → nama yang lebih ramah
-  function formatNamaSpesialisasi(kode: string): string {
-    const peta: Record<string, string> = {
-      CARDIOLOGY:        'Kardiologi',
-      NEUROLOGY:         'Neurologi',
-      ORTHOPEDICS:       'Ortopedi',
-      OPHTHALMOLOGY:     'Mata',
-      ENT:               'THT',
-      DERMATOLOGY:       'Dermatologi',
-      PEDIATRIC:         'Pediatri / Anak',
-      OBSTETRICS:        'Obstetri & Ginekologi',
-      INTERNAL_MEDICINE: 'Penyakit Dalam',
-      GENERAL_MEDICINE:  'Umum',
-      ONCOLOGY:          'Onkologi',
-      PSYCHIATRY:        'Psikiatri',
-      RADIOLOGY:         'Radiologi',
-      SURGERY:           'Bedah',
-      UROLOGY:           'Urologi',
-    };
-    return peta[kode] ?? kode.replace(/_/g, ' ').toLowerCase()
-      .split(' ')
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
-  }
-
-  const itemsTerfilter = cari.trim()
-    ? items.filter((i) =>
-        i.name.toLowerCase().includes(cari.toLowerCase()) ||
-        i.code.toLowerCase().includes(cari.toLowerCase()),
+  const filteredItems = search.trim()
+    ? items.filter((item) =>
+        item.name.toLowerCase().includes(search.toLowerCase()) ||
+        item.code.toLowerCase().includes(search.toLowerCase()),
       )
     : items;
 
-  const handleSimpanEdit = (id: string) => {
-    if (!editingName.trim()) { showToast('Nama tidak boleh kosong', 'error'); return; }
-    setItems((prev) => prev.map((i) =>
-      i.id === id ? { ...i, name: editingName.trim(), code: editingCode.trim().toUpperCase() } : i,
-    ));
-    setEditingId(null);
-    showToast('Perubahan spesialisasi belum didukung backend Admin', 'info');
-  };
-
-  const handleEksporCsv = () => {
-    eksporCsv(
-      ['Kode', 'Nama Spesialisasi', 'Jumlah Dokter', 'Dibuat'],
-      itemsTerfilter.map((i) => [i.code, i.name, i.doctorCount, fmtDate(i.createdAt)]),
-      `spesialisasi-${new Date().toISOString().slice(0, 10)}.csv`,
-    );
-    showToast('File CSV berhasil diunduh', 'success');
-  };
-
-  // Stat summary
-  const totalDokter = items.reduce((sum, i) => sum + i.doctorCount, 0);
-  const spTersibuk  = items.reduce(
-    (max, i) => (i.doctorCount > max.doctorCount ? i : max),
+  const totalDoctors = items.reduce((sum, item) => sum + item.doctorCount, 0);
+  const busiest = items.reduce(
+    (max, item) => (item.doctorCount > max.doctorCount ? item : max),
     { doctorCount: 0, name: '—' } as DoctorSpecialization,
   );
+
+  const handleExportCsv = () => {
+    exportCsv(
+      ['Kode', 'Nama Spesialisasi', 'Jumlah Dokter', 'Terlihat Pada'],
+      filteredItems.map((item) => [item.code, item.name, item.doctorCount, fmtDate(item.createdAt)]),
+      `spesialisasi-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
+    showToast('CSV spesialisasi berhasil diunduh.', 'success');
+  };
 
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} height={42} style={{ marginBottom: 4 }} />
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton key={index} height={42} style={{ marginBottom: 4 }} />
         ))}
       </div>
     );
@@ -261,40 +173,37 @@ function TabSpesialisasi() {
 
   return (
     <div>
-      {/* ── Info sumber data ── */}
-      <div style={{
-        padding: '8px 12px',
-        background: 'var(--color-success-bg)',
-        borderRadius: 8,
-        border: '1px solid var(--color-success)',
-        marginBottom: 16,
-        fontSize: 12,
-        color: 'var(--color-success)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-      }}>
+      <div className={styles.infoBanner}>
         <span>✅</span>
-        <span>Data real dari <strong>hospital-service → /v1/doctors</strong> — dihitung berdasarkan data dokter terdaftar.</span>
+        <span>
+          Data real dari <strong>hospital-service → /v1/doctors</strong>. Admin hanya dapat melihat dan mengekspor ringkasan spesialisasi yang benar-benar tersedia dari backend.
+        </span>
       </div>
 
-      {/* ── Stat cards ── */}
+      <ActionGuardNotice
+        action="edit"
+        reason="Endpoint CRUD spesialisasi khusus Admin belum tersedia, jadi perubahan data referensi tetap dinonaktifkan di production."
+      />
+
       <div className={styles.statGrid} style={{ marginBottom: 16 }}>
         <StatCard label="Total Spesialisasi" value={items.length} color="var(--color-primary)" />
-        <StatCard label="Total Dokter Terdaftar" value={totalDokter} color="var(--color-success)" />
-        <StatCard label="Spesialisasi Terbanyak" value={spTersibuk.name !== '—' ? `${spTersibuk.name} (${spTersibuk.doctorCount})` : '—'} color="var(--color-warning)" />
+        <StatCard label="Total Dokter Terdaftar" value={totalDoctors} color="var(--color-success)" />
+        <StatCard
+          label="Spesialisasi Terbanyak"
+          value={busiest.name !== '—' ? `${busiest.name} (${busiest.doctorCount})` : '—'}
+          color="var(--color-warning)"
+        />
       </div>
 
-      {/* ── Toolbar ── */}
       <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
         <input
           className={styles.searchInput}
-          style={{ flex: '1 1 200px', maxWidth: 280 }}
+          style={{ flex: '1 1 220px', maxWidth: 320 }}
           placeholder="Cari spesialisasi…"
-          value={cari}
-          onChange={(e) => setCari(e.target.value)}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             className={`${styles.btn} ${styles.btnOutline}`}
             onClick={fetchSpesialisasi}
@@ -302,20 +211,26 @@ function TabSpesialisasi() {
           >
             ↻ Muat Ulang
           </button>
-          <button
+          <GuardedActionButton
+            action="export"
+            allowed={filteredItems.length > 0}
+            deniedReason="Belum ada data spesialisasi real untuk diekspor."
+            onClick={handleExportCsv}
             className={`${styles.btn} ${styles.btnOutline}`}
-            onClick={handleEksporCsv}
-            disabled={items.length === 0}
           >
             ↓ Ekspor CSV
-          </button>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} disabled title="CRUD spesialisasi belum tersedia di backend Admin">
+          </GuardedActionButton>
+          <GuardedActionButton
+            action="create"
+            allowed={false}
+            deniedReason="Penambahan spesialisasi harus dilakukan melalui layanan backend yang resmi."
+            className={`${styles.btn} ${styles.btnPrimary}`}
+          >
             + Tambah
-          </button>
+          </GuardedActionButton>
         </div>
       </div>
 
-      {/* ── Tabel ── */}
       <div className={styles.tableWrapper}>
         <table className={styles.table}>
           <thead>
@@ -323,94 +238,49 @@ function TabSpesialisasi() {
               <th>Nama Spesialisasi</th>
               <th>Kode</th>
               <th style={{ textAlign: 'center' }}>Jumlah Dokter</th>
-              <th>Terakhir Diperbarui</th>
+              <th>Terlihat Pada</th>
               <th style={{ textAlign: 'center', width: 140 }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
-            {itemsTerfilter.length === 0 ? (
+            {filteredItems.length === 0 ? (
               <tr>
                 <td colSpan={5}>
-                  <KosongState pesan={cari ? `Tidak ada hasil untuk "${cari}"` : 'Belum ada spesialisasi'} />
+                  <EmptyState
+                    message={search ? `Tidak ada hasil untuk "${search}"` : 'Belum ada spesialisasi real'}
+                    description="Tambahkan dokter di hospital-service agar ringkasan spesialisasi muncul otomatis."
+                  />
                 </td>
               </tr>
-            ) : itemsTerfilter.map((item) => (
+            ) : filteredItems.map((item) => (
               <tr key={item.id}>
+                <td><span style={{ fontWeight: 500 }}>{item.name}</span></td>
                 <td>
-                  {editingId === item.id ? (
-                    <input
-                      className={styles.searchInput}
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSimpanEdit(item.id)}
-                      autoFocus
-                    />
-                  ) : (
-                    <span style={{ fontWeight: 500 }}>{item.name}</span>
-                  )}
+                  <code style={{ fontSize: 11, background: 'var(--color-surface-2)', padding: '2px 6px', borderRadius: 4 }}>
+                    {item.code}
+                  </code>
                 </td>
-                <td>
-                  {editingId === item.id ? (
-                    <input
-                      className={styles.searchInput}
-                      style={{ width: 140 }}
-                      value={editingCode}
-                      onChange={(e) => setEditingCode(e.target.value)}
-                    />
-                  ) : (
-                    <code style={{
-                      fontSize: 11, background: 'var(--color-surface-2)',
-                      padding: '2px 6px', borderRadius: 4,
-                    }}>
-                      {item.code}
-                    </code>
-                  )}
-                </td>
+                <td style={{ textAlign: 'center', fontWeight: 700 }}>{item.doctorCount}</td>
+                <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>{fmtDate(item.createdAt)}</td>
                 <td style={{ textAlign: 'center' }}>
-                  <span style={{
-                    fontWeight: 700,
-                    color: item.doctorCount === 0 ? 'var(--color-muted)' : 'var(--color-text)',
-                  }}>
-                    {item.doctorCount}
-                  </span>
-                </td>
-                <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-                  {fmtDate(item.createdAt)}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  {editingId === item.id ? (
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnPrimary}`}
-                        onClick={() => handleSimpanEdit(item.id)}
-                      >
-                        Simpan
-                      </button>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}
-                        onClick={() => setEditingId(null)}
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                        disabled
-                        title="Perubahan spesialisasi belum didukung backend Admin"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`}
-                        disabled
-                        title="Perubahan spesialisasi belum didukung backend Admin"
-                      >
-                        Hapus
-                      </button>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <GuardedActionButton
+                      action="edit"
+                      allowed={false}
+                      deniedReason="Perubahan spesialisasi belum didukung endpoint Admin."
+                      className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
+                    >
+                      Edit
+                    </GuardedActionButton>
+                    <GuardedActionButton
+                      action="delete"
+                      allowed={false}
+                      deniedReason="Penghapusan spesialisasi harus dilakukan lewat backend sumber data."
+                      className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`}
+                    >
+                      Hapus
+                    </GuardedActionButton>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -418,94 +288,71 @@ function TabSpesialisasi() {
         </table>
       </div>
 
-      {/* Catatan kaki */}
       <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 8 }}>
-        * Data spesialisasi dihitung dari dokter terdaftar di sistem. Endpoint CRUD khusus spesialisasi belum tersedia untuk Admin.
+        * Ringkasan spesialisasi dihitung langsung dari dokter terdaftar. Tidak ada data referensi lokal atau simulasi yang disimpan di Admin.
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipe item generik untuk tab Layanan & Fasilitas
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface ItemGenerik {
-  id: string;
-  code: string;
-  name: string;
-  isActive: boolean;
-  createdAt: string;
-  description?: string;
-}
-
-interface PropsTabGenerik {
-  dataAwal: ItemGenerik[];
-  pesanKosong: string;
-  labelTambah: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab Generik: Tipe Layanan & Fasilitas (read-only fallback)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGenerik) {
-  const { showToast } = useToast();
-  const [items, setItems]               = useState<ItemGenerik[]>(dataAwal);
-  const [cari, setCari]                 = useState('');
-  const [editingId, setEditingId]       = useState<string | null>(null);
-  const [editingName, setEditingName]   = useState('');
-  const [editingCode, setEditingCode]   = useState('');
-  const itemsTerfilter = cari.trim()
-    ? items.filter((i) =>
-        i.name.toLowerCase().includes(cari.toLowerCase()) ||
-        i.code.toLowerCase().includes(cari.toLowerCase()),
-      )
-    : items;
-
-  const jumlahAktif    = items.filter((i) => i.isActive).length;
-  const jumlahNonaktif = items.filter((i) => !i.isActive).length;
-
-  const handleSimpanEdit = (id: string) => {
-    if (!editingName.trim()) { showToast('Nama tidak boleh kosong', 'error'); return; }
-    setItems((prev) => prev.map((i) =>
-      i.id === id ? { ...i, name: editingName.trim(), code: editingCode.trim().toUpperCase() } : i,
-    ));
-    setEditingId(null);
-    showToast('Perubahan master data belum didukung backend Admin', 'info');
-  };
+function StatusBadge({ active }: { active?: boolean }) {
+  const style: CSSProperties = active
+    ? { background: 'var(--color-success-bg)', color: 'var(--color-success)' }
+    : { background: 'var(--color-surface-2)', color: 'var(--color-muted)' };
 
   return (
-    <div>
-      <BannerSimulasi />
+    <span className={styles.badge} style={style}>
+      {active ? 'Aktif' : 'Tidak tersedia'}
+    </span>
+  );
+}
 
-      {/* ── Stat cards ── */}
+function TabEndpointUnavailable({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <ActionGuardNotice action="view" reason={description} />
+
       <div className={styles.statGrid} style={{ marginBottom: 16 }}>
-        <StatCard label="Total Item" value={items.length} />
-        <StatCard label="Aktif" value={jumlahAktif} color="var(--color-success)" />
-        <StatCard label="Nonaktif" value={jumlahNonaktif} color="var(--color-muted)" />
+        <StatCard label="Total Item" value={0} />
+        <StatCard label="Aktif" value={0} color="var(--color-success)" />
+        <StatCard label="Nonaktif" value={0} color="var(--color-muted)" />
       </div>
 
-      {/* ── Toolbar ── */}
       <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
         <input
           className={styles.searchInput}
-          style={{ flex: '1 1 200px', maxWidth: 280 }}
-          placeholder="Cari…"
-          value={cari}
-          onChange={(e) => setCari(e.target.value)}
-        />
-        <button
-          className={`${styles.btn} ${styles.btnPrimary}`}
+          style={{ flex: '1 1 220px', maxWidth: 320 }}
+          placeholder={`Cari ${title.toLowerCase()}…`}
           disabled
-          title="CRUD master data belum tersedia di backend Admin"
-          style={{ marginLeft: 'auto' }}
-        >
-          + {labelTambah}
-        </button>
+          value=""
+          readOnly
+        />
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <GuardedActionButton
+            action="export"
+            allowed={false}
+            deniedReason={`Ekspor ${title.toLowerCase()} dinonaktifkan sampai endpoint tersedia.`}
+            className={`${styles.btn} ${styles.btnOutline}`}
+          >
+            ↓ Ekspor CSV
+          </GuardedActionButton>
+          <GuardedActionButton
+            action="create"
+            allowed={false}
+            deniedReason={`Penambahan ${title.toLowerCase()} harus menunggu endpoint backend resmi.`}
+            className={`${styles.btn} ${styles.btnPrimary}`}
+          >
+            + Tambah
+          </GuardedActionButton>
+        </div>
       </div>
 
-      {/* ── Tabel ── */}
       <div className={styles.tableWrapper}>
         <table className={styles.table}>
           <thead>
@@ -513,287 +360,116 @@ function TabGenerikSimulasi({ dataAwal, pesanKosong, labelTambah }: PropsTabGene
               <th>Nama</th>
               <th>Kode</th>
               <th style={{ textAlign: 'center' }}>Status</th>
-              <th>Dibuat</th>
+              <th>Catatan</th>
               <th style={{ textAlign: 'center', width: 170 }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
-            {itemsTerfilter.length === 0 ? (
-              <tr>
-                <td colSpan={5}>
-                  <KosongState pesan={cari ? `Tidak ada hasil untuk "${cari}"` : pesanKosong} />
-                </td>
-              </tr>
-            ) : itemsTerfilter.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  {editingId === item.id ? (
-                    <input
-                      className={styles.searchInput}
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSimpanEdit(item.id)}
-                      autoFocus
-                    />
-                  ) : (
-                    <span style={{ fontWeight: 500 }}>{item.name}</span>
-                  )}
-                </td>
-                <td>
-                  {editingId === item.id ? (
-                    <input
-                      className={styles.searchInput}
-                      style={{ width: 90 }}
-                      value={editingCode}
-                      onChange={(e) => setEditingCode(e.target.value)}
-                    />
-                  ) : (
-                    <code style={{
-                      fontSize: 11, background: 'var(--color-surface-2)',
-                      padding: '2px 6px', borderRadius: 4,
-                    }}>
-                      {item.code}
-                    </code>
-                  )}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <span style={{
-                    display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                    fontSize: 11, fontWeight: 600,
-                    background: item.isActive ? 'var(--color-success-bg)' : '#f5f5f5',
-                    color:      item.isActive ? 'var(--color-success)'    : '#9e9e9e',
-                  }}>
-                    {item.isActive ? 'Aktif' : 'Nonaktif'}
-                  </span>
-                </td>
-                <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-                  {fmtDate(item.createdAt)}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  {editingId === item.id ? (
-                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnPrimary}`}
-                        onClick={() => handleSimpanEdit(item.id)}
-                      >
-                        Simpan
-                      </button>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}
-                        onClick={() => setEditingId(null)}
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                        disabled
-                        title="CRUD master data belum tersedia di backend Admin"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                        disabled
-                        title="CRUD master data belum tersedia di backend Admin"
-                      >
-                        {item.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                      </button>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`}
-                        disabled
-                        title="CRUD master data belum tersedia di backend Admin"
-                      >
-                        Hapus
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
+            <tr>
+              <td colSpan={5}>
+                <EmptyState
+                  message={`Endpoint ${title.toLowerCase()} belum tersedia`}
+                  description="Admin tidak lagi menampilkan data buatan. Hubungkan endpoint backend agar data dapat muncul di sini."
+                />
+              </td>
+            </tr>
+            <tr>
+              <td style={{ fontWeight: 500 }}>Sumber data backend</td>
+              <td><code style={{ fontSize: 11 }}>—</code></td>
+              <td style={{ textAlign: 'center' }}><StatusBadge /></td>
+              <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>Belum ada respons backend yang aman untuk ditampilkan.</td>
+              <td style={{ textAlign: 'center' }}>
+                <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <GuardedActionButton
+                    action="edit"
+                    allowed={false}
+                    deniedReason={`Perubahan ${title.toLowerCase()} belum tersedia.`}
+                    className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
+                  >
+                    Edit
+                  </GuardedActionButton>
+                  <GuardedActionButton
+                    action="delete"
+                    allowed={false}
+                    deniedReason={`Penghapusan ${title.toLowerCase()} belum tersedia.`}
+                    className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`}
+                  >
+                    Hapus
+                  </GuardedActionButton>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
-
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab: Konfigurasi Sistem
-// ─────────────────────────────────────────────────────────────────────────────
-
 function TabKonfigurasi() {
-  const { showToast } = useToast();
-  const [configs]                       = useState<SystemConfig[]>(INIT_CONFIGS);
-  const [editingKey, setEditingKey]     = useState<string | null>(null);
-  const [editingValue, setEditingValue] = useState('');
-
-  const getJenisTipe = (type: SystemConfig['type']) => {
-    const peta = { boolean: 'Boolean', number: 'Angka', string: 'Teks' };
-    return peta[type] ?? type;
-  };
-
-  const getBadgeTipe = (type: SystemConfig['type']): React.CSSProperties => {
-    if (type === 'boolean') return { background: 'var(--color-accent-light)', color: 'var(--color-accent)' };
-    if (type === 'number')  return { background: 'var(--color-info-bg)', color: 'var(--color-primary)' };
-    return { background: '#f5f5f5', color: '#616161' };
-  };
-
-  const validateNilai = (cfg: SystemConfig, nilai: string): string | null => {
-    if (cfg.type === 'boolean' && !['true', 'false'].includes(nilai.toLowerCase())) {
-      return 'Nilai boolean harus "true" atau "false"';
-    }
-    if (cfg.type === 'number' && isNaN(Number(nilai))) {
-      return 'Nilai angka tidak valid';
-    }
-    return null;
-  };
-
-  const handleSimpan = (key: string) => {
-    const cfg = configs.find((c) => c.key === key);
-    if (!cfg) return;
-    const errValidasi = validateNilai(cfg, editingValue);
-    if (errValidasi) { showToast(errValidasi, 'error'); return; }
-    setEditingKey(null);
-    showToast(`Perubahan konfigurasi "${key}" belum didukung backend Admin`, 'info');
-  };
-
   return (
     <div>
-      {/* Banner peringatan */}
-      <div className={styles.warningBanner}>
-        <span>⚠</span>
+      <ActionGuardNotice
+        action="view"
+        reason="Konfigurasi operasional production dikelola melalui environment variables dan service backend, sehingga nilainya tidak ditampilkan atau diubah dari Admin."
+      />
+
+      <div className={styles.infoBanner}>
+        <span>🔒</span>
         <span>
-          Konfigurasi sistem belum memiliki endpoint Admin yang persisten. Untuk production, ubah melalui environment variables atau config server.
+          Konfigurasi sensitif seperti secret, timeout, ukuran upload, dan mode maintenance harus dikelola di server. Admin hanya menampilkan status ketersediaan endpoint, bukan nilai konfigurasi internal.
         </span>
       </div>
 
-      {/* Banner praktik terbaik */}
-      <div style={{
-        padding: '10px 14px',
-        background: 'var(--color-info-bg)',
-        borderRadius: 8,
-        border: '1px solid var(--color-primary)',
-        marginBottom: 16,
-        fontSize: 12,
-        color: 'var(--color-primary)',
-      }}>
-        💡 <strong>Best practice:</strong> Konfigurasi sensitif (secret keys, database URLs, dll.)
-        tidak boleh ditampilkan di UI admin. Gunakan environment variables di server.
+      <div className={styles.statGrid} style={{ marginBottom: 16 }}>
+        <StatCard label="Nilai Ditampilkan" value={0} />
+        <StatCard label="Perubahan UI" value="Dinonaktifkan" color="var(--color-warning)" />
+        <StatCard label="Sumber Konfigurasi" value="Server" color="var(--color-primary)" />
       </div>
 
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Key Konfigurasi</th>
-              <th>Nilai</th>
-              <th style={{ textAlign: 'center' }}>Tipe</th>
-              <th>Deskripsi</th>
-              <th style={{ fontSize: 11, color: 'var(--color-muted)' }}>Diperbarui</th>
-              <th style={{ textAlign: 'center', width: 100 }}>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {configs.map((cfg) => (
-              <tr key={cfg.key}>
-                <td>
-                  <code style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)' }}>
-                    {cfg.key}
-                  </code>
-                </td>
-                <td>
-                  {editingKey === cfg.key ? (
-                    <input
-                      className={styles.searchInput}
-                      style={{ width: 140 }}
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSimpan(cfg.key)}
-                      autoFocus
-                    />
-                  ) : (
-                    <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600 }}>
-                      {cfg.value}
-                    </span>
-                  )}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <span style={{
-                    display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                    fontSize: 11, fontWeight: 600,
-                    ...getBadgeTipe(cfg.type),
-                  }}>
-                    {getJenisTipe(cfg.type)}
-                  </span>
-                </td>
-                <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-                  {cfg.description}
-                </td>
-                <td style={{ fontSize: 11, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
-                  {fmtDate(cfg.updatedAt)}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  {editingKey === cfg.key ? (
-                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnPrimary}`}
-                        onClick={() => handleSimpan(cfg.key)}
-                      >
-                        Simpan
-                      </button>
-                      <button
-                        className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}
-                        onClick={() => setEditingKey(null)}
-                      >
-                        Batal
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      className={`${styles.btn} ${styles.btnSm} ${styles.btnGhost}`}
-                      disabled
-                      title="Perubahan konfigurasi belum didukung backend Admin"
-                    >
-                      Edit
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className={styles.cardElevated} style={{ marginBottom: 0 }}>
+        <EmptyState
+          message="Endpoint konfigurasi Admin belum tersedia"
+          description="Tidak ada nilai konfigurasi buatan atau lokal yang ditampilkan di production."
+        />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <GuardedActionButton
+            action="edit"
+            allowed={false}
+            deniedReason="Perubahan konfigurasi harus dilakukan melalui deploy server atau endpoint backend yang aman."
+            className={`${styles.btn} ${styles.btnSecondary}`}
+          >
+            Edit Konfigurasi
+          </GuardedActionButton>
+          <GuardedActionButton
+            action="export"
+            allowed={false}
+            deniedReason="Tidak ada konfigurasi yang aman untuk diekspor dari UI Admin."
+            className={`${styles.btn} ${styles.btnOutline}`}
+          >
+            Ekspor Konfigurasi
+          </GuardedActionButton>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipe dan daftar tab
-// ─────────────────────────────────────────────────────────────────────────────
-
 type TabId = 'spesialisasi' | 'layanan' | 'fasilitas' | 'konfigurasi';
 
-interface DefinisiTab {
+interface TabDefinition {
   id: TabId;
   label: string;
   icon: string;
   badge?: string;
 }
 
-const TABS: DefinisiTab[] = [
-  { id: 'spesialisasi', label: 'Spesialisasi Dokter', icon: '⚕',  badge: 'Data Real' },
-  { id: 'layanan',      label: 'Tipe Layanan',        icon: '🩺', badge: 'Read-only' },
-  { id: 'fasilitas',    label: 'Fasilitas',           icon: '🏗', badge: 'Read-only' },
-  { id: 'konfigurasi',  label: 'Konfigurasi Sistem',  icon: '⚙️', badge: 'Read-only' },
+const TABS: TabDefinition[] = [
+  { id: 'spesialisasi', label: 'Spesialisasi Dokter', icon: '⚕', badge: 'Data Backend' },
+  { id: 'layanan', label: 'Tipe Layanan', icon: '🩺', badge: 'Endpoint Belum Tersedia' },
+  { id: 'fasilitas', label: 'Fasilitas', icon: '🏗', badge: 'Endpoint Belum Tersedia' },
+  { id: 'konfigurasi', label: 'Konfigurasi Sistem', icon: '⚙️', badge: 'Dikelola di Server' },
 ];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Komponen Utama MasterDataPage
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function MasterDataPage() {
   const [activeTab, setActiveTab] = useState<TabId>('spesialisasi');
@@ -802,12 +478,11 @@ export default function MasterDataPage() {
     <div className={styles.page}>
       <PageHeader
         title="Master Data"
-        subtitle="Kelola data referensi dan pengaturan sistem"
+        subtitle="Kelola data referensi dan pengaturan sistem dari sumber backend yang tersedia"
         breadcrumbs={[{ label: 'Beranda', to: '/' }, { label: 'Master Data' }]}
       />
 
       <div className={styles.card}>
-        {/* ── Navigasi Tab ── */}
         <div style={{
           display: 'flex',
           gap: 4,
@@ -844,8 +519,8 @@ export default function MasterDataPage() {
                   fontWeight: 600,
                   padding: '1px 6px',
                   borderRadius: 999,
-                  background: tab.badge === 'Data Real' ? 'var(--color-success-bg)' : 'var(--color-warning-bg)',
-                  color: tab.badge === 'Data Real' ? 'var(--color-success)' : 'var(--color-warning)',
+                  background: tab.badge === 'Data Backend' ? 'var(--color-success-bg)' : 'var(--color-warning-bg)',
+                  color: tab.badge === 'Data Backend' ? 'var(--color-success)' : 'var(--color-warning)',
                   marginLeft: 2,
                 }}>
                   {tab.badge}
@@ -855,25 +530,19 @@ export default function MasterDataPage() {
           ))}
         </div>
 
-        {/* ── Konten Tab ── */}
         {activeTab === 'spesialisasi' && <TabSpesialisasi />}
-
         {activeTab === 'layanan' && (
-          <TabGenerikSimulasi
-            dataAwal={MOCK_SERVICE_TYPES}
-            pesanKosong="Belum ada tipe layanan"
-            labelTambah="Tipe Layanan"
+          <TabEndpointUnavailable
+            title="tipe layanan"
+            description="Tidak ada endpoint backend Admin untuk tipe layanan, sehingga tabel sengaja dibiarkan kosong dan read-only."
           />
         )}
-
         {activeTab === 'fasilitas' && (
-          <TabGenerikSimulasi
-            dataAwal={MOCK_FACILITIES}
-            pesanKosong="Belum ada fasilitas"
-            labelTambah="Fasilitas"
+          <TabEndpointUnavailable
+            title="fasilitas"
+            description="Tidak ada endpoint backend Admin untuk fasilitas rumah sakit, sehingga Admin tidak lagi menampilkan baris buatan."
           />
         )}
-
         {activeTab === 'konfigurasi' && <TabKonfigurasi />}
       </div>
     </div>

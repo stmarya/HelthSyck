@@ -3,8 +3,33 @@ name: HealthSync Admin Validation
 on:
   push:
     branches: [main]
+    paths:
+      - '.github/workflows/healthsync-admin.yml'
+      - 'healthsync/package-lock.json'
+      - 'healthsync/package.json'
+      - 'healthsync/packages/shared/**'
+      - 'healthsync/apps/admin/**'
+      - 'healthsync/services/auth-service/**'
+      - 'healthsync/services/consultation-service/**'
+      - 'healthsync/services/hospital-service/**'
+      - 'healthsync/services/patient-service/**'
+      - 'healthsync/services/ambulance-service/**'
+      - 'healthsync/services/referral-service/**'
   pull_request:
     branches: [main]
+    paths:
+      - '.github/workflows/healthsync-admin.yml'
+      - 'healthsync/package-lock.json'
+      - 'healthsync/package.json'
+      - 'healthsync/packages/shared/**'
+      - 'healthsync/apps/admin/**'
+      - 'healthsync/services/auth-service/**'
+      - 'healthsync/services/consultation-service/**'
+      - 'healthsync/services/hospital-service/**'
+      - 'healthsync/services/patient-service/**'
+      - 'healthsync/services/ambulance-service/**'
+      - 'healthsync/services/referral-service/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,19 +64,16 @@ jobs:
         run: npm ci
 
       - name: Build shared package
-        run: npm run build --workspace=packages/shared
+        run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
 
       - name: Admin typecheck
-        working-directory: healthsync/apps/admin
-        run: npm run typecheck
+        run: npm exec --workspace=apps/admin -- tsc --noEmit
 
       - name: Admin lint
-        working-directory: healthsync/apps/admin
-        run: npm run lint
+        run: npm exec --workspace=apps/admin -- eslint src --ext ts,tsx --max-warnings 0
 
       - name: Admin build
-        working-directory: healthsync/apps/admin
-        run: npm run build
+        run: npm exec --workspace=apps/admin -- vite build
 
   services:
     runs-on: ubuntu-latest
@@ -83,10 +105,10 @@ jobs:
         run: npm ci
 
       - name: Build shared package
-        run: npm run build --workspace=packages/shared
+        run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
 
       - name: Service typecheck
         run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
 
       - name: Service tests
-        run: npm test --workspace=${{ matrix.workspace }}
+        run: npm exec --workspace=${{ matrix.workspace }} -- jest --passWithNoTests --forceExit

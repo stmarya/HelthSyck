@@ -165,6 +165,7 @@ export default function ActivityLogPage() {
 
   const permissionDenied = error?.toLowerCase().includes('admin role required') || error?.toLowerCase().includes('forbidden');
   const unavailable = error?.toLowerCase().includes('not found') || error?.toLowerCase().includes('belum tersedia');
+  const unsupportedFiltersMessage = 'Filter aktor, resource, dan rentang tanggal belum didukung endpoint audit saat ini.';
 
   return (
     <div className={styles.page}>
@@ -225,6 +226,13 @@ export default function ActivityLogPage() {
       </div>
 
       <div className={styles.card}>
+        <div className={styles.warningBanner} style={{ marginBottom: 14 }}>
+          <span>ℹ️</span>
+          <span>
+            Filter hasil dan aksi memakai parameter backend yang tersedia saat ini. {unsupportedFiltersMessage}
+          </span>
+        </div>
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <input
             type="search"
@@ -251,6 +259,36 @@ export default function ActivityLogPage() {
             <option value="">Semua Aksi</option>
             {uniqueActions.map((action) => <option key={action} value={action}>{action}</option>)}
           </select>
+          <input
+            type="text"
+            placeholder="Filter aktor (belum tersedia)"
+            disabled
+            aria-label="Filter aktor belum tersedia"
+            title={unsupportedFiltersMessage}
+            style={{ flex: '1 1 180px', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 14 }}
+          />
+          <input
+            type="text"
+            placeholder="Filter resource (belum tersedia)"
+            disabled
+            aria-label="Filter resource belum tersedia"
+            title={unsupportedFiltersMessage}
+            style={{ flex: '1 1 180px', padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 14 }}
+          />
+          <input
+            type="date"
+            disabled
+            aria-label="Tanggal mulai belum tersedia"
+            title={unsupportedFiltersMessage}
+            style={{ padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 14 }}
+          />
+          <input
+            type="date"
+            disabled
+            aria-label="Tanggal akhir belum tersedia"
+            title={unsupportedFiltersMessage}
+            style={{ padding: '8px 12px', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: 14 }}
+          />
         </div>
 
         {error && (

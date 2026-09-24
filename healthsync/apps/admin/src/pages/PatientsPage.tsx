@@ -52,6 +52,42 @@ function calcAge(dob: string | null | undefined): number | null {
   return Math.floor((Date.now() - parsed) / (1000 * 60 * 60 * 24 * 365.25));
 }
 
+function redactName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'Pasien';
+  if (parts.length === 1) return `${parts[0].slice(0, 1).toUpperCase()}***`;
+  return parts.map((part, index) => (index === 0 ? `${part.slice(0, 1).toUpperCase()}***` : `${part.slice(0, 1).toUpperCase()}.`)).join(' ');
+}
+
+function redactPhone(phone: string | null): string {
+  if (!phone) return '—';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 4) return '***';
+  return `${digits.slice(0, 2)}****${digits.slice(-2)}`;
+}
+
+function exportPatientsCsv(patients: Patient[]) {
+  const rows = [
+    ['Nama (Redacted)', 'Jenis Kelamin', 'Usia', 'Gol. Darah', 'Telepon (Redacted)', 'Terdaftar'],
+    ...patients.map((patient) => [
+      redactName(patient.name),
+      GENDER_LABEL[patient.gender] ?? patient.gender,
+      calcAge(patient.date_of_birth) != null ? String(calcAge(patient.date_of_birth)) : '—',
+      patient.blood_type,
+      redactPhone(patient.phone),
+      formatDate(patient.created_at),
+    ]),
+  ];
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `pasien-terlihat-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 const GENDER_LABEL: Record<string, string> = { MALE: 'Laki-laki', FEMALE: 'Perempuan' };
 
 const BLOOD_COLOR: Record<string, string> = {
@@ -83,6 +119,11 @@ export default function PatientsPage() {
 
   const [selected, setSelected]   = useState<PatientDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+
+  const visiblePatients = patients;
+  const missingPhoneCount = visiblePatients.filter((patient) => !patient.phone?.trim()).length;
+  const unknownBloodTypeCount = visiblePatients.filter((patient) => patient.blood_type === 'UNKNOWN').length;
+  const incompleteBirthDateCount = visiblePatients.filter((patient) => calcAge(patient.date_of_birth) == null).length;
 
   // ── Fetch list pasien ──
   // Response shape dari /v1/patients:
@@ -147,9 +188,48 @@ export default function PatientsPage() {
           </div>
           <button className={`${styles.btn} ${styles.btnOutline}`}
             onClick={() => { setSearch(''); setPage(1); }}>Reset</button>
+          <button
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            onClick={() => {
+              exportPatientsCsv(visiblePatients);
+              showToast(`${visiblePatients.length} pasien pada tampilan saat ini berhasil diekspor dengan redaksi aman.`, 'success');
+            }}
+            disabled={loading || visiblePatients.length === 0}
+          >
+            ↓ Ekspor CSV Aman
+          </button>
           <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={fetchData} style={{ marginLeft: 'auto' }}>
             ↻ Muat Ulang
           </button>
+        </div>
+      </div>
+
+      <div className={styles.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div>
+            <div className={styles.cardTitle} style={{ marginBottom: 4 }}>Ringkasan Kualitas Data</div>
+            <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+              Dihitung dari data pasien yang sedang terlihat sesuai filter dan halaman aktif.
+            </div>
+          </div>
+        </div>
+        <div className={styles.statGrid} style={{ marginBottom: 0 }}>
+          <div className={styles.statCard}>
+            <div className={styles.statValue}>{visiblePatients.length}</div>
+            <div className={styles.statLabel}>Pasien pada Tampilan</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statValue} style={{ color: missingPhoneCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>{missingPhoneCount}</div>
+            <div className={styles.statLabel}>Tanpa Nomor Telepon</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statValue} style={{ color: unknownBloodTypeCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>{unknownBloodTypeCount}</div>
+            <div className={styles.statLabel}>Golongan Darah Unknown</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statValue} style={{ color: incompleteBirthDateCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>{incompleteBirthDateCount}</div>
+            <div className={styles.statLabel}>Tanggal Lahir Tidak Lengkap</div>
+          </div>
         </div>
       </div>
 
@@ -190,7 +270,17 @@ export default function PatientsPage() {
               </thead>
               <tbody>
                 {patients.map((p) => (
-                  <tr key={p.id} onClick={() => void handleSelectPatient(p)}>
+                  <tr
+                    key={p.id}
+                    onClick={() => void handleSelectPatient(p)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void handleSelectPatient(p);
+                      }
+                    }}
+                    tabIndex={0}
+                  >
                     <td style={{ fontWeight: 600 }}>{p.name}</td>
                     <td>{GENDER_LABEL[p.gender] ?? p.gender}</td>
                     <td>{formatDate(p.date_of_birth)}</td>
