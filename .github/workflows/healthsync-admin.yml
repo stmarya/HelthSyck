@@ -70,7 +70,7 @@ jobs:
       - run: npm ci
       - run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
       - run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
-      - run: npm exec --workspace=${{ matrix.workspace} -- jest --runInBand --passWithNoTests
+      - run: npm exec --workspace=${{ matrix.workspace }} -- jest --runInBand --passWithNoTests
 
   database:
     runs-on: ubuntu-latest
