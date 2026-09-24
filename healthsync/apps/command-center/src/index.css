@@ -122,10 +122,10 @@ input, select, textarea {
 /* ── Deteksi preferensi sistem — default dark mode jika sistem dark ── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-bg:             #0f1117;
-    --color-surface:        #161b27;
-    --color-surface-2:      #1c2333;
-    --color-surface-hover:  #212940;
+    --color-bg:             #19151f;
+    --color-surface:        #24202e;
+    --color-surface-2:      #2b2636;
+    --color-surface-hover:  #342e40;
     --color-surface-glass:  rgba(22, 27, 39, 0.95);
     --color-border:         rgba(255,255,255,0.08);
     --color-border-strong:  rgba(255,255,255,0.14);
@@ -147,18 +147,29 @@ input, select, textarea {
 
 /* ── Dark Mode (manual toggle via data-theme) ── */
 [data-theme="dark"] {
-  --color-bg:             #0f1117;
-  --color-surface:        #161b27;
-  --color-surface-2:      #1c2333;
-  --color-surface-hover:  #212940;
-  --color-surface-glass:  rgba(22, 27, 39, 0.95);
+  --color-primary:        #e89477;
+  --color-primary-dark:   #cf745d;
+  --color-primary-light:  rgba(232, 148, 119, 0.16);
+  --color-primary-glow:   rgba(232, 148, 119, 0.16);
+  --color-accent:         #ad91b8;
+  --color-accent-dark:    #92759e;
+  --color-accent-light:   rgba(173, 145, 184, 0.16);
+  --color-bg:             #19151f;
+  --color-surface:        #24202e;
+  --color-surface-2:      #2b2636;
+  --color-surface-hover:  #342e40;
+  --color-surface-glass:  rgba(36, 32, 46, 0.96);
   --color-border:         rgba(255,255,255,0.08);
-  --color-border-strong:  rgba(255,255,255,0.14);
-  --color-border-focus:   #60a5fa;
-  --color-text:           #F1F5F9;
-  --color-text-secondary: #CBD5E1;
-  --color-muted:          #94A3B8;
-  --color-disabled:       #64748B;
+  --color-border-strong:  rgba(255,255,255,0.16);
+  --color-border-focus:   #e89477;
+  --color-text:           #fff7f3;
+  --color-text-secondary: #eadde2;
+  --color-muted:          #b2a4b1;
+  --color-disabled:       #7c7180;
+  --color-success:        #71c99e;
+  --color-warning:        #e5c887;
+  --color-danger:         #f07c70;
+  --color-info:           #82b6d8;
 
   /* Surface override untuk card, table, form */
   --color-success-bg:     rgba(16,163,74,0.12);
@@ -384,4 +395,73 @@ a:hover {
 .modalBoxEmergency {
   border: 2px solid var(--color-danger);
   animation: emergencyAlert 1.5s ease-in-out infinite, fadeInUp 0.2s ease both;
+}
+
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+}
+
+/* Command Center shell: hierarchy and responsive navigation */
+.cc-shell {
+  background:
+    radial-gradient(circle at 85% -20%, rgba(173, 145, 184, 0.12), transparent 30rem),
+    var(--color-bg);
+}
+
+@media (max-width: 1100px) {
+  .cc-nav-bottom {
+    overflow-x: auto;
+    justify-content: flex-start !important;
+    scrollbar-width: thin;
+  }
+  .cc-nav-bottom > div {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .cc-nav-top {
+    height: auto !important;
+    min-height: 52px;
+    padding: 10px 0;
+    flex-wrap: wrap;
+  }
+  .cc-nav-top > button:first-of-type {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none !important;
+  }
+  .cc-nav-top > div:last-child {
+    gap: 6px !important;
+  }
+  .cc-nav-top > div:last-child > span {
+    display: none;
+  }
+  .cc-nav-bottom {
+    min-height: 42px !important;
+  }
+  .cc-nav-bottom > div {
+    gap: 2px !important;
+  }
+  .cc-nav-bottom a {
+    padding: 8px 9px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

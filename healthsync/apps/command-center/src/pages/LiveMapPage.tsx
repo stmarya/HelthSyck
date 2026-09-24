@@ -5,8 +5,9 @@ import { useState, useEffect, useRef, useCallback, type ReactNode, type ReactEle
 import { simulationEngine } from '../simulation/SimulationEngine';
 import type { SimEvent } from '../simulation/SimulationEngine';
 import type { Pasien, Ambulans, DriverApotek, RumahSakit, Apotek } from '../simulation/SimulationData';
-import { SEED_RUMAH_SAKIT, SEED_APOTEK, SEED_DRIVER_APOTEK } from '../simulation/SimulationData';
+import { SEED_APOTEK } from '../simulation/SimulationData';
 import { useToast } from '../context/ToastContext';
+import { RealtimeClient } from '../realtime/client';
 
 // ─── Konstanta Peta Jakarta ────────────────────────────────────────────────────
 
@@ -366,11 +367,19 @@ export default function LiveMapPage() {
     return {
       pasien:     s.pasien.map((p) => ({ ...p, koordinat: { ...p.koordinat } })),
       ambulans:   s.ambulans.map((a) => ({ ...a, koordinat: { ...a.koordinat } })),
-      driver:     SEED_DRIVER_APOTEK.map((d) => ({ ...d, koordinat: { ...d.koordinat } })),
-      rumahSakit: SEED_RUMAH_SAKIT.map((rs) => ({ ...rs, koordinat: { ...rs.koordinat } })),
+      driver:     s.driver.map((d) => ({ ...d, koordinat: { ...d.koordinat } })),
+      rumahSakit: s.rumahSakit.map((rs) => ({ ...rs, koordinat: { ...rs.koordinat } })),
       apotek:     SEED_APOTEK.map((ap) => ({ ...ap })),
     };
   });
+
+  const [lastSeenAt, setLastSeenAt] = useState<Record<string, number>>({});
+
+  const [, setClock] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // ── Filter toggle ──────────────────────────────────────────────────────────
 
@@ -446,6 +455,25 @@ export default function LiveMapPage() {
       );
     });
 
+    const realtime = new RealtimeClient();
+    const token = localStorage.getItem('hs_access_token');
+    const unsubscribeRealtime = token ? realtime.on('location.updated', (event) => {
+      const entityId = String(event.payload.entityId ?? '');
+      const entityType = String(event.payload.entityType ?? '').toLowerCase();
+      const lat = Number(event.payload.latitude);
+      const lng = Number(event.payload.longitude);
+      if (!entityId || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const koordinat = { lat, lng };
+      setLastSeenAt((previous) => ({ ...previous, [entityId]: Date.parse(String(event.payload.recordedAt ?? '')) || Date.now() }));
+      setEntities((prev) => {
+        if (entityType === 'ambulance' || entityType === 'ambulans') return { ...prev, ambulans: prev.ambulans.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
+        if (entityType === 'driver') return { ...prev, driver: prev.driver.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
+        if (entityType === 'patient' || entityType === 'pasien') return { ...prev, pasien: prev.pasien.map((item) => item.id === entityId ? { ...item, koordinat } : item) };
+        return prev;
+      });
+    }) : undefined;
+    if (token) realtime.connect(token, 'command-center');
+
     const unsubCapacity = simulationEngine.on('HOSPITAL_CAPACITY_UPDATE', (ev: SimEvent) => {
       if (ev.type !== 'HOSPITAL_CAPACITY_UPDATE') return;
       // Perbarui data rumah sakit di state lokal
@@ -472,6 +500,8 @@ export default function LiveMapPage() {
       unsubLocation();
       unsubEmergency();
       unsubCapacity();
+      unsubscribeRealtime?.();
+      realtime.close();
     };
   }, [toast]);
 
@@ -576,6 +606,13 @@ export default function LiveMapPage() {
     handleMarkerClick(id);
   }, [handleMarkerClick]);
 
+  function freshnessLabel(id: string): string {
+    const seen = lastSeenAt[id];
+    if (!seen) return 'Seed / menunggu GPS';
+    const ageSeconds = Math.max(0, Math.floor((Date.now() - seen) / 1000));
+    return ageSeconds <= 15 ? 'GPS live' : `GPS stale ${ageSeconds}s`;
+  }
+
   // ── Hitung total entitas ───────────────────────────────────────────────────
 
   const totalEntitas =
@@ -593,11 +630,11 @@ export default function LiveMapPage() {
       kategori: 'pasien', isUrgent: p.status === 'Darurat' || p.status === 'Kritis',
     })) : []),
     ...(filter.ambulans ? entities.ambulans.map((a): PanelItem => ({
-      id: a.id, label: a.nomorUnit, sub: `${a.status}${a.eta !== undefined ? ` · ETA ${a.eta} mnt` : ''}`,
+      id: a.id, label: a.nomorUnit, sub: `${a.status}${a.eta !== undefined ? ` · ETA ${a.eta} mnt` : ''} · ${freshnessLabel(a.id)}`,
       kategori: 'ambulans', isUrgent: a.status === 'Dalam Perjalanan',
     })) : []),
     ...(filter.driver ? entities.driver.map((d): PanelItem => ({
-      id: d.id, label: d.nama, sub: d.status,
+      id: d.id, label: d.nama, sub: `${d.status} · ${freshnessLabel(d.id)}`,
       kategori: 'driver', isUrgent: d.status === 'Mengantarkan',
     })) : []),
     ...(filter.rumahSakit ? entities.rumahSakit.map((rs): PanelItem => ({
@@ -633,7 +670,7 @@ export default function LiveMapPage() {
             <span style={{ fontSize: 10, fontWeight: 700, color: '#16A34A', letterSpacing: 1 }}>LIVE</span>
           </div>
           <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-            {totalEntitas} entitas ditampilkan
+            {totalEntitas} entitas ditampilkan · GPS stale jika >15 detik
           </span>
         </div>
 

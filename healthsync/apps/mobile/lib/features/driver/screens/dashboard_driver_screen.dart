@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/realtime_location_tracker.dart';
 import '../../../core/providers/driver_provider.dart';
 import '../../../core/models/driver_order.dart';
 import '../../../shared/widgets/health_card.dart';
@@ -21,13 +23,28 @@ class DashboardDriverScreen extends ConsumerStatefulWidget {
 
 class _DashboardDriverScreenState
     extends ConsumerState<DashboardDriverScreen> {
+  RealtimeLocationTracker? _locationTracker;
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    Future.microtask(() async {
       final userId = ref.read(authProvider).user?.id;
       ref.read(driverOrderProvider.notifier).fetchOrders(driverUserId: userId);
+      final auth = ref.read(authProvider);
+      final token = auth.accessToken;
+      final entityId = auth.user?.id;
+      if (token != null && entityId != null && entityId.isNotEmpty) {
+        _locationTracker = RealtimeLocationTracker(accessToken: token, entityId: entityId, entityType: 'DRIVER');
+        await _locationTracker!.start();
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    final tracker = _locationTracker;
+    if (tracker != null) unawaited(tracker.dispose());
+    super.dispose();
   }
 
   @override
@@ -443,3 +460,4 @@ class _InfoChip extends StatelessWidget {
     );
   }
 }
+

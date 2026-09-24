@@ -458,6 +458,29 @@ services:
       retries: 3
       start_period: 30s
 
+  realtime-service:
+    build:
+      context: ../..
+      dockerfile: services/realtime-service/Dockerfile
+    container_name: hs-realtime
+    <<: *service-defaults
+    environment:
+      PORT: ${REALTIME_PORT:-3011}
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: ${REDIS_URL}
+      NODE_ENV: ${NODE_ENV}
+    ports:
+      - "${REALTIME_PORT:-3011}:3011"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3011/ready || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   integration-service:
     build:
       context: ../..
@@ -609,10 +632,16 @@ services:
       VITE_NOTIFICATION_TARGET: http://notification-service:3009
       VITE_IOT_TARGET:          http://iot-ingestion:4001
       VITE_ALERT_TARGET:        http://alert-service:4002
+      VITE_REALTIME_TARGET:      http://realtime-service:3011
+      VITE_TURN_URL:              ${TURN_URL:-}
+      VITE_TURN_USERNAME:         ${TURN_USERNAME:-}
+      VITE_TURN_CREDENTIAL:       ${TURN_CREDENTIAL:-}
     ports:
       - "5173:5173"
     depends_on:
       auth-service:
+        condition: service_healthy
+      realtime-service:
         condition: service_healthy
 
   admin:
@@ -645,3 +674,4 @@ services:
     depends_on:
       auth-service:
         condition: service_healthy
+

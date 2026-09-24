@@ -5,14 +5,23 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'ax
 // ─────────────────────────────────────────────────────────────────────────────
 
 let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
+type RefreshSubscriber = {
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+};
+let refreshSubscribers: RefreshSubscriber[] = [];
 
-function subscribeTokenRefresh(cb: (token: string) => void) {
-  refreshSubscribers.push(cb);
+function subscribeTokenRefresh(resolve: (token: string) => void, reject: (error: unknown) => void) {
+  refreshSubscribers.push({ resolve, reject });
 }
 
 function onRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers.forEach(({ resolve }) => resolve(token));
+  refreshSubscribers = [];
+}
+
+function onRefreshFailed(error: unknown) {
+  refreshSubscribers.forEach(({ reject }) => reject(error));
   refreshSubscribers = [];
 }
 
@@ -28,6 +37,14 @@ function onRefreshed(token: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BASE = '';
+
+// Refresh memakai client mentah agar request refresh tidak masuk interceptor
+// 401 yang sama dan membuat deadlock.
+const refreshClient = axios.create({
+  baseURL: BASE,
+  timeout: 15_000,
+  headers: { 'Content-Type': 'application/json' },
+});
 
 export const authClient = axios.create({
   baseURL: BASE,
@@ -100,15 +117,17 @@ function attachInterceptors(client: AxiosInstance) {
   client.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
+      if (!error.config) return Promise.reject(error);
       const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+      const isRefreshRequest = originalRequest.url?.includes('/v1/auth/refresh') === true;
 
-      if (error.response?.status === 401 && !originalRequest._retry) {
+      if (error.response?.status === 401 && !originalRequest._retry && !isRefreshRequest) {
         if (isRefreshing) {
-          return new Promise((resolve) => {
+          return new Promise((resolve, reject) => {
             subscribeTokenRefresh((token: string) => {
               originalRequest.headers['Authorization'] = `Bearer ${token}`;
               resolve(client(originalRequest));
-            });
+            }, reject);
           });
         }
 
@@ -117,19 +136,20 @@ function attachInterceptors(client: AxiosInstance) {
 
         try {
           const refreshToken = localStorage.getItem('hs_refresh_token');
-          const { data } = await authClient.post('/v1/auth/refresh', { refreshToken });
+          const { data } = await refreshClient.post('/v1/auth/refresh', { refreshToken });
           const newToken: string = data.data.accessToken;
           localStorage.setItem('hs_access_token', newToken);
           localStorage.setItem('hs_refresh_token', data.data.refreshToken);
           onRefreshed(newToken);
           originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
           return client(originalRequest);
-        } catch {
+        } catch (refreshError) {
+          onRefreshFailed(refreshError);
           localStorage.removeItem('hs_access_token');
           localStorage.removeItem('hs_refresh_token');
           localStorage.removeItem('hs_user');
-          window.location.href = '/login';
-          return Promise.reject(error);
+          window.location.assign('/login');
+          return Promise.reject(refreshError);
         } finally {
           isRefreshing = false;
         }
