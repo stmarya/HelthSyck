@@ -105,6 +105,14 @@ const VerifyOtpSchema = z.object({
   purpose: z.enum(['PHONE_VERIFY', 'PASSWORD_RESET']),
 });
 
+const AdminCreateUserSchema = RegisterSchema.extend({
+  role: z.enum(['PATIENT', 'DOCTOR', 'COMMAND_CENTER', 'PHARMACIST', 'AMBULANCE_DRIVER', 'ADMIN']),
+});
+
+const AdminUpdateUserSchema = z.object({
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION']),
+});
+
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
@@ -358,7 +366,14 @@ app.get('/health', async (_req: Request, res: Response) => {
     await getRedis().ping();
     redisOk = true;
   } catch { /* intentionally swallowed */ }
-  res.json({ status: 'ok', service: SERVICE_NAME, db: dbOk, redis: redisOk, timestamp: new Date().toISOString() });
+  const healthy = dbOk && redisOk;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    service: SERVICE_NAME,
+    db: dbOk,
+    redis: redisOk,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -750,10 +765,11 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
 
 app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const page  = Math.max(1, parseInt(String(req.query['page']  ?? '1'),  10));
+    const page  = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10));
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '20'), 10)));
     const q     = (req.query['q']    as string | undefined)?.trim() ?? '';
     const role  = (req.query['role'] as string | undefined)?.trim() ?? '';
+    const status = (req.query['status'] as string | undefined)?.trim() ?? '';
     const offset = (page - 1) * limit;
 
     const conditions: string[] = [];
@@ -767,6 +783,10 @@ app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response
     if (role) {
       params.push(role);
       conditions.push(`u.role = $${params.length}::user_role`);
+    }
+    if (status) {
+      params.push(status);
+      conditions.push(`u.status = $${params.length}::user_status`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -784,9 +804,11 @@ app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response
     const dataParams = [...params, limit, offset];
     const dataRes = await getPool().query<{
       id: string; email: string; phone: string | null; role: string;
-      status: string; created_at: string; name: string | null;
+      status: string; created_at: string; name: string | null; last_login_at: string | null;
+      email_verified: boolean; phone_verified: boolean;
     }>(
       `SELECT u.id, u.email, u.phone, u.role, u.status, u.created_at,
+              u.last_login_at, u.email_verified, u.phone_verified,
               COALESCE(
                 p.name,
                 INITCAP(REPLACE(SPLIT_PART(u.email, '@', 1), '.', ' '))
@@ -808,10 +830,268 @@ app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response
         status:    u.status,
         name:      u.name ?? u.email,
         createdAt: u.created_at,
+        lastLoginAt: u.last_login_at,
+        emailVerified: u.email_verified,
+        phoneVerified: u.phone_verified,
       })),
       meta: {
         page, limit, total,
         totalPages: Math.ceil(total / limit),
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /v1/auth/admin/users — create user from Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = AdminCreateUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
+      return;
+    }
+
+    const { email, password, role, name, phone } = parsed.data;
+    const adminUser = (req as AuthRequest).user;
+    const pool = getPool();
+
+    const existing = await pool.query<{ id: string }>(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      [email],
+    );
+    if (existing.rowCount && existing.rowCount > 0) {
+      res.status(409).json(buildProblem(409, 'Conflict', 'Email already registered', req.path));
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const userId = crypto.randomUUID();
+    const inserted = await pool.query<{
+      id: string; email: string; phone: string | null; role: string; status: string; created_at: string;
+    }>(
+      `INSERT INTO users (id, email, phone, password_hash, role, status)
+       VALUES ($1, $2, $3, $4, $5::user_role, 'ACTIVE')
+       RETURNING id, email, phone, role, status, created_at`,
+      [userId, email, phone ?? null, passwordHash, role],
+    );
+
+    const user = inserted.rows[0];
+    if (!user) throw new Error('Insert failed unexpectedly');
+
+    await writeAuditLog(adminUser.sub, 'ADMIN_USER_CREATE', req, {
+      targetUserId: user.id,
+      targetEmail: user.email,
+      targetRole: user.role,
+      displayName: name,
+    });
+
+    res.status(201).json({
+      data: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        name,
+        createdAt: user.created_at,
+      },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /v1/auth/admin/users/:id — update status safely from Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.patch('/v1/auth/admin/users/:id', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = AdminUpdateUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
+      return;
+    }
+
+    const { id } = req.params;
+    if (!id || !z.string().uuid().safeParse(id).success) {
+      res.status(422).json(buildProblem(422, 'Validation Error', 'User ID tidak valid', req.path));
+      return;
+    }
+
+    const adminUser = (req as AuthRequest).user;
+    if (adminUser.sub === id && parsed.data.status !== 'ACTIVE') {
+      res.status(409).json(buildProblem(409, 'Conflict', 'Admin tidak dapat menonaktifkan atau menangguhkan akun sendiri', req.path));
+      return;
+    }
+
+    const pool = getPool();
+    const currentResult = await pool.query<{
+      id: string; email: string; phone: string | null; role: string; status: string;
+      created_at: string; last_login_at: string | null; email_verified: boolean; phone_verified: boolean; name: string | null;
+    }>(
+      `SELECT u.id, u.email, u.phone, u.role, u.status, u.created_at, u.last_login_at, u.email_verified, u.phone_verified,
+              COALESCE(p.name, INITCAP(REPLACE(SPLIT_PART(u.email, '@', 1), '.', ' '))) AS name
+       FROM users u
+       LEFT JOIN patients p ON p.user_id = u.id
+       WHERE u.id = $1`,
+      [id],
+    );
+
+    const currentUser = currentResult.rows[0];
+    if (!currentUser) {
+      res.status(404).json(buildProblem(404, 'Not Found', 'User not found', req.path));
+      return;
+    }
+
+    const updated = await pool.query(
+      `UPDATE users
+       SET status = $1::user_status
+       WHERE id = $2
+       RETURNING id`,
+      [parsed.data.status, id],
+    );
+
+    const userId = updated.rows[0]?.id as string | undefined;
+    if (!userId) {
+      res.status(404).json(buildProblem(404, 'Not Found', 'User not found', req.path));
+      return;
+    }
+
+    const userResult = await pool.query<{
+      id: string; email: string; phone: string | null; role: string; status: string;
+      created_at: string; last_login_at: string | null; email_verified: boolean; phone_verified: boolean; name: string | null;
+    }>(
+      `SELECT u.id, u.email, u.phone, u.role, u.status, u.created_at, u.last_login_at, u.email_verified, u.phone_verified,
+              COALESCE(p.name, INITCAP(REPLACE(SPLIT_PART(u.email, '@', 1), '.', ' '))) AS name
+       FROM users u
+       LEFT JOIN patients p ON p.user_id = u.id
+       WHERE u.id = $1`,
+      [userId],
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      res.status(404).json(buildProblem(404, 'Not Found', 'User not found', req.path));
+      return;
+    }
+
+    await writeAuditLog(adminUser.sub, 'ADMIN_USER_STATUS_UPDATE', req, {
+      targetUserId: user.id,
+      targetEmail: user.email,
+      previousStatus: currentUser.status,
+      nextStatus: user.status,
+    });
+
+    res.json({
+      data: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        name: user.name ?? user.email,
+        createdAt: user.created_at,
+        lastLoginAt: user.last_login_at,
+        emailVerified: user.email_verified,
+        phoneVerified: user.phone_verified,
+      },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /v1/auth/admin/logs — paginated audit log feed for Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/v1/auth/admin/logs', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '25'), 10)));
+    const q = (req.query['q'] as string | undefined)?.trim() ?? '';
+    const action = (req.query['action'] as string | undefined)?.trim() ?? '';
+    const status = (req.query['status'] as string | undefined)?.trim() ?? '';
+    const offset = (page - 1) * limit;
+
+    const statusExpr = `CASE
+      WHEN l.event LIKE '%FAIL%' THEN 'FAILURE'
+      WHEN l.event LIKE '%WARN%' THEN 'WARNING'
+      ELSE 'SUCCESS'
+    END`;
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (q) {
+      params.push(`%${q}%`);
+      conditions.push(`(COALESCE(u.email, '') ILIKE $${params.length} OR l.event ILIKE $${params.length} OR COALESCE(l.metadata::text, '') ILIKE $${params.length})`);
+    }
+
+    if (action) {
+      params.push(action);
+      conditions.push(`l.event = $${params.length}`);
+    }
+
+    if (status) {
+      params.push(status);
+      conditions.push(`${statusExpr} = $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*) AS count
+       FROM auth_audit_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       ${where}`,
+      params,
+    );
+
+    const dataResult = await getPool().query<{
+      id: string; created_at: string; event: string; ip_address: string | null;
+      user_email: string | null; status: 'SUCCESS' | 'FAILURE' | 'WARNING'; detail: string | null;
+    }>(
+      `SELECT l.id::text,
+              l.created_at,
+              l.event,
+              l.ip_address::text,
+              u.email AS user_email,
+              ${statusExpr} AS status,
+              l.metadata::text AS detail
+       FROM auth_audit_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       ${where}
+       ORDER BY l.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset],
+    );
+
+    res.json({
+      data: dataResult.rows.map((row) => ({
+        id: row.id,
+        timestamp: row.created_at,
+        userEmail: row.user_email ?? 'Sistem',
+        action: row.event,
+        resource: 'auth-service',
+        ipAddress: row.ip_address ?? undefined,
+        status: row.status,
+        detail: row.detail ?? undefined,
+      })),
+      meta: {
+        page,
+        limit,
+        total: parseInt(countResult.rows[0]?.count ?? '0', 10),
+        totalPages: Math.ceil(parseInt(countResult.rows[0]?.count ?? '0', 10) / limit),
         timestamp: new Date().toISOString(),
       },
     });

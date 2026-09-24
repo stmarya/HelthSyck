@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { notificationClient } from '../api/client';
 import type { NotificationRow, NotificationsApiResponse, UnreadCountResponse } from '../types/admin';
 import styles from './NotificationBell.module.css';
@@ -182,9 +183,9 @@ export default function NotificationBell() {
 
           {/* Footer */}
           <div className={styles.dropdownFooter}>
-            <a href="/alerts" className={styles.footerLink}>
+            <Link to="/alerts" className={styles.footerLink}>
               Lihat semua alert →
-            </a>
+            </Link>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { isAxiosError } from 'axios';
 import { authClient } from '../api/client';
 import type { User, UserRole, UserStatus, CreateUserForm } from '../types/admin';
 import { Modal, ConfirmDialog } from '../components/Modal';
@@ -57,6 +58,14 @@ const STATUS_LABEL: Record<string, string> = {
   SUSPENDED: 'Ditangguhkan', PENDING_VERIFICATION: 'Menunggu Verifikasi',
 };
 
+function getApiErrorMessage(err: unknown, fallback: string): string {
+  if (isAxiosError(err)) {
+    const detail = err.response?.data as { detail?: string } | undefined;
+    if (detail?.detail) return detail.detail;
+  }
+  return err instanceof Error ? err.message : fallback;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-komponen Badge
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,7 +98,17 @@ function StatusBadge({ status }: { status: string }) {
 // Modal Detail Pengguna
 // ─────────────────────────────────────────────────────────────────────────────
 
-function UserDetailModal({ user, onClose }: { user: User; onClose: () => void }) {
+function UserDetailModal({
+  user,
+  onClose,
+  onUpdateStatus,
+  statusUpdating,
+}: {
+  user: User;
+  onClose: () => void;
+  onUpdateStatus: (status: UserStatus) => void;
+  statusUpdating: boolean;
+}) {
   const fmt = (val: string | undefined) => val ?? '—';
   const fmtDate = (s: string | undefined) => {
     if (!s) return '—';
@@ -125,6 +144,24 @@ function UserDetailModal({ user, onClose }: { user: User; onClose: () => void })
       {row('Status', <StatusBadge status={user.status} />)}
       {row('Terdaftar', fmtDate(user.createdAt))}
       {row('Login Terakhir', fmtDate(user.lastLoginAt))}
+      <div style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 12, color: 'var(--color-muted)', fontWeight: 600, marginBottom: 8 }}>
+          Ubah Status
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {(['ACTIVE', 'INACTIVE', 'SUSPENDED'] as const).map((status) => (
+            <button
+              key={status}
+              type="button"
+              className={`${styles.btn} ${status === 'SUSPENDED' ? styles.btnDangerOutline : styles.btnSecondary}`}
+              disabled={statusUpdating || user.status === status}
+              onClick={() => onUpdateStatus(status)}
+            >
+              {statusUpdating && user.status !== status ? 'Menyimpan…' : STATUS_LABEL[status]}
+            </button>
+          ))}
+        </div>
+      </div>
     </Modal>
   );
 }
@@ -135,10 +172,11 @@ function UserDetailModal({ user, onClose }: { user: User; onClose: () => void })
 
 interface AddUserModalProps {
   onClose: () => void;
-  onSubmit: (form: CreateUserForm) => void;
+  onSubmit: (form: CreateUserForm) => void | Promise<void>;
+  submitting: boolean;
 }
 
-function AddUserModal({ onClose, onSubmit }: AddUserModalProps) {
+function AddUserModal({ onClose, onSubmit, submitting }: AddUserModalProps) {
   const [form, setForm] = useState<CreateUserForm>({
     name: '', email: '', password: '', role: 'PATIENT', phone: '',
   });
@@ -158,7 +196,7 @@ function AddUserModal({ onClose, onSubmit }: AddUserModalProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (validate()) onSubmit(form);
+    if (validate() && !submitting) void onSubmit(form);
   };
 
   const set = <K extends keyof CreateUserForm>(key: K, val: CreateUserForm[K]) =>
@@ -200,11 +238,11 @@ function AddUserModal({ onClose, onSubmit }: AddUserModalProps) {
           />
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
-          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={onClose}>
+          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={onClose} disabled={submitting}>
             Batal
           </button>
-          <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}>
-            Tambah Pengguna
+          <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={submitting}>
+            {submitting ? 'Menyimpan…' : 'Tambah Pengguna'}
           </button>
         </div>
       </form>
@@ -263,6 +301,9 @@ export default function UsersPage({ defaultRole, title }: UsersPageProps) {
   const [selectedIds, setSelectedIds]       = useState<Set<string>>(new Set());
   const [detailUser, setDetailUser]         = useState<User | null>(null);
   const [showAddModal, setShowAddModal]     = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [confirmBulk, setConfirmBulk]       = useState<{ open: boolean; action: string; label: string }>({
     open: false, action: '', label: '',
   });
@@ -294,8 +335,7 @@ export default function UsersPage({ defaultRole, title }: UsersPageProps) {
       setUsers(body.data ?? []);
       setTotal(body.meta?.total ?? 0);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        ?? 'Gagal memuat daftar pengguna. Silakan coba lagi.';
+      const msg = getApiErrorMessage(err, 'Gagal memuat daftar pengguna. Silakan coba lagi.');
       setError(msg);
       setUsers([]);
     } finally {
@@ -336,16 +376,73 @@ export default function UsersPage({ defaultRole, title }: UsersPageProps) {
     setConfirmBulk({ open: true, action, label });
   };
 
-  const executeBulkAction = () => {
+  const updateUserStatus = useCallback(async (user: User, nextStatus: UserStatus) => {
+    if (statusUpdatingId || user.status === nextStatus) return;
+    setStatusUpdatingId(user.id);
+    try {
+      const res = await authClient.patch('/v1/auth/admin/users/' + user.id, { status: nextStatus });
+      const updated = (res.data as { data?: User }).data;
+      if (updated) {
+        setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, ...updated } : item)));
+        setDetailUser((prev) => (prev?.id === user.id ? { ...prev, ...updated } : prev));
+      }
+      showToast(`Status ${user.email} diperbarui ke ${STATUS_LABEL[nextStatus]}.`, 'success');
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Gagal memperbarui status pengguna.'), 'error');
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  }, [showToast, statusUpdatingId]);
+
+  const executeBulkAction = async () => {
+    if (bulkSubmitting || selectedIds.size === 0) return;
+    const nextStatusMap: Record<string, UserStatus> = {
+      activate: 'ACTIVE',
+      deactivate: 'INACTIVE',
+      suspend: 'SUSPENDED',
+    };
+    const nextStatus = nextStatusMap[confirmBulk.action];
+    if (!nextStatus) return;
+    const selectedUsers = users.filter((user) => selectedIds.has(user.id) && user.status !== nextStatus);
+    setBulkSubmitting(true);
     setConfirmBulk((prev) => ({ ...prev, open: false }));
-    showToast(`Endpoint belum tersedia — TODO: bulk ${confirmBulk.action} untuk ${selectedCount} pengguna`, 'warning');
-    setSelectedIds(new Set());
+    try {
+      const results = await Promise.allSettled(
+        selectedUsers.map((user) => authClient.patch('/v1/auth/admin/users/' + user.id, { status: nextStatus })),
+      );
+      const successCount = results.filter((result) => result.status === 'fulfilled').length;
+      const firstFailure = results.find((result) => result.status === 'rejected');
+
+      if (successCount > 0) {
+        showToast(`${successCount} pengguna berhasil diperbarui ke ${STATUS_LABEL[nextStatus]}.`, 'success');
+        setSelectedIds(new Set());
+        await fetchUsers();
+      }
+      if (firstFailure?.status === 'rejected') {
+        showToast(getApiErrorMessage(firstFailure.reason, 'Sebagian perubahan status gagal diproses.'), 'warning');
+      }
+      if (successCount === 0 && !firstFailure) {
+        showToast('Tidak ada perubahan status yang perlu diterapkan.', 'info');
+      }
+    } finally {
+      setBulkSubmitting(false);
+    }
   };
 
   // ── Tambah pengguna ──
-  const handleAddUser = (_form: CreateUserForm) => {
-    setShowAddModal(false);
-    showToast('Endpoint belum tersedia — TODO: POST /v1/auth/register', 'warning');
+  const handleAddUser = async (form: CreateUserForm) => {
+    if (createSubmitting) return;
+    setCreateSubmitting(true);
+    try {
+      await authClient.post('/v1/auth/admin/users', form);
+      setShowAddModal(false);
+      showToast(`Pengguna ${form.email} berhasil dibuat.`, 'success');
+      await fetchUsers();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'Gagal membuat pengguna baru.'), 'error');
+    } finally {
+      setCreateSubmitting(false);
+    }
   };
 
   // ── Export CSV ──
@@ -610,12 +707,17 @@ export default function UsersPage({ defaultRole, title }: UsersPageProps) {
 
       {/* ── Modal Detail ── */}
       {detailUser && (
-        <UserDetailModal user={detailUser} onClose={() => setDetailUser(null)} />
+        <UserDetailModal
+          user={detailUser}
+          onClose={() => setDetailUser(null)}
+          onUpdateStatus={(status) => { void updateUserStatus(detailUser, status); }}
+          statusUpdating={statusUpdatingId === detailUser.id}
+        />
       )}
 
       {/* ── Modal Tambah Pengguna ── */}
       {showAddModal && (
-        <AddUserModal onClose={() => setShowAddModal(false)} onSubmit={handleAddUser} />
+        <AddUserModal onClose={() => setShowAddModal(false)} onSubmit={handleAddUser} submitting={createSubmitting} />
       )}
 
       {/* ── Konfirmasi Bulk Action ── */}

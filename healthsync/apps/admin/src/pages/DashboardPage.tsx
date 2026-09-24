@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Legend,
   AreaChart, Area,
 } from 'recharts';
+import { Link } from 'react-router-dom';
 import { authClient, consultationClient, alertClient, ambulanceClient } from '../api/client';
 import type { AlertRow, AlertsApiResponse, Ambulance } from '../types/admin';
 import styles from './Page.module.css';
@@ -16,10 +17,29 @@ import { Skeleton, SkeletonChart } from '../components/Skeleton';
 interface ActivityLog {
   id: string;
   action: string;
-  actor_email: string;
-  target?: string;
-  created_at: string;
+  userEmail: string;
+  detail?: string;
+  timestamp: string;
   level?: 'info' | 'warning' | 'danger' | 'success';
+}
+
+interface HealthResponse {
+  status?: string;
+  db?: boolean;
+  redis?: boolean;
+}
+
+function makeTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(timeoutMs);
+  const controller = new AbortController();
+  window.setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
+function isHealthyResponse(payload: HealthResponse): boolean {
+  const dbHealthy = payload.db ?? true;
+  const redisHealthy = payload.redis ?? true;
+  return payload.status !== 'degraded' && payload.status !== 'error' && dbHealthy && redisHealthy;
 }
 
 // Konfigurasi visual per level log
@@ -42,15 +62,17 @@ function detectLevel(action: string): string {
 function ActivityFeed() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     void (async () => {
       try {
-        const res = await authClient.get('/v1/auth/admin/activity-logs?limit=8');
+        const res = await authClient.get('/v1/auth/admin/logs?limit=8');
         const body = res.data as { data: ActivityLog[] };
         setLogs(body.data ?? []);
+        setUnavailable(false);
       } catch {
-        // Fallback: log kosong jika endpoint tidak tersedia
+        setUnavailable(true);
         setLogs([]);
       } finally {
         setLoading(false);
@@ -77,7 +99,7 @@ function ActivityFeed() {
       }}>
         <span style={{ fontSize: 18 }}>📋</span>
         <span style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 500 }}>
-          Belum ada log aktivitas tersedia.
+          {unavailable ? 'Log aktivitas admin belum tersedia.' : 'Belum ada log aktivitas tersedia.'}
         </span>
       </div>
     );
@@ -88,7 +110,7 @@ function ActivityFeed() {
       {logs.map((log) => {
         const lvl   = log.level ?? detectLevel(log.action);
         const style = ACTIVITY_STYLE[lvl] ?? ACTIVITY_STYLE.info;
-        const ts    = new Date(log.created_at);
+        const ts    = new Date(log.timestamp);
         const waktu = isNaN(ts.getTime())
           ? '—'
           : ts.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -109,8 +131,7 @@ function ActivityFeed() {
                 {log.action}
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 1 }}>
-                {log.actor_email}
-                {log.target && <span> → <span style={{ color: style.color, fontWeight: 600 }}>{log.target}</span></span>}
+                {log.userEmail}
               </div>
             </div>
 
@@ -243,6 +264,7 @@ interface RecentUser { name: string; email: string; role: string; createdAt: str
 
 function RecentUsersTable({ loading }: { loading: boolean }) {
   const [users, setUsers] = useState<RecentUser[]>([]);
+  const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -250,7 +272,10 @@ function RecentUsersTable({ loading }: { loading: boolean }) {
         const res = await authClient.get('/v1/auth/admin/users?page=1&limit=5');
         const d = res.data as { data: RecentUser[] };
         setUsers(d.data ?? []);
-      } catch { /* gagal diam */ }
+        setUnavailable(false);
+      } catch {
+        setUnavailable(true);
+      }
     })();
   }, []);
 
@@ -260,7 +285,7 @@ function RecentUsersTable({ loading }: { loading: boolean }) {
     PATIENT: { bg: 'var(--color-surface-2)',    color: 'var(--color-muted)',  border: 'var(--color-border)' },
   };
 
-  if (loading || users.length === 0) {
+  if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {Array.from({ length: 5 }).map((_, i) => (
@@ -272,6 +297,14 @@ function RecentUsersTable({ loading }: { loading: boolean }) {
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+
+  if (users.length === 0) {
+    return (
+      <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
+        {unavailable ? 'Data pengguna terbaru belum tersedia.' : 'Belum ada pengguna terbaru.'}
       </div>
     );
   }
@@ -378,8 +411,9 @@ export default function DashboardPage() {
       SERVICES.map(async (svc) => {
         const start = Date.now();
         try {
-          const res = await fetch(svc.url, { signal: AbortSignal.timeout(3000) });
-          if (!res.ok) return { ...svc, status: 'OFFLINE' as const };
+          const res = await fetch(svc.url, { signal: makeTimeoutSignal(3000) });
+          const payload = await res.json() as HealthResponse;
+          if (!res.ok || !isHealthyResponse(payload)) return { ...svc, status: 'OFFLINE' as const };
           return { ...svc, status: 'ONLINE' as const, latency: Date.now() - start };
         } catch {
           return { ...svc, status: 'OFFLINE' as const };
@@ -463,7 +497,7 @@ export default function DashboardPage() {
   const lats    = services.filter((s) => s.latency != null).map((s) => s.latency!);
   const avgLat  = lats.length ? Math.round(lats.reduce((a, b) => a + b, 0) / lats.length) : null;
 
-  const totalUsers    = kpis.find((k) => k.metric === 'New Users')?.current ?? 0;
+  const totalUsers    = usersByRole.reduce((sum, role) => sum + role.value, 0);
   const totalConsult  = kpis.find((k) => k.metric === 'Consultations')?.current ?? 0;
   const totalDoctors  = usersByRole.find((r) => r.name.toLowerCase().startsWith('doc'))?.value ?? 0;
   const totalPatients = usersByRole.find((r) => r.name.toLowerCase().startsWith('pat'))?.value ?? 0;
@@ -666,12 +700,12 @@ export default function DashboardPage() {
               Alert aktif yang memerlukan perhatian
             </p>
           </div>
-          <a href="/alerts" style={{
+          <Link to="/alerts" style={{
             fontSize: 12, fontWeight: 600, color: 'var(--color-primary)',
             display: 'flex', alignItems: 'center', gap: 4,
           }}>
             Lihat semua →
-          </a>
+          </Link>
         </div>
         {alertsLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -745,9 +779,9 @@ export default function DashboardPage() {
                 5 pengguna terakhir didaftarkan
               </p>
             </div>
-            <a href="/users" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)' }}>
+            <Link to="/users" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)' }}>
               Lihat semua →
-            </a>
+            </Link>
           </div>
           <RecentUsersTable loading={analyticsLoading} />
         </div>
@@ -767,9 +801,9 @@ export default function DashboardPage() {
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <a href="/health" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)' }}>
+              <Link to="/health" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)' }}>
                 Detail →
-              </a>
+              </Link>
               <button
                 onClick={() => { void checkHealth(); }}
                 style={{
@@ -871,9 +905,9 @@ export default function DashboardPage() {
               Log aksi penting pada sistem HealthSync
             </p>
           </div>
-          <a href="/logs" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)' }}>
+          <Link to="/logs" style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-primary)' }}>
             Lihat semua →
-          </a>
+          </Link>
         </div>
         <ActivityFeed />
       </div>
