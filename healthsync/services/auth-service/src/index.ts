@@ -920,7 +920,6 @@ app.post('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-
         phone: user.phone,
         role: user.role,
         status: user.status,
-        name,
         createdAt: user.created_at,
       },
       meta: { timestamp: new Date().toISOString() },

@@ -81,6 +81,7 @@ export default function ActivityLogPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
   const LIMIT = 25;
 
   const buildQuery = useCallback(() => {
@@ -95,6 +96,7 @@ export default function ActivityLogPage() {
   }, [LIMIT, actionFilter, page, searchQuery, statusFilter]);
 
   useEffect(() => () => {
+    mountedRef.current = false;
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
@@ -115,18 +117,18 @@ export default function ActivityLogPage() {
       setError(null);
       try {
         const res = await authClient.get<LogsResponse>('/v1/auth/admin/logs?' + buildQuery());
-        if (cancelled || requestId !== requestIdRef.current) return;
+        if (cancelled || !mountedRef.current || requestId !== requestIdRef.current) return;
         setLogs(res.data.data ?? []);
         setTotal(res.data.meta?.total ?? 0);
         setPageCount(Math.max(1, res.data.meta?.totalPages ?? 1));
       } catch (err) {
-        if (cancelled || requestId !== requestIdRef.current) return;
+        if (cancelled || !mountedRef.current || requestId !== requestIdRef.current) return;
         setLogs([]);
         setTotal(0);
         setPageCount(1);
         setError(getApiErrorMessage(err, 'Gagal memuat log aktivitas.'));
       } finally {
-        if (!cancelled && requestId === requestIdRef.current) setLoading(false);
+        if (!cancelled && mountedRef.current && requestId === requestIdRef.current) setLoading(false);
       }
     };
 
@@ -140,14 +142,14 @@ export default function ActivityLogPage() {
       const requestId = ++requestIdRef.current;
       void authClient.get<LogsResponse>('/v1/auth/admin/logs?' + buildQuery())
         .then((res) => {
-          if (requestId !== requestIdRef.current) return;
+          if (!mountedRef.current || requestId !== requestIdRef.current) return;
           setLogs(res.data.data ?? []);
           setTotal(res.data.meta?.total ?? 0);
           setPageCount(Math.max(1, res.data.meta?.totalPages ?? 1));
           setError(null);
         })
         .catch((err) => {
-          if (requestId !== requestIdRef.current) return;
+          if (!mountedRef.current || requestId !== requestIdRef.current) return;
           setError(getApiErrorMessage(err, 'Gagal menyegarkan log aktivitas.'));
         });
     }, 30_000);
@@ -187,7 +189,7 @@ export default function ActivityLogPage() {
             disabled={loading || logs.length === 0}
             className={`${styles.btn} ${styles.btnSecondary}`}
           >
-            Export CSV
+            Export Halaman Ini
           </button>
         </div>
       </div>
@@ -276,7 +278,7 @@ export default function ActivityLogPage() {
         {!error && (
           <>
             <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 10 }}>
-              Menampilkan {logs.length} dari {total} entri log
+              Menampilkan {logs.length} dari {total} entri log • ekspor mencakup halaman ini
             </div>
 
             <div style={{ overflowX: 'auto' }}>

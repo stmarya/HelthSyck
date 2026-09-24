@@ -316,7 +316,6 @@ describe('Admin endpoints', () => {
       email: 'operator@example.com',
       role: 'ADMIN',
       status: 'ACTIVE',
-      name: 'Operator',
     });
   });
 
