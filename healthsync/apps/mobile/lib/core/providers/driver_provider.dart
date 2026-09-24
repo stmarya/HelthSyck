@@ -116,9 +116,6 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
             .toList();
       }
 
-      if (orders.isEmpty) {
-        orders = _mockOrders();
-      }
 
       final aktif = orders
           .where((o) =>
@@ -135,11 +132,10 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
         platNomor: platNomor,
       );
     } catch (e) {
-      _log.w('Fetch orders: gunakan mock — $e');
-      final mocks = _mockOrders();
+      _log.e('Fetch orders failed: $e');
       state = state.copyWith(
-        items: mocks,
-        orderAktif: mocks.isNotEmpty ? mocks.first : null,
+        items: const [],
+        error: 'Data pengiriman tidak dapat dimuat.',
         isLoading: false,
       );
     }
@@ -238,32 +234,7 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
     }
   }
 
-  List<DriverOrder> _mockOrders() => [
-    DriverOrder(
-      id: 'mock-ord-001',
-      pasienNama: 'Budi Santoso',
-      pasienAlamat: 'Jl. Sudirman No. 45, Jakarta Pusat',
-      apotek: 'Apotek Kimia Farma Sudirman',
-      status: StatusOrder.diterima,
-      items: ['Paracetamol 500mg x10', 'Amoxicillin 500mg x6'],
-      createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-      jarakKm: 3.2,
-      estimasiMenit: 20,
-      ongkir: 15000,
-    ),
-    DriverOrder(
-      id: 'mock-ord-002',
-      pasienNama: 'Siti Rahayu',
-      pasienAlamat: 'Jl. Thamrin No. 12, Jakarta Pusat',
-      apotek: 'Apotek Guardian Pondok Indah',
-      status: StatusOrder.selesai,
-      items: ['Metformin 500mg x30'],
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      jarakKm: 5.1,
-      estimasiMenit: 0,
-      ongkir: 20000,
-    ),
-  ];
+
 }
 
 // ─────────────────────────────────────────────

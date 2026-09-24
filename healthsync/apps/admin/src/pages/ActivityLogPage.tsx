@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import styles from './Page.module.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -16,43 +16,7 @@ interface LogEntry {
   detail?: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mock data generator
-// TODO: Replace with real endpoint GET /v1/auth/admin/logs when available
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MOCK_ACTIONS = [
-  'LOGIN', 'LOGOUT', 'VIEW_USER', 'EDIT_USER', 'EXPORT_CSV',
-  'VIEW_ANALYTICS', 'REFRESH_TOKEN', 'VIEW_HOSPITALS', 'SEARCH_USERS',
-];
-const MOCK_RESOURCES = [
-  '/v1/auth/login', '/v1/auth/admin/users', '/v1/admin/kpis',
-  '/v1/hospitals', '/v1/consultations/stats/weekly',
-];
-const MOCK_USERS = [
-  'admin@healthsync.id', 'budiari@test.id',
-  'system@healthsync.id',
-];
-const MOCK_IPS = ['192.168.1.10', '10.0.0.1', '172.16.0.5', '127.0.0.1'];
-
-function generateMockLogs(count: number): LogEntry[] {
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(Date.now() - i * 1000 * (30 + Math.random() * 90));
-    const status: LogEntry['status'] =
-      Math.random() < 0.8 ? 'SUCCESS' :
-      Math.random() < 0.5 ? 'FAILURE' : 'WARNING';
-    return {
-      id: `log-${i}`,
-      timestamp: d.toISOString(),
-      userEmail: MOCK_USERS[Math.floor(Math.random() * MOCK_USERS.length)]!,
-      action: MOCK_ACTIONS[Math.floor(Math.random() * MOCK_ACTIONS.length)]!,
-      resource: MOCK_RESOURCES[Math.floor(Math.random() * MOCK_RESOURCES.length)]!,
-      ipAddress: MOCK_IPS[Math.floor(Math.random() * MOCK_IPS.length)]!,
-      status,
-      detail: status === 'FAILURE' ? 'Unauthorized: invalid token' : undefined,
-    };
-  });
-}
+// Audit log data is intentionally empty until a real backend endpoint is available.
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   SUCCESS: { bg: '#f0fdf4', color: '#166534' },
@@ -84,7 +48,7 @@ function exportLogsCsv(logs: LogEntry[]) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ActivityLogPage() {
-  const ALL_LOGS = useRef<LogEntry[]>(generateMockLogs(200));
+  const ALL_LOGS = useRef<LogEntry[]>([]);
 
   const [searchInput, setSearchInput]   = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -93,18 +57,7 @@ export default function ActivityLogPage() {
   const [page, setPage]                 = useState(1);
   const LIMIT = 25;
 
-  // Auto-refresh every 30s
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = setInterval(() => {
-      // Prepend new mock entries
-      // TODO: Replace with real API call when endpoint available
-      const newEntries = generateMockLogs(3);
-      ALL_LOGS.current = [...newEntries, ...ALL_LOGS.current].slice(0, 500);
-      setPage(1);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [autoRefresh]);
+  // Auto-refresh is disabled until the audit-log endpoint is available.
 
   // Filter
   const filtered = ALL_LOGS.current.filter((l) => {
@@ -128,7 +81,7 @@ export default function ActivityLogPage() {
         <div>
           <h1 className={styles.title} style={{ margin: 0 }}>Log Aktivitas</h1>
           <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9E9E9E' }}>
-            ⚠️ Data mock — TODO: endpoint GET /v1/auth/admin/logs belum tersedia
+            Data audit belum tersedia — endpoint backend GET /v1/auth/admin/logs belum tersedia
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

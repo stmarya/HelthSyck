@@ -96,6 +96,11 @@ class _DashboardDokterScreenState extends ConsumerState<DashboardDokterScreen> {
         title: const Text('Dashboard Dokter'),
         actions: [
           IconButton(
+            tooltip: 'Riwayat konsultasi',
+            onPressed: () => context.push('/doctor/history'),
+            icon: const Icon(Icons.history),
+          ),
+          IconButton(
             tooltip: 'Muat ulang',
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh),

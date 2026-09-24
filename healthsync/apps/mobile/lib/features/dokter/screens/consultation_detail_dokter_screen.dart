@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/api_client.dart';
 
@@ -138,6 +139,7 @@ class _ConsultationDetailDokterScreenState
     final consultation = _consultation ?? const <String, dynamic>{};
     final status = consultation['status']?.toString() ?? '';
     final patient = consultation['patient_name']?.toString() ?? 'Pasien';
+    final patientId = consultation['patient_id']?.toString() ?? '';
 
     return Scaffold(
       appBar: AppBar(title: Text('Konsultasi $patient')),
@@ -158,6 +160,28 @@ class _ConsultationDetailDokterScreenState
                         if (consultation['diagnosis'] != null) Text('Diagnosis: ${consultation['diagnosis']}'),
                         const SizedBox(height: 12),
                         _actions(status),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: patientId.isEmpty
+                                  ? null
+                                  : () => context.push('/doctor/patients/$patientId'),
+                              icon: const Icon(Icons.medical_information_outlined),
+                              label: const Text('Data klinis pasien'),
+                            ),
+                            if (patientId.isNotEmpty && (status == 'IN_PROGRESS' || status == 'COMPLETED'))
+                              OutlinedButton.icon(
+                                onPressed: () => context.push(
+                                  '/doctor/prescriptions/new/${widget.consultationId}/$patientId',
+                                ),
+                                icon: const Icon(Icons.receipt_long),
+                                label: const Text('Buat resep'),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
                   ),

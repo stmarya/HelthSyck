@@ -36,6 +36,9 @@ import 'features/ambulans/screens/navigasi_darurat_screen.dart';
 import 'features/ambulans/screens/riwayat_tugas_screen.dart';
 import 'features/dokter/screens/dashboard_dokter_screen.dart';
 import 'features/dokter/screens/consultation_detail_dokter_screen.dart';
+import 'features/dokter/screens/patient_clinical_screen.dart';
+import 'features/dokter/screens/prescription_create_screen.dart';
+import 'features/dokter/screens/riwayat_dokter_screen.dart';
 
 // ─────────────────────────────────────────────
 // Konstanta role — sesuai nilai dari database
@@ -108,6 +111,23 @@ GoRouter buildMultiRoleRouter(AuthState authState) {
         builder: (_, s) => ConsultationDetailDokterScreen(
           consultationId: s.pathParameters['id']!,
         ),
+      ),
+      GoRoute(
+        path: '/doctor/patients/:patientId',
+        builder: (_, s) => PatientClinicalScreen(
+          patientId: s.pathParameters['patientId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/prescriptions/new/:consultationId/:patientId',
+        builder: (_, s) => PrescriptionCreateScreen(
+          consultationId: s.pathParameters['consultationId']!,
+          patientId: s.pathParameters['patientId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/history',
+        builder: (_, __) => const RiwayatDokterScreen(),
       ),
 
       // ── Apotek ─────────────────────────────────────

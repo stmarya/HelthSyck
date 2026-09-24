@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import jwt from 'jsonwebtoken';
 import { z, ZodError } from 'zod';
 import crypto from 'crypto';
@@ -296,8 +296,22 @@ async function dispatchNotification(
 // Express app
 // ─────────────────────────────────────────────
 
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) => {
+    const configured = (process.env['CORS_ORIGINS'] ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const allowedOrigins = configured.length > 0
+      ? configured
+      : ['http://localhost:3000', 'http://localhost:5173'];
+    callback(null, !origin || allowedOrigins.includes(origin));
+  },
+  credentials: true,
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {

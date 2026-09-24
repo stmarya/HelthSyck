@@ -94,7 +94,8 @@ class AmbulansNotifier extends StateNotifier<AmbulansState> {
 
       if (unitData == null) {
         state = state.copyWith(
-          tugasHistory: _mockTugas(),
+          tugasHistory: const [],
+          error: 'Unit ambulans untuk akun ini belum ditemukan.',
           isLoading: false,
         );
         return;
@@ -122,7 +123,7 @@ class AmbulansNotifier extends StateNotifier<AmbulansState> {
       }
 
       // Ambil riwayat lokasi sebagai "history" sementara
-      final history = tugasAktif != null ? [tugasAktif] : _mockTugas();
+      final history = tugasAktif != null ? [tugasAktif] : <AmbulanceTask>[];
 
       state = state.copyWith(
         tugasHistory: history,
@@ -137,13 +138,14 @@ class AmbulansNotifier extends StateNotifier<AmbulansState> {
       state = state.copyWith(
         isLoading: false,
         error: e.detail,
-        tugasHistory: _mockTugas(),
+        tugasHistory: const [],
       );
     } catch (e) {
-      _log.w('Fetch tugas ambulans: gunakan mock — $e');
+      _log.e('Fetch tugas ambulans failed: $e');
       state = state.copyWith(
         isLoading: false,
-        tugasHistory: _mockTugas(),
+        error: 'Data tugas ambulans tidak dapat dimuat.',
+        tugasHistory: const [],
       );
     }
   }
@@ -237,28 +239,7 @@ class AmbulansNotifier extends StateNotifier<AmbulansState> {
     }
   }
 
-  List<AmbulanceTask> _mockTugas() => [
-    AmbulanceTask(
-      id: 'mock-001',
-      pasienNama: 'Ahmad Fauzi',
-      alamatPasien: 'Jl. Gatot Subroto No. 88, Jakarta Selatan',
-      tujuanRS: 'RS Cipto Mangunkusumo',
-      status: StatusAmbulans.selesai,
-      prioritas: PrioritasAmbulans.darurat,
-      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      kondisiPasien: 'Sesak napas berat',
-    ),
-    AmbulanceTask(
-      id: 'mock-002',
-      pasienNama: 'Dewi Lestari',
-      alamatPasien: 'Jl. Kuningan No. 23, Jakarta Selatan',
-      tujuanRS: 'RS Pertamina Pusat',
-      status: StatusAmbulans.selesai,
-      prioritas: PrioritasAmbulans.normal,
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      kondisiPasien: 'Kecelakaan lalu lintas',
-    ),
-  ];
+
 }
 
 // ─────────────────────────────────────────────

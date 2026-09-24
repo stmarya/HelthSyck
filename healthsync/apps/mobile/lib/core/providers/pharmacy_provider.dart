@@ -237,10 +237,10 @@ class ObatNotifier extends StateNotifier<ObatState> {
           return;
         }
       }
-      state = state.copyWith(items: _mockObat(), isLoading: false);
+      state = state.copyWith(items: const [], isLoading: false, error: 'Data apotek tidak dapat dimuat.');
     } catch (e) {
-      _log.w('Resolve pharmacy: $e');
-      state = state.copyWith(items: _mockObat(), isLoading: false);
+      _log.e('Resolve pharmacy failed: $e');
+      state = state.copyWith(items: const [], isLoading: false, error: 'Data apotek tidak dapat dimuat.');
     }
   }
 
@@ -270,11 +270,11 @@ class ObatNotifier extends StateNotifier<ObatState> {
         }).toList();
         state = state.copyWith(items: items, isLoading: false);
       } else {
-        state = state.copyWith(items: _mockObat(), isLoading: false);
+        state = state.copyWith(items: const [], isLoading: false, error: 'Data apotek tidak dapat dimuat.');
       }
     } catch (e) {
-      _log.w('Fetch inventory: $e');
-      state = state.copyWith(items: _mockObat(), isLoading: false);
+      _log.e('Fetch inventory failed: $e');
+      state = state.copyWith(items: const [], isLoading: false, error: 'Data apotek tidak dapat dimuat.');
     }
   }
 
@@ -288,13 +288,7 @@ class ObatNotifier extends StateNotifier<ObatState> {
     }
   }
 
-  List<Obat> _mockObat() => [
-    const Obat(id: '1', nama: 'Paracetamol 500mg', kategori: 'TABLET', stok: 500, satuan: 'tablet', harga: 1200, stokMinimum: 100),
-    const Obat(id: '2', nama: 'Amoxicillin 500mg', kategori: 'CAPSULE', stok: 250, satuan: 'kapsul', harga: 8500, stokMinimum: 50),
-    const Obat(id: '3', nama: 'Metformin 500mg', kategori: 'TABLET', stok: 200, satuan: 'tablet', harga: 6500, stokMinimum: 50),
-    const Obat(id: '4', nama: 'Salbutamol 4mg', kategori: 'TABLET', stok: 12, satuan: 'tablet', harga: 1500, stokMinimum: 30),
-    const Obat(id: '5', nama: 'Omeprazole 20mg', kategori: 'CAPSULE', stok: 180, satuan: 'kapsul', harga: 15000, stokMinimum: 40),
-  ];
+
 }
 
 // ─────────────────────────────────────────────
