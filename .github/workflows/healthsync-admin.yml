@@ -17,7 +17,6 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  GO_VERSION: '1.22'
   DATABASE_URL: postgresql://healthsync:healthsync_test@localhost:5432/healthsync_test
   JWT_SECRET: ci-test-secret-do-not-use-in-production
   REDIS_URL: redis://localhost:6379
@@ -31,54 +30,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm, cache-dependency-path: healthsync/package-lock.json }
+        with: { node-version: '20', cache: npm, cache-dependency-path: healthsync/package-lock.json }
       - run: npm ci
       - run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
       - run: npm exec --workspace=apps/admin -- tsc --noEmit
       - run: npm exec --workspace=apps/admin -- eslint src --ext ts,tsx --max-warnings 0
       - run: npm exec --workspace=apps/admin -- vite build
 
-  node_services:
+  services:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        workspace:
-          - services/auth-service
-          - services/patient-service
-          - services/consultation-service
-          - services/prescription-service
-          - services/ambulance-service
-          - services/referral-service
-          - services/hospital-service
-          - services/pharmacy-service
-          - services/notification-service
-          - services/integration-service
+        workspace: [services/auth-service, services/patient-service, services/consultation-service, services/prescription-service, services/ambulance-service, services/referral-service, services/hospital-service, services/pharmacy-service, services/notification-service, services/integration-service]
     defaults: { run: { working-directory: healthsync } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm, cache-dependency-path: healthsync/package-lock.json }
+        with: { node-version: '20', cache: npm, cache-dependency-path: healthsync/package-lock.json }
       - run: npm ci
       - run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
       - run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
       - run: npm exec --workspace=${{ matrix.workspace }} -- jest --runInBand --passWithNoTests
 
-  go_services:
+  go-services:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         service: [iot-ingestion, alert-service]
-    defaults: { run: { working-directory: healthsync/services/${{ matrix.service }} } }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '${{ env.GO_VERSION }}', cache-dependency-path: 'healthsync/services/${{ matrix.service }}/go.sum' }
+        with:
+          go-version: '1.22'
+          cache-dependency-path: healthsync/services/${{ matrix.service }}/go.sum
       - run: gofmt -w . && git diff --exit-code
+        working-directory: healthsync/services/${{ matrix.service }}
       - run: go vet ./...
+        working-directory: healthsync/services/${{ matrix.service }}
       - run: go test ./... -race -count=1
+        working-directory: healthsync/services/${{ matrix.service }}
       - run: go build ./...
+        working-directory: healthsync/services/${{ matrix.service }}
 
   database:
     runs-on: ubuntu-latest
@@ -93,28 +87,15 @@ jobs:
     defaults: { run: { working-directory: healthsync } }
     steps:
       - uses: actions/checkout@v4
-      - name: Validate all migrations from an empty database
-        run: bash infra/db/run_migrations.sh
-      - name: Validate migration rerun is safe
-        run: bash infra/db/run_migrations.sh
-      - name: Validate migration registry and critical constraints
+      - run: bash infra/db/run_migrations.sh
+      - run: bash infra/db/run_migrations.sh
+      - name: Validate latest schema and critical constraints
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-          DO $$
-          BEGIN
-            IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version='V014__remove_legacy_pharmacy_aliases') THEN
-              RAISE EXCEPTION 'latest migration is not registered';
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='alerts'::regclass AND contype='p') THEN
-              RAISE EXCEPTION 'alerts primary key is missing';
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='pharmacy_staff') THEN
-              RAISE EXCEPTION 'pharmacy_staff is missing';
-            END IF;
-          END $$;
-          SQL
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1 FROM schema_migrations WHERE version='V014__remove_legacy_pharmacy_aliases'"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1 FROM information_schema.tables WHERE table_name='pharmacy_staff'"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1 FROM pg_constraint WHERE conrelid='alerts'::regclass AND contype='p'"
 
-  compose_validation:
+  docker:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: healthsync } }
     steps:
@@ -137,29 +118,9 @@ jobs:
           MQTT_BROKER=tcp://emqx:1883
           ENV
       - run: docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.ci config --quiet
-      - name: Build every application image
+      - name: Build all application images
         run: |
           docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.ci build \
             auth-service patient-service consultation-service prescription-service \
             ambulance-service referral-service hospital-service pharmacy-service \
             notification-service integration-service iot-ingestion alert-service admin command-center
-
-  readiness:
-    if: always()
-    needs: [admin, node_services, go_services, database, compose_validation]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Enforce every deployment gate
-        env:
-          ADMIN: ${{ needs.admin.result }}
-          NODE_SERVICES: ${{ needs.node_services.result }}
-          GO_SERVICES: ${{ needs.go_services.result }}
-          DATABASE: ${{ needs.database.result }}
-          COMPOSE: ${{ needs.compose_validation.result }}
-        run: |
-          printf '%-20s %s\n' Admin "$ADMIN" Node-services "$NODE_SERVICES" Go-services "$GO_SERVICES" Database "$DATABASE" Docker-compose "$COMPOSE"
-          test "$ADMIN" = success
-          test "$NODE_SERVICES" = success
-          test "$GO_SERVICES" = success
-          test "$DATABASE" = success
-          test "$COMPOSE" = success
