@@ -364,7 +364,7 @@ app.get(
 
     try {
       const result = await pool.query(
-        `SELECT id, generic_name, brand_name, dosage_form, strength, requires_prescription
+        `SELECT id, generic_name, brand_name, dosage_form, strength, unit, drug_class, requires_prescription
          FROM drugs
          WHERE generic_name ILIKE '%' || $1 || '%'
             OR brand_name   ILIKE '%' || $1 || '%'

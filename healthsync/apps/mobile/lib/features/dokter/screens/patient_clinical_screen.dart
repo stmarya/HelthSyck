@@ -51,7 +51,8 @@ class _PatientClinicalScreenState extends ConsumerState<PatientClinicalScreen> {
       List<Map<String, dynamic>> vitals = const [];
       try {
         final response = await _api.get(
-          '/v1/patients/${widget.patientId}/vitals?limit=10',
+          '/v1/patients/${widget.patientId}/vitals?limit=50'
+          '&from=${Uri.encodeQueryComponent(DateTime.now().toUtc().subtract(const Duration(days: 30)).toIso8601String())}',
           port: 3002,
         );
         final raw = response['data'];
@@ -121,6 +122,14 @@ class _PatientClinicalScreenState extends ConsumerState<PatientClinicalScreen> {
                     _ErrorCard(message: _error!),
                   _PatientSummary(patient: patient),
                   const SizedBox(height: 12),
+                  const _SectionCard(
+                    title: 'Privasi dan kelengkapan data',
+                    icon: Icons.verified_user_outlined,
+                    child: Text(
+                      'NIK tidak ditampilkan di aplikasi dokter. Data di bawah berasal dari profil pasien, rekam tanda vital, dan perangkat yang terhubung.',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   _SectionCard(
                     title: 'Tanda vital terakhir',
                     icon: Icons.monitor_heart_outlined,
@@ -151,7 +160,17 @@ class _PatientClinicalScreenState extends ConsumerState<PatientClinicalScreen> {
                                 .map((condition) => ListTile(
                                       contentPadding: EdgeInsets.zero,
                                       title: Text(condition['description']?.toString() ?? '-'),
-                                      subtitle: Text(condition['icd10_code']?.toString() ?? 'Kode ICD belum tersedia'),
+                                      subtitle: Text(
+                                        _joinValues([
+                                          condition['icd10_code'] == null
+                                              ? 'Kode ICD belum tersedia'
+                                              : 'ICD-10 ${condition['icd10_code']}',
+                                          condition['diagnosed_at'] == null
+                                              ? 'Tanggal diagnosis belum dicatat'
+                                              : 'Diagnosis ${condition['diagnosed_at']}',
+                                          condition['notes'],
+                                        ]),
+                                      ),
                                     ))
                                 .toList(),
                           ),
@@ -186,7 +205,17 @@ class _PatientClinicalScreenState extends ConsumerState<PatientClinicalScreen> {
                                 .map((device) => ListTile(
                                       contentPadding: EdgeInsets.zero,
                                       title: Text(device['device_id']?.toString() ?? '-'),
-                                      subtitle: Text(device['device_type']?.toString() ?? '-'),
+                                      subtitle: Text(
+                                        _joinValues([
+                                          device['device_type'],
+                                          device['firmware_version'] == null
+                                              ? 'Firmware belum tercatat'
+                                              : 'Firmware ${device['firmware_version']}',
+                                          device['last_seen_at'] == null
+                                              ? 'Belum pernah terlihat'
+                                              : 'Terakhir aktif ${device['last_seen_at']}',
+                                        ]),
+                                      ),
                                     ))
                                 .toList(),
                           ),
@@ -220,7 +249,13 @@ class _PatientSummary extends StatelessWidget {
             Text('Tanggal lahir: ${patient['date_of_birth'] ?? '-'}'),
             Text('Golongan darah: ${patient['blood_type'] ?? '-'}'),
             Text('Telepon: ${patient['phone'] ?? patient['user_phone'] ?? '-'}'),
+            Text('Email: ${patient['email'] ?? '-'}'),
             Text('Alamat: ${patient['address'] ?? '-'}'),
+            Text(
+              'Kontak darurat: ${patient['emergency_contact_name'] ?? '-'}'
+              ' • ${patient['emergency_contact_phone'] ?? '-'}',
+            ),
+            Text('Profil diperbarui: ${patient['updated_at'] ?? '-'}'),
           ],
         ),
       ),
@@ -240,6 +275,10 @@ class _VitalsGrid extends StatelessWidget {
       'SpO₂': '${vitals['spo2'] ?? '-'}%',
       'Tekanan darah': '${vitals['systolic_bp'] ?? '-'}/${vitals['diastolic_bp'] ?? '-'}',
       'Suhu': '${vitals['temperature'] ?? '-'} °C',
+      'Aktivitas': '${vitals['activity_level'] ?? '-'}',
+      'Baterai': '${vitals['battery_level'] ?? '-'}%',
+      'Sinyal': '${vitals['signal_strength'] ?? '-'} dBm',
+      'Sumber': '${vitals['source'] ?? '-'}',
     };
     return Wrap(
       spacing: 12,
@@ -275,11 +314,18 @@ class _VitalHistoryTile extends StatelessWidget {
       ),
       subtitle: Text(
         '${vital['systolic_bp'] ?? '-'}/${vital['diastolic_bp'] ?? '-'} mmHg'
+        ' • Suhu ${vital['temperature'] ?? '-'} °C'
+        ' • ${vital['source'] ?? '-'}'
         ' • ${vital['recorded_at'] ?? '-'}',
       ),
     );
   }
 }
+
+String _joinValues(Iterable<dynamic> values) => values
+    .map((value) => value?.toString().trim() ?? '')
+    .where((value) => value.isNotEmpty)
+    .join(' • ');
 
 class _SectionCard extends StatelessWidget {
   final String title;

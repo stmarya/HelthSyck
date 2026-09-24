@@ -66,9 +66,10 @@ const PaginationSchema = z.object({
   page:       z.coerce.number().int().min(1).default(1),
   limit:      z.coerce.number().int().min(1).max(100).default(20),
   pharmacyId: z.string().uuid().optional(),
-  status:     z.enum(['ISSUED','SENT_TO_PHARMACY','PREPARING','READY','DISPENSED','DELIVERED','CANCELLED']).optional(),
+  status:     z.enum(['ISSUED','SENT_TO_PHARMACY','CONFIRMED','PREPARING','READY','DELIVERING','DELIVERED','CANCELLED']).optional(),
   patientId:  z.string().uuid().optional(),
   doctorId:   z.string().uuid().optional(),
+  consultationId: z.string().uuid().optional(),
 });
 
 async function resolvePatientId(userId: string): Promise<string | null> {
@@ -314,7 +315,7 @@ app.get(
       return;
     }
 
-    const { page, limit, pharmacyId, status, patientId, doctorId } = parsed.data;
+    const { page, limit, pharmacyId, status, patientId, doctorId, consultationId } = parsed.data;
     const offset = (page - 1) * limit;
     const { role, sub } = authReq.user;
 
@@ -347,6 +348,7 @@ app.get(
         if (patientId)  conditions.push(`p.patient_id=${addParam(patientId)}`);
         if (doctorId)   conditions.push(`p.doctor_id=${addParam(doctorId)}`);
       }
+      if (consultationId) conditions.push(`p.consultation_id=${addParam(consultationId)}`);
       if (status) conditions.push(`p.status=${addParam(status)}`);
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

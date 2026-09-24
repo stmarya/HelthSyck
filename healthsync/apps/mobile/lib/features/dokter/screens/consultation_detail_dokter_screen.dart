@@ -17,6 +17,7 @@ class _ConsultationDetailDokterScreenState
     extends ConsumerState<ConsultationDetailDokterScreen> {
   Map<String, dynamic>? _consultation;
   List<Map<String, dynamic>> _messages = const [];
+  List<Map<String, dynamic>> _prescriptions = const [];
   bool _loading = true;
   bool _submitting = false;
   final _messageController = TextEditingController();
@@ -40,10 +41,25 @@ class _ConsultationDetailDokterScreenState
     try {
       final detail = await _api.get('/v1/consultations/${widget.consultationId}', port: 3003);
       final messages = await _api.get('/v1/consultations/${widget.consultationId}/messages', port: 3003);
+      List<Map<String, dynamic>> prescriptions = const [];
+      try {
+        final response = await _api.get(
+          '/v1/prescriptions?consultationId=${widget.consultationId}&limit=20',
+          port: 3004,
+        );
+        final raw = response['data'];
+        if (raw is List) {
+          prescriptions = _asMapList(raw);
+        }
+      } on ApiException {
+        // Prescription history is supplementary; consultation remains usable
+        // when the pharmacy service is temporarily unavailable.
+      }
       if (!mounted) return;
       setState(() {
         _consultation = detail['data'] as Map<String, dynamic>?;
         _messages = _asMapList(messages['data']);
+        _prescriptions = prescriptions;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -140,6 +156,7 @@ class _ConsultationDetailDokterScreenState
     final status = consultation['status']?.toString() ?? '';
     final patient = consultation['patient_name']?.toString() ?? 'Pasien';
     final patientId = consultation['patient_id']?.toString() ?? '';
+    final symptomData = consultation['symptom_data'];
 
     return Scaffold(
       appBar: AppBar(title: Text('Konsultasi $patient')),
@@ -156,8 +173,21 @@ class _ConsultationDetailDokterScreenState
                       children: [
                         Text(consultation['chief_complaint']?.toString() ?? '-', style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 8),
-                        Text('Status: $status'),
-                        if (consultation['diagnosis'] != null) Text('Diagnosis: ${consultation['diagnosis']}'),
+                        _InfoRow(label: 'Status', value: status),
+                        _InfoRow(label: 'Prioritas', value: consultation['urgency']?.toString() ?? 'NORMAL'),
+                        _InfoRow(label: 'Dibuat', value: consultation['created_at']?.toString() ?? '-'),
+                        _InfoRow(label: 'Dimulai', value: consultation['started_at']?.toString() ?? '-'),
+                        _InfoRow(label: 'Selesai', value: consultation['ended_at']?.toString() ?? '-'),
+                        _InfoRow(label: 'Diagnosis', value: consultation['diagnosis']?.toString() ?? 'Belum dicatat'),
+                        _InfoRow(label: 'Catatan medis', value: consultation['notes']?.toString() ?? 'Belum dicatat'),
+                        if (symptomData is Map && symptomData.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text('Data gejala', style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 4),
+                          ...symptomData.entries.map(
+                            (entry) => _InfoRow(label: entry.key.toString(), value: entry.value?.toString() ?? '-'),
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         _actions(status),
                         const SizedBox(height: 8),
@@ -180,12 +210,28 @@ class _ConsultationDetailDokterScreenState
                                 icon: const Icon(Icons.receipt_long),
                                 label: const Text('Buat resep'),
                               ),
+                            if (patientId.isNotEmpty && (status == 'IN_PROGRESS' || status == 'COMPLETED'))
+                              OutlinedButton.icon(
+                                onPressed: () => context.push('/doctor/referrals/new/$patientId'),
+                                icon: const Icon(Icons.local_hospital_outlined),
+                                label: const Text('Buat rujukan'),
+                              ),
                           ],
                         ),
                       ],
                     ),
                   ),
                 ),
+                if (_prescriptions.isNotEmpty)
+                  _PrescriptionSummaryList(items: _prescriptions),
+                if (_messages.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Belum ada pesan dalam konsultasi ini.'),
+                    ),
+                  ),
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -193,8 +239,17 @@ class _ConsultationDetailDokterScreenState
                     itemBuilder: (context, index) {
                       final message = _messages[index];
                       return ListTile(
+                        leading: Icon(
+                          message['message_type']?.toString() == 'SYSTEM'
+                              ? Icons.info_outline
+                              : Icons.chat_bubble_outline,
+                        ),
                         title: Text(message['content']?.toString() ?? ''),
-                        subtitle: Text(message['sender_email']?.toString() ?? ''),
+                        subtitle: Text(
+                          '${message['sender_email']?.toString() ?? '-'}'
+                          ' • ${message['message_type']?.toString() ?? 'TEXT'}'
+                          ' • ${message['created_at']?.toString() ?? '-'}',
+                        ),
                       );
                     },
                   ),
@@ -238,5 +293,52 @@ class _ConsultationDetailDokterScreenState
       );
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text('$label: $value'),
+    );
+  }
+}
+
+class _PrescriptionSummaryList extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+
+  const _PrescriptionSummaryList({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ExpansionTile(
+        leading: const Icon(Icons.receipt_long),
+        title: Text('Resep (${items.length})'),
+        children: items
+            .map(
+              (item) => ListTile(
+                title: Text('Status: ${item['status'] ?? '-'}'),
+                subtitle: Text(
+                  'Diterbitkan: ${item['issued_at'] ?? '-'}\n'
+                  'Berlaku sampai: ${item['expires_at'] ?? '-'}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: item['id'] == null
+                    ? null
+                    : () => context.push('/doctor/prescriptions/${item['id']}'),
+              ),
+            )
+            .toList(),
+      ),
+    );
   }
 }

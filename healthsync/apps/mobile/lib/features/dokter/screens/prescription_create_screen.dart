@@ -85,6 +85,11 @@ class _PrescriptionCreateScreenState extends ConsumerState<PrescriptionCreateScr
       _items.add({
         'drugId': drug['id']?.toString() ?? '',
         'drugName': drug['generic_name']?.toString() ?? drug['brand_name']?.toString() ?? 'Obat',
+        'brandName': drug['brand_name']?.toString(),
+        'dosageForm': drug['dosage_form']?.toString(),
+        'strength': drug['strength']?.toString(),
+        'unit': drug['unit']?.toString(),
+        'drugClass': drug['drug_class']?.toString(),
         'dosage': _dosageController.text.trim(),
         'quantity': quantity,
         'instructions': _instructionsController.text.trim(),
@@ -170,7 +175,13 @@ class _PrescriptionCreateScreenState extends ConsumerState<PrescriptionCreateScr
                       ?? 'Obat';
                   return ListTile(
                     title: Text(name),
-                    subtitle: Text('${drug['dosage_form'] ?? '-'} ${drug['strength'] ?? ''}'),
+                    subtitle: Text(
+                      '${drug['brand_name'] ?? '-'} • '
+                      '${drug['dosage_form'] ?? '-'} ${drug['strength'] ?? ''}\n'
+                      'Kelas: ${drug['drug_class'] ?? '-'} • '
+                      'Resep wajib: ${drug['requires_prescription'] == true ? 'Ya' : 'Tidak'}',
+                    ),
+                    isThreeLine: true,
                     trailing: const Icon(Icons.add_circle_outline),
                     onTap: () => _showDrugForm(drug),
                   );
@@ -193,9 +204,12 @@ class _PrescriptionCreateScreenState extends ConsumerState<PrescriptionCreateScr
                     child: ListTile(
                       title: Text(entry.value['drugName']?.toString() ?? 'Obat'),
                       subtitle: Text(
-                        '${entry.value['dosage']} • ${entry.value['quantity']} item'
+                        '${entry.value['brandName'] ?? '-'} • '
+                        '${entry.value['dosageForm'] ?? '-'} ${entry.value['strength'] ?? ''}\n'
+                        'Dosis: ${entry.value['dosage']} • Jumlah: ${entry.value['quantity']} ${entry.value['unit'] ?? 'item'}'
                         '${(entry.value['instructions'] as String).isEmpty ? '' : ' • ${entry.value['instructions']}'}',
                       ),
+                      isThreeLine: true,
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () => setState(() => _items.removeAt(entry.key)),

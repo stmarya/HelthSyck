@@ -95,7 +95,10 @@ class _RiwayatDokterScreenState extends ConsumerState<RiwayatDokterScreen> {
                           title: Text(item['patient_name']?.toString() ?? 'Pasien'),
                           subtitle: Text(
                             '${item['chief_complaint'] ?? '-'}\n'
-                            'Diagnosis: ${item['diagnosis'] ?? 'Belum dicatat'}',
+                            'Prioritas: ${item['urgency'] ?? 'NORMAL'} • '
+                            'Selesai: ${item['ended_at'] ?? '-'}\n'
+                            'Diagnosis: ${item['diagnosis'] ?? 'Belum dicatat'}\n'
+                            'Catatan: ${item['notes'] ?? 'Belum dicatat'}',
                           ),
                           isThreeLine: true,
                           trailing: const Icon(Icons.chevron_right),

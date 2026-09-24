@@ -473,6 +473,7 @@ app.put(
 app.get('/v1/referrals/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    const caller = (req as AuthRequest).user;
     const result = await getPool().query(
       `SELECT r.*,
               p.name               AS patient_name,
@@ -494,6 +495,32 @@ app.get('/v1/referrals/:id', authenticate, async (req: Request, res: Response, n
     );
     if (!result.rows[0]) {
       res.status(404).json(buildProblem(404, 'Not Found', `Referral ${id} not found`, req.path));
+      return;
+    }
+    const referral = result.rows[0] as {
+      referring_doctor_id: string;
+      patient_id: string;
+    };
+    if (caller.role === 'DOCTOR') {
+      const doctor = await getPool().query<{ id: string }>(
+        'SELECT id FROM doctors WHERE user_id = $1',
+        [caller.sub],
+      );
+      if (doctor.rows[0]?.id !== referral.referring_doctor_id) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You are not the referring doctor for this referral', req.path));
+        return;
+      }
+    } else if (caller.role === 'PATIENT') {
+      const patient = await getPool().query<{ id: string }>(
+        'SELECT id FROM patients WHERE user_id = $1',
+        [caller.sub],
+      );
+      if (patient.rows[0]?.id !== referral.patient_id) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'This referral does not belong to you', req.path));
+        return;
+      }
+    } else if (!['ADMIN', 'COMMAND_CENTER'].includes(caller.role)) {
+      res.status(403).json(buildProblem(403, 'Forbidden', 'Insufficient permissions', req.path));
       return;
     }
     ok(res, result.rows[0]);
@@ -562,8 +589,16 @@ app.get('/v1/referrals', authenticate, async (req: Request, res: Response, next:
     const [dataRes, countRes] = await Promise.all([
       pool.query(
         `SELECT r.id, r.patient_id, r.from_hospital_id, r.to_hospital_id,
-                r.status, r.urgency_level, r.reason, r.sent_at, r.accepted_at, r.created_at
+                r.status, r.urgency_level, r.reason, r.diagnosis,
+                r.required_specialization, r.notes,
+                r.sent_at, r.accepted_at, r.rejected_reason, r.arrived_at, r.created_at,
+                p.name AS patient_name,
+                hf.name AS from_hospital_name,
+                ht.name AS to_hospital_name
          FROM referrals r
+         JOIN patients p ON p.id = r.patient_id
+         JOIN hospitals hf ON hf.id = r.from_hospital_id
+         JOIN hospitals ht ON ht.id = r.to_hospital_id
          ${where}
          ORDER BY r.created_at DESC
          LIMIT $${limitIdx} OFFSET $${offsetIdx}`,

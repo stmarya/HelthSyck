@@ -38,6 +38,8 @@ import 'features/dokter/screens/dashboard_dokter_screen.dart';
 import 'features/dokter/screens/consultation_detail_dokter_screen.dart';
 import 'features/dokter/screens/patient_clinical_screen.dart';
 import 'features/dokter/screens/prescription_create_screen.dart';
+import 'features/dokter/screens/prescription_detail_dokter_screen.dart';
+import 'features/dokter/screens/rujukan_dokter_screen.dart';
 import 'features/dokter/screens/riwayat_dokter_screen.dart';
 
 // ─────────────────────────────────────────────
@@ -122,6 +124,22 @@ GoRouter buildMultiRoleRouter(AuthState authState) {
         path: '/doctor/prescriptions/new/:consultationId/:patientId',
         builder: (_, s) => PrescriptionCreateScreen(
           consultationId: s.pathParameters['consultationId']!,
+          patientId: s.pathParameters['patientId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/prescriptions/:prescriptionId',
+        builder: (_, s) => PrescriptionDetailDokterScreen(
+          prescriptionId: s.pathParameters['prescriptionId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/doctor/referrals',
+        builder: (_, __) => const RujukanDokterScreen(),
+      ),
+      GoRoute(
+        path: '/doctor/referrals/new/:patientId',
+        builder: (_, s) => RujukanDokterScreen(
           patientId: s.pathParameters['patientId']!,
         ),
       ),
