@@ -3,24 +3,14 @@ name: HealthSync Admin and Services Validation
 on:
   push:
     branches: [main, copilot/admin-readiness-production-safe]
-    paths:
-      - '.github/workflows/healthsync-admin.yml'
-      - 'healthsync/package*.json'
-      - 'healthsync/packages/shared/**'
-      - 'healthsync/apps/admin/**'
-      - 'healthsync/services/**'
-      - 'healthsync/infra/db/**'
-      - 'healthsync/infra/docker/**'
+    paths: ['.github/workflows/healthsync-admin.yml', 'healthsync/package*.json', 'healthsync/packages/shared/**', 'healthsync/apps/admin/**', 'healthsync/services/**', 'healthsync/infra/db/**', 'healthsync/infra/docker/**']
   pull_request:
-    paths:
-      - '.github/workflows/healthsync-admin.yml'
-      - 'healthsync/package*.json'
-      - 'healthsync/packages/shared/**'
-      - 'healthsync/apps/admin/**'
-      - 'healthsync/services/**'
-      - 'healthsync/infra/db/**'
-      - 'healthsync/infra/docker/**'
+    paths: ['.github/workflows/healthsync-admin.yml', 'healthsync/package*.json', 'healthsync/packages/shared/**', 'healthsync/apps/admin/**', 'healthsync/services/**', 'healthsync/infra/db/**', 'healthsync/infra/docker/**']
   workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -53,15 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workspace:
-          - services/auth-service
-          - services/consultation-service
-          - services/hospital-service
-          - services/patient-service
-          - services/ambulance-service
-          - services/referral-service
-          - services/pharmacy-service
-          - services/prescription-service
+        workspace: [services/auth-service, services/consultation-service, services/hospital-service, services/patient-service, services/ambulance-service, services/referral-service, services/pharmacy-service, services/prescription-service]
     defaults: { run: { working-directory: healthsync } }
     steps:
       - uses: actions/checkout@v4
@@ -77,10 +59,7 @@ jobs:
     services:
       postgres:
         image: timescale/timescaledb:latest-pg15
-        env:
-          POSTGRES_USER: healthsync
-          POSTGRES_PASSWORD: healthsync_test
-          POSTGRES_DB: healthsync_test
+        env: { POSTGRES_USER: healthsync, POSTGRES_PASSWORD: healthsync_test, POSTGRES_DB: healthsync_test }
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U healthsync -d healthsync_test"
@@ -89,4 +68,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate all migrations from an empty database
-        run: bash infra/db/run_migrations.sh
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          set +e
+          bash infra/db/run_migrations.sh 2>&1 | tee /tmp/migrations.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            printf '### Database migration validation failed\n\n```text\n%s\n```\n' "$(tail -n 80 /tmp/migrations.log)" > /tmp/comment.md
+            gh pr comment 5 --body-file /tmp/comment.md || true
+          fi
+          exit "$status"
