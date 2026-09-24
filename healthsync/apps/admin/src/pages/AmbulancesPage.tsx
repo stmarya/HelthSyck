@@ -203,6 +203,7 @@ export default function AmbulancesPage() {
   const handleEditSubmit = async () => {
     if (!editRow) return;
     const normalizedPlate = form.plateNumber.trim().toUpperCase();
+    const currentPlate = (editRow.plate_number ?? '').trim().toUpperCase();
     if (!form.hospitalId) {
       showToast('ID Rumah Sakit wajib diisi', 'error');
       return;
@@ -219,7 +220,7 @@ export default function AmbulancesPage() {
     try {
       const payload: Record<string, string> = {};
       if (form.hospitalId  && form.hospitalId  !== editRow.hospital_id)  payload['hospitalId']  = form.hospitalId;
-      if (normalizedPlate !== (editRow.plate_number ?? ''))                payload['plateNumber'] = normalizedPlate;
+      if (normalizedPlate !== currentPlate)                                payload['plateNumber'] = normalizedPlate;
       if (form.type !== (editRow.type ?? 'BLS'))                           payload['type']        = form.type;
       if (form.driverId.trim() && form.driverId !== (editRow.driver_id ?? '')) payload['driverId'] = form.driverId.trim();
 

@@ -190,22 +190,27 @@ export default function PatientsPage() {
               </thead>
               <tbody>
                 {patients.map((p) => (
-                  <tr key={p.id} onClick={() => void handleSelectPatient(p)}>
-                    <td style={{ fontWeight: 600 }}>{p.name}</td>
-                    <td>{GENDER_LABEL[p.gender] ?? p.gender}</td>
-                    <td>{formatDate(p.date_of_birth)}</td>
-                    <td>{calcAge(p.date_of_birth) != null ? `${calcAge(p.date_of_birth)} th` : '—'}</td>
-                    <td>
-                      <span className={styles.badge} style={{
-                        background: BLOOD_COLOR[p.blood_type] + '20',
-                        color: BLOOD_COLOR[p.blood_type],
-                      }}>
-                        {p.blood_type}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>{p.phone ?? '—'}</td>
-                    <td style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>{formatDate(p.created_at)}</td>
-                  </tr>
+                  (() => {
+                    const age = calcAge(p.date_of_birth);
+                    return (
+                     <tr key={p.id} onClick={() => void handleSelectPatient(p)}>
+                       <td style={{ fontWeight: 600 }}>{p.name}</td>
+                       <td>{GENDER_LABEL[p.gender] ?? p.gender}</td>
+                       <td>{formatDate(p.date_of_birth)}</td>
+                       <td>{age != null ? `${age} th` : '—'}</td>
+                       <td>
+                         <span className={styles.badge} style={{
+                           background: BLOOD_COLOR[p.blood_type] + '20',
+                           color: BLOOD_COLOR[p.blood_type],
+                         }}>
+                           {p.blood_type}
+                         </span>
+                       </td>
+                       <td style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>{p.phone ?? '—'}</td>
+                       <td style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)' }}>{formatDate(p.created_at)}</td>
+                     </tr>
+                    );
+                  })()
                 ))}
               </tbody>
             </table>
@@ -240,6 +245,10 @@ export default function PatientsPage() {
             </div>
           ) : (
             <div style={{ fontSize: 'var(--text-sm)' }}>
+              {(() => {
+                const selectedAge = calcAge(selected.date_of_birth);
+                return (
+                  <>
               {/* Info Dasar */}
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Data Pribadi
@@ -251,10 +260,7 @@ export default function PatientsPage() {
                     { label: 'ID Pengguna', value: <code style={{ fontSize: 11 }}>{selected.user_id}</code> },
                     { label: 'Nama', value: selected.name },
                     { label: 'Jenis Kelamin', value: GENDER_LABEL[selected.gender] ?? selected.gender },
-                    {
-                      label: 'Tanggal Lahir',
-                      value: `${formatDate(selected.date_of_birth)}${calcAge(selected.date_of_birth) != null ? ` (${calcAge(selected.date_of_birth)} tahun)` : ''}`,
-                    },
+                    { label: 'Tanggal Lahir', value: `${formatDate(selected.date_of_birth)}${selectedAge != null ? ` (${selectedAge} tahun)` : ''}` },
                     { label: 'Golongan Darah', value: (
                       <span className={styles.badge} style={{ background: BLOOD_COLOR[selected.blood_type] + '20', color: BLOOD_COLOR[selected.blood_type] }}>
                         {selected.blood_type}
@@ -338,6 +344,9 @@ export default function PatientsPage() {
                   </div>
                 </>
               )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </Modal>

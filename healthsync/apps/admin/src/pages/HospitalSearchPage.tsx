@@ -61,6 +61,11 @@ function bedColor(available: number, total: number): string {
   return '#16a34a';
 }
 
+function getErrorMessage(err: unknown): string {
+  return (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    ?? (err instanceof Error ? err.message : 'Gagal melakukan pencarian rumah sakit');
+}
+
 function copyToClipboard(text: string, label: string, showToast: (m: string, t: 'success' | 'info') => void) {
   void navigator.clipboard.writeText(text).then(() => showToast(`${label} disalin ke clipboard`, 'success'));
 }
@@ -113,7 +118,7 @@ export default function HospitalSearchPage() {
       );
       setResults(res.data.data ?? []);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal melakukan pencarian rumah sakit';
+      const msg = getErrorMessage(err);
       showToast(msg, 'error');
       setError(msg);
       setResults([]);

@@ -714,10 +714,6 @@ export default function BedManagementPage() {
               onChange={(e) => setEditStatus(e.target.value as BedStatus)}
               options={STATUS_OPTIONS_EDIT}
             />
-            <div className={styles.warningBanner} style={{ marginBottom: 0 }}>
-              <span>⚠️</span>
-              <span>Status <strong>Terisi</strong> memerlukan patientId dari backend admisi dan belum bisa diubah dari Admin.</span>
-            </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => setEditBed(null)}>Batal</button>
               <button
