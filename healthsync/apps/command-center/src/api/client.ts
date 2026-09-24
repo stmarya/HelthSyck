@@ -1,8 +1,4 @@
-import axios, {
-  AxiosInstance,
-  AxiosError,
-  InternalAxiosRequestConfig,
-} from "axios";
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Token-refresh state (shared across all clients)
@@ -15,10 +11,7 @@ type RefreshSubscriber = {
 };
 let refreshSubscribers: RefreshSubscriber[] = [];
 
-function subscribeTokenRefresh(
-  resolve: (token: string) => void,
-  reject: (error: unknown) => void,
-) {
+function subscribeTokenRefresh(resolve: (token: string) => void, reject: (error: unknown) => void) {
   refreshSubscribers.push({ resolve, reject });
 }
 
@@ -43,69 +36,68 @@ function onRefreshFailed(error: unknown) {
 // Ini menghilangkan kebutuhan CORS header di setiap service.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE = "";
+const BASE = '';
 
-// Refresh harus memakai client mentah. Jika memakai authClient, request refresh
-// ikut masuk interceptor 401 dan dapat membuat deadlock saat token refresh juga
-// dianggap kedaluwarsa.
+// Refresh memakai client mentah agar request refresh tidak masuk interceptor
+// 401 yang sama dan membuat deadlock.
 const refreshClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const authClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const patientClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const consultationClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const alertClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const ambulanceClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const hospitalClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const referralClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const prescriptionClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 export const pharmacyClient = axios.create({
   baseURL: BASE,
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { 'Content-Type': 'application/json' },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,8 +107,8 @@ export const pharmacyClient = axios.create({
 function attachInterceptors(client: AxiosInstance) {
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-      const token = localStorage.getItem("hs_access_token");
-      if (token) config.headers["Authorization"] = `Bearer ${token}`;
+      const token = localStorage.getItem('hs_access_token');
+      if (token) config.headers['Authorization'] = `Bearer ${token}`;
       return config;
     },
     (error) => Promise.reject(error),
@@ -126,22 +118,14 @@ function attachInterceptors(client: AxiosInstance) {
     (response) => response,
     async (error: AxiosError) => {
       if (!error.config) return Promise.reject(error);
-      const originalRequest = error.config as InternalAxiosRequestConfig & {
-        _retry?: boolean;
-      };
+      const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+      const isRefreshRequest = originalRequest.url?.includes('/v1/auth/refresh') === true;
 
-      const isRefreshRequest =
-        originalRequest.url?.includes("/v1/auth/refresh") === true;
-
-      if (
-        error.response?.status === 401 &&
-        !originalRequest._retry &&
-        !isRefreshRequest
-      ) {
+      if (error.response?.status === 401 && !originalRequest._retry && !isRefreshRequest) {
         if (isRefreshing) {
           return new Promise((resolve, reject) => {
             subscribeTokenRefresh((token: string) => {
-              originalRequest.headers["Authorization"] = `Bearer ${token}`;
+              originalRequest.headers['Authorization'] = `Bearer ${token}`;
               resolve(client(originalRequest));
             }, reject);
           });
@@ -151,22 +135,20 @@ function attachInterceptors(client: AxiosInstance) {
         isRefreshing = true;
 
         try {
-          const refreshToken = localStorage.getItem("hs_refresh_token");
-          const { data } = await refreshClient.post("/v1/auth/refresh", {
-            refreshToken,
-          });
+          const refreshToken = localStorage.getItem('hs_refresh_token');
+          const { data } = await refreshClient.post('/v1/auth/refresh', { refreshToken });
           const newToken: string = data.data.accessToken;
-          localStorage.setItem("hs_access_token", newToken);
-          localStorage.setItem("hs_refresh_token", data.data.refreshToken);
+          localStorage.setItem('hs_access_token', newToken);
+          localStorage.setItem('hs_refresh_token', data.data.refreshToken);
           onRefreshed(newToken);
-          originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
           return client(originalRequest);
         } catch (refreshError) {
           onRefreshFailed(refreshError);
-          localStorage.removeItem("hs_access_token");
-          localStorage.removeItem("hs_refresh_token");
-          localStorage.removeItem("hs_user");
-          window.location.assign("/login");
+          localStorage.removeItem('hs_access_token');
+          localStorage.removeItem('hs_refresh_token');
+          localStorage.removeItem('hs_user');
+          window.location.assign('/login');
           return Promise.reject(refreshError);
         } finally {
           isRefreshing = false;
@@ -178,17 +160,8 @@ function attachInterceptors(client: AxiosInstance) {
   );
 }
 
-[
-  authClient,
-  patientClient,
-  consultationClient,
-  alertClient,
-  ambulanceClient,
-  hospitalClient,
-  referralClient,
-  prescriptionClient,
-  pharmacyClient,
-].forEach(attachInterceptors);
+[authClient, patientClient, consultationClient, alertClient, ambulanceClient, hospitalClient, referralClient, prescriptionClient, pharmacyClient]
+  .forEach(attachInterceptors);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default export kept for backward-compatibility with existing pages

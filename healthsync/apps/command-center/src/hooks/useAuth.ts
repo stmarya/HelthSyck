@@ -1,8 +1,7 @@
-import { useState, useCallback } from "react";
-import { authClient } from "../api/client";
+import { useState, useCallback } from 'react';
+import { authClient } from '../api/client';
 
-const ACCESS_DENIED_MESSAGE =
-  "Akses ditolak. Akun ini tidak memiliki izin untuk Command Center.";
+const ACCESS_DENIED_MESSAGE = 'Akses ditolak. Akun ini tidak memiliki izin untuk Command Center.';
 
 interface User {
   userId: string;
@@ -12,7 +11,7 @@ interface User {
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem("hs_user");
+    const stored = localStorage.getItem('hs_user');
     return stored ? (JSON.parse(stored) as User) : null;
   });
   const [loading, setLoading] = useState(false);
@@ -22,7 +21,7 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const res = await authClient.post("/v1/auth/login", { email, password });
+      const res = await authClient.post('/v1/auth/login', { email, password });
       const { accessToken, refreshToken, userId, role } = res.data.data as {
         accessToken: string;
         refreshToken: string;
@@ -31,25 +30,24 @@ export function useAuth() {
       };
 
       // Validasi role: hanya COMMAND_CENTER dan ADMIN yang boleh masuk
-      if (role !== "COMMAND_CENTER" && role !== "ADMIN") {
+      if (role !== 'COMMAND_CENTER' && role !== 'ADMIN') {
         setError(ACCESS_DENIED_MESSAGE);
         throw new Error(ACCESS_DENIED_MESSAGE);
       }
 
-      localStorage.setItem("hs_access_token", accessToken);
-      localStorage.setItem("hs_refresh_token", refreshToken);
+      localStorage.setItem('hs_access_token', accessToken);
+      localStorage.setItem('hs_refresh_token', refreshToken);
       const userData: User = { userId, email, role };
-      localStorage.setItem("hs_user", JSON.stringify(userData));
+      localStorage.setItem('hs_user', JSON.stringify(userData));
       setUser(userData);
       return userData;
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
-      // Jangan mengandalkan closure `error` di sini: state update React
-      // asynchronous, sehingga closure sebelumnya masih dapat bernilai null.
+      // React state update asynchronous; closure `error` bisa masih null.
       if (err instanceof Error && err.message === ACCESS_DENIED_MESSAGE) {
         setError(ACCESS_DENIED_MESSAGE);
       } else {
-        const msg = axiosErr.response?.data?.detail ?? "Login gagal";
+        const msg = axiosErr.response?.data?.detail ?? 'Login gagal';
         setError(msg);
       }
       throw err;
@@ -59,9 +57,9 @@ export function useAuth() {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("hs_access_token");
-    localStorage.removeItem("hs_refresh_token");
-    localStorage.removeItem("hs_user");
+    localStorage.removeItem('hs_access_token');
+    localStorage.removeItem('hs_refresh_token');
+    localStorage.removeItem('hs_user');
     setUser(null);
   }, []);
 
