@@ -275,7 +275,8 @@ class SimulationEngine {
   }
 
   private createConsultation(): void {
-    const doctor = this.pick(this.state.dokter.filter((d) => d.status !== 'Tidak Tersedia'));
+    const activeDoctors = this.state.dokter.filter((d) => d.status !== 'Tidak Tersedia');
+    const doctor = this.pick(activeDoctors.length > 0 ? activeDoctors : this.state.dokter);
     const patient = this.pick(this.state.pasien);
     const session: TeleconsultationSession = {
       id: `consult-${this.state.elapsedSeconds}-${++this.sequence}`,
