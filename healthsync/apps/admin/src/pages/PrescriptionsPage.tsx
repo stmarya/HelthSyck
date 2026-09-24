@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { prescriptionClient } from '../api/client';
-import type { Prescription, PrescriptionStatus, PaginationMeta } from '../types/admin';
+import type { PaginationMeta, Prescription } from '../types/admin';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import PageHeader from '../components/PageHeader';
@@ -8,30 +8,65 @@ import { SelectField } from '../components/FormField';
 import { Skeleton } from '../components/Skeleton';
 import styles from './Page.module.css';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Konstanta
-// ─────────────────────────────────────────────────────────────────────────────
+type PrescriptionStatus =
+  | 'ISSUED'
+  | 'SENT_TO_PHARMACY'
+  | 'CONFIRMED'
+  | 'PREPARING'
+  | 'READY'
+  | 'DELIVERING'
+  | 'DELIVERED'
+  | 'CANCELLED';
 
-const STATUS_OPTIONS: { value: PrescriptionStatus | ''; label: string }[] = [
-  { value: '',          label: 'Semua Status' },
-  { value: 'ISSUED',    label: 'Diterbitkan' },
-  { value: 'CONFIRMED', label: 'Dikonfirmasi' },
-  { value: 'DISPENSED', label: 'Disiapkan' },
-  { value: 'DELIVERED', label: 'Dikirim' },
+type PrescriptionRow = Omit<Prescription, 'status'> & { status: PrescriptionStatus };
+
+interface PrescriptionItem {
+  id: string;
+  drug_id: string;
+  quantity: number;
+  instructions: string | null;
+  generic_name: string | null;
+  brand_name: string | null;
+  dosage_form: string | null;
+  strength: string | null;
+}
+
+interface PrescriptionDetail extends PrescriptionRow {
+  items?: PrescriptionItem[];
+  patient_name?: string | null;
+  doctor_email?: string | null;
+}
+
+const STATUS_OPTIONS: Array<{ value: PrescriptionStatus | ''; label: string }> = [
+  { value: '', label: 'Semua Status' },
+  { value: 'ISSUED', label: 'Diterbitkan' },
+  { value: 'SENT_TO_PHARMACY', label: 'Dikirim ke Apotek' },
+  { value: 'PREPARING', label: 'Sedang Disiapkan' },
+  { value: 'READY', label: 'Siap Diserahkan' },
+  { value: 'DELIVERED', label: 'Selesai' },
   { value: 'CANCELLED', label: 'Dibatalkan' },
 ];
 
-const STATUS_STYLE: Record<PrescriptionStatus, { bg: string; color: string }> = {
-  ISSUED:    { bg: 'var(--color-info-bg)',    color: 'var(--color-primary)' },
-  CONFIRMED: { bg: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
-  DISPENSED: { bg: '#ede7f6',                 color: '#7b1fa2' },
-  DELIVERED: { bg: 'var(--color-success-bg)', color: 'var(--color-success)' },
-  CANCELLED: { bg: 'var(--color-danger-bg)',  color: 'var(--color-danger)' },
+const STATUS_LABEL: Record<PrescriptionStatus, string> = {
+  ISSUED: 'Diterbitkan',
+  SENT_TO_PHARMACY: 'Dikirim ke Apotek',
+  CONFIRMED: 'Dikonfirmasi',
+  PREPARING: 'Sedang Disiapkan',
+  READY: 'Siap Diserahkan',
+  DELIVERING: 'Dalam Pengiriman',
+  DELIVERED: 'Selesai',
+  CANCELLED: 'Dibatalkan',
 };
 
-const STATUS_LABEL: Record<PrescriptionStatus, string> = {
-  ISSUED: 'Diterbitkan', CONFIRMED: 'Dikonfirmasi',
-  DISPENSED: 'Disiapkan', DELIVERED: 'Dikirim', CANCELLED: 'Dibatalkan',
+const STATUS_STYLE: Record<PrescriptionStatus, { background: string; color: string }> = {
+  ISSUED: { background: 'var(--color-info-bg)', color: 'var(--color-primary)' },
+  SENT_TO_PHARMACY: { background: '#e0f2fe', color: '#0369a1' },
+  CONFIRMED: { background: 'var(--color-warning-bg)', color: 'var(--color-warning)' },
+  PREPARING: { background: '#ede9fe', color: '#6d28d9' },
+  READY: { background: '#ecfccb', color: '#3f6212' },
+  DELIVERING: { background: '#ffedd5', color: '#9a3412' },
+  DELIVERED: { background: 'var(--color-success-bg)', color: 'var(--color-success)' },
+  CANCELLED: { background: 'var(--color-danger-bg)', color: 'var(--color-danger)' },
 };
 
 const FULFILLMENT_LABEL: Record<string, string> = {
@@ -39,162 +74,125 @@ const FULFILLMENT_LABEL: Record<string, string> = {
   DELIVERY: 'Diantar',
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+function formatDateTime(value: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('id-ID', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PrescriptionsPage
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── Tipe prescription item dari GET /v1/prescriptions/:id ──
-interface PrescriptionItem {
-  id: string;
-  drug_id: string;
-  quantity: number;
-  dosage_instructions: string | null;
-  generic_name: string | null;
-  brand_name: string | null;
-  dosage_form: string | null;
-  strength: string | null;
-}
-
-interface PrescriptionDetail extends Prescription {
-  items?: PrescriptionItem[];
-  patient_name?: string | null;
-  doctor_email?: string | null;
+function getErrorMessage(error: unknown): string {
+  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    ?? (error instanceof Error ? error.message : 'Gagal memuat resep');
 }
 
 export default function PrescriptionsPage() {
   const { showToast } = useToast();
-
-  const [rows, setRows]         = useState<Prescription[]>([]);
-  const [meta, setMeta]         = useState<PaginationMeta | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
-
-  const [status, setStatus]     = useState<PrescriptionStatus | ''>('');
-  const [page, setPage]         = useState(1);
-  const [limit]                 = useState(20);
-
-  const [selected, setSelected]       = useState<PrescriptionDetail | null>(null);
+  const [rows, setRows] = useState<PrescriptionRow[]>([]);
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<PrescriptionStatus | ''>('');
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<PrescriptionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const limit = 20;
 
-  // ── Fetch ──
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
       if (status) params.set('status', status);
-
-      const res = await prescriptionClient.get<{
-        data: Prescription[];
-        meta: PaginationMeta;
-      }>(`/v1/prescriptions?${params.toString()}`);
-
-      setRows(res.data.data ?? []);
-      setMeta(res.data.meta ?? null);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal memuat resep';
-      setError(msg);
-      showToast(msg, 'error');
+      const response = await prescriptionClient.get<{ data: PrescriptionRow[]; meta: PaginationMeta }>(
+        `/v1/prescriptions?${params.toString()}`,
+      );
+      setRows(response.data.data ?? []);
+      setMeta(response.data.meta ?? null);
+    } catch (fetchError) {
+      const message = getErrorMessage(fetchError);
+      setError(message);
+      setRows([]);
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [page, limit, status, showToast]);
+  }, [page, status, showToast]);
 
   useEffect(() => { void fetchData(); }, [fetchData]);
   useEffect(() => { setPage(1); }, [status]);
 
-  // ── Fetch detail + items saat row diklik ──
-  const openDetail = useCallback(async (row: Prescription) => {
+  const openDetail = useCallback(async (row: PrescriptionRow) => {
     setSelected(row);
     setDetailLoading(true);
     try {
-      const res = await prescriptionClient.get<{ data: PrescriptionDetail }>(
+      const response = await prescriptionClient.get<{ data: PrescriptionDetail }>(
         `/v1/prescriptions/${row.id}`,
       );
-      setSelected(res.data.data);
-    } catch {
-      // Tetap tampilkan data list jika detail gagal
+      setSelected(response.data.data);
+    } catch (detailError) {
+      showToast(getErrorMessage(detailError), 'error');
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
-  // ── Stat Cards ──
-  const stats = STATUS_OPTIONS.slice(1).map((opt) => ({
-    label: opt.label,
-    count: rows.filter((r) => r.status === opt.value).length,
-    style: STATUS_STYLE[opt.value as PrescriptionStatus],
-  }));
+  const currentPageStats = Object.entries(STATUS_LABEL).map(([value, label]) => ({
+    value: value as PrescriptionStatus,
+    label,
+    count: rows.filter((row) => row.status === value).length,
+  })).filter((item) => item.count > 0);
 
-  // ── Render ──
   return (
     <div className={styles.page}>
       <PageHeader
         title="Manajemen Resep"
+        subtitle="Status mengikuti siklus resep pada prescription-service"
         breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Resep' }]}
       />
 
-      {/* ── Stat Cards ── */}
-      <div className={styles.statGrid}>
-        {stats.map((s) => (
-          <div key={s.label} className={styles.statCard}>
-            <div className={styles.statValue} style={{ fontSize: 28, color: s.style.color }}>
-              {s.count}
+      {currentPageStats.length > 0 && (
+        <div className={styles.statGrid}>
+          {currentPageStats.map((item) => (
+            <div key={item.value} className={styles.statCard}>
+              <div className={styles.statValue} style={{ color: STATUS_STYLE[item.value].color }}>{item.count}</div>
+              <div className={styles.statLabel}>{item.label} (halaman ini)</div>
             </div>
-            <div className={styles.statLabel}>{s.label}</div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* ── Filter ── */}
       <div className={styles.card}>
         <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ flex: '0 1 200px' }}>
+          <div style={{ flex: '0 1 240px' }}>
             <SelectField
               label="Filter Status"
               value={status}
-              onChange={(e) => setStatus(e.target.value as PrescriptionStatus | '')}
+              onChange={(event) => setStatus(event.target.value as PrescriptionStatus | '')}
               options={STATUS_OPTIONS}
             />
           </div>
-          <button
-            className={`${styles.btn} ${styles.btnOutline}`}
-            onClick={() => { setStatus(''); setPage(1); }}
-          >Reset</button>
-          <button
-            className={`${styles.btn} ${styles.btnPrimary}`}
-            onClick={fetchData}
-            style={{ marginLeft: 'auto' }}
-          >↻ Muat Ulang</button>
+          <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => setStatus('')}>Reset</button>
+          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void fetchData()} style={{ marginLeft: 'auto' }}>
+            ↻ Muat Ulang
+          </button>
         </div>
+        <p style={{ margin: '10px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-muted)' }}>
+          Ringkasan di atas hanya menghitung data pada halaman aktif. Status transisi tetap ditampilkan pada tabel meskipun belum tersedia sebagai filter backend.
+        </p>
       </div>
 
-      {/* ── Tabel ── */}
       <div className={styles.card} style={{ padding: 0 }}>
         {loading ? (
           <div style={{ padding: 'var(--space-6)' }}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} height={36} style={{ marginBottom: 'var(--space-2)' }} />
-            ))}
+            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} height={36} style={{ marginBottom: 'var(--space-2)' }} />)}
           </div>
         ) : error ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>⚠️</div>
             <div className={styles.emptyTitle}>Gagal memuat data</div>
             <div className={styles.emptyDesc}>{error}</div>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={fetchData}>Coba Lagi</button>
+            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void fetchData()}>Coba Lagi</button>
           </div>
         ) : rows.length === 0 ? (
           <div className={styles.emptyState}>
@@ -205,46 +203,17 @@ export default function PrescriptionsPage() {
         ) : (
           <div className={styles.tableWrapper}>
             <table className={`${styles.table} ${styles.tableHover} ${styles.tableClickable}`}>
-              <thead>
-                <tr>
-                  <th>ID Resep</th>
-                  <th>ID Konsultasi</th>
-                  <th>Status</th>
-                  <th>Cara Pengambilan</th>
-                  <th>Diterbitkan</th>
-                  <th>Kedaluwarsa</th>
-                  <th>Catatan</th>
-                </tr>
-              </thead>
+              <thead><tr><th>ID Resep</th><th>ID Konsultasi</th><th>Status</th><th>Cara Pengambilan</th><th>Diterbitkan</th><th>Kedaluwarsa</th><th>Catatan</th></tr></thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id} onClick={() => { void openDetail(row); }}>
-                    <td style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)', color: 'var(--color-muted)' }}>
-                      {row.id.slice(0, 8)}…
-                    </td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 'var(--text-xs)', color: 'var(--color-muted)' }}>
-                      {row.consultation_id.slice(0, 8)}…
-                    </td>
-                    <td>
-                      <span className={styles.badge} style={STATUS_STYLE[row.status]}>
-                        {STATUS_LABEL[row.status]}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 'var(--text-sm)' }}>
-                      {row.fulfillment_type ? FULFILLMENT_LABEL[row.fulfillment_type] ?? row.fulfillment_type : '—'}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: 'var(--text-sm)' }}>
-                      {formatDateTime(row.issued_at)}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
-                      {formatDateTime(row.expires_at)}
-                    </td>
-                    <td style={{
-                      maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap', fontSize: 'var(--text-sm)', color: 'var(--color-muted)',
-                    }}>
-                      {row.notes ?? '—'}
-                    </td>
+                    <td><code>{row.id.slice(0, 8)}…</code></td>
+                    <td><code>{row.consultation_id.slice(0, 8)}…</code></td>
+                    <td><span className={styles.badge} style={STATUS_STYLE[row.status]}>{STATUS_LABEL[row.status]}</span></td>
+                    <td>{row.fulfillment_type ? FULFILLMENT_LABEL[row.fulfillment_type] ?? row.fulfillment_type : '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.issued_at)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.expires_at)}</td>
+                    <td>{row.notes ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -253,106 +222,61 @@ export default function PrescriptionsPage() {
         )}
 
         {meta && meta.totalPages > 1 && (
-          <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: 'var(--space-3) var(--space-4)',
-            borderTop: '1px solid var(--color-border)',
-            fontSize: 'var(--text-sm)', color: 'var(--color-muted)',
-          }}>
-            <span>Total: {meta.total} resep</span>
-            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              <button
-                className={`${styles.btn} ${styles.btnSm} ${styles.btnOutline}`}
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >← Sebelumnya</button>
-              <span style={{ lineHeight: '28px' }}>Hal. {page} / {meta.totalPages}</span>
-              <button
-                className={`${styles.btn} ${styles.btnSm} ${styles.btnOutline}`}
-                disabled={page >= meta.totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >Berikutnya →</button>
+          <div className={styles.pagination}>
+            <span className={styles.paginationInfo}>Total: {meta.total} resep</span>
+            <div className={styles.paginationControls}>
+              <button className={styles.pageBtn} disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>‹</button>
+              <span style={{ lineHeight: '32px' }}>{page} / {meta.totalPages}</span>
+              <button className={styles.pageBtn} disabled={page >= meta.totalPages} onClick={() => setPage((value) => value + 1)}>›</button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Modal Detail ── */}
       {selected && (
-        <Modal open onClose={() => setSelected(null)} title={`Detail Resep — ${selected.id.slice(0, 8)}…`} width={560}>
-          {/* Info dasar */}
+        <Modal open onClose={() => setSelected(null)} title={`Detail Resep — ${selected.id.slice(0, 8)}…`} width={620}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
             <tbody>
               {[
-                { label: 'ID Resep', value: <code style={{ fontSize: 'var(--text-xs)' }}>{selected.id}</code> },
-                { label: 'ID Konsultasi', value: <code style={{ fontSize: 'var(--text-xs)' }}>{selected.consultation_id}</code> },
-                { label: 'Pasien', value: selected.patient_name ?? selected.patient_id },
-                { label: 'Dokter', value: selected.doctor_email ?? selected.doctor_id },
-                { label: 'ID Apotek', value: selected.pharmacy_id ?? '—' },
-                { label: 'Status', value: (
-                  <span className={styles.badge} style={STATUS_STYLE[selected.status]}>
-                    {STATUS_LABEL[selected.status]}
-                  </span>
-                )},
-                { label: 'Cara Pengambilan', value: selected.fulfillment_type ? FULFILLMENT_LABEL[selected.fulfillment_type] ?? selected.fulfillment_type : '—' },
-                { label: 'Alamat Pengiriman', value: selected.delivery_address ?? '—' },
-                { label: 'Catatan', value: selected.notes ?? '—' },
-                { label: 'Diterbitkan', value: formatDateTime(selected.issued_at) },
-                { label: 'Kedaluwarsa', value: formatDateTime(selected.expires_at) },
-                { label: 'Diperbarui', value: formatDateTime(selected.updated_at) },
-              ].map(({ label, value }) => (
+                ['ID Resep', selected.id],
+                ['ID Konsultasi', selected.consultation_id],
+                ['Pasien', selected.patient_name ?? selected.patient_id],
+                ['Dokter', selected.doctor_email ?? selected.doctor_id],
+                ['ID Apotek', selected.pharmacy_id ?? '—'],
+                ['Status', STATUS_LABEL[selected.status]],
+                ['Cara Pengambilan', selected.fulfillment_type ? FULFILLMENT_LABEL[selected.fulfillment_type] ?? selected.fulfillment_type : '—'],
+                ['Alamat Pengiriman', selected.delivery_address ?? '—'],
+                ['Catatan', selected.notes ?? '—'],
+                ['Diterbitkan', formatDateTime(selected.issued_at)],
+                ['Kedaluwarsa', formatDateTime(selected.expires_at)],
+              ].map(([label, value]) => (
                 <tr key={label} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-muted)', fontWeight: 600, width: '40%' }}>{label}</td>
-                  <td style={{ padding: 'var(--space-2) var(--space-3)' }}>{value}</td>
+                  <td style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-muted)', fontWeight: 600, width: '36%' }}>{label}</td>
+                  <td style={{ padding: 'var(--space-2) var(--space-3)', wordBreak: 'break-word' }}>{value}</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {/* Daftar obat */}
           <div style={{ marginTop: 'var(--space-4)' }}>
-            <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', marginBottom: 'var(--space-2)', color: 'var(--color-text)' }}>
-              Daftar Obat
-            </div>
-            {detailLoading ? (
-              <Skeleton height={80} />
-            ) : selected.items && selected.items.length > 0 ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--text-sm)' }}>
-                <thead>
-                  <tr style={{ background: 'var(--color-surface)', borderBottom: '2px solid var(--color-border)' }}>
-                    <th style={{ padding: 'var(--space-2) var(--space-3)', textAlign: 'left', fontWeight: 600, color: 'var(--color-muted)' }}>Nama Obat</th>
-                    <th style={{ padding: 'var(--space-2) var(--space-3)', textAlign: 'left', fontWeight: 600, color: 'var(--color-muted)' }}>Bentuk / Kekuatan</th>
-                    <th style={{ padding: 'var(--space-2) var(--space-3)', textAlign: 'right', fontWeight: 600, color: 'var(--color-muted)' }}>Jumlah</th>
-                    <th style={{ padding: 'var(--space-2) var(--space-3)', textAlign: 'left', fontWeight: 600, color: 'var(--color-muted)' }}>Instruksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.items.map((item) => (
-                    <tr key={item.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: 'var(--space-2) var(--space-3)' }}>
-                        <div style={{ fontWeight: 600 }}>{item.generic_name ?? '—'}</div>
-                        {item.brand_name && (
-                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)' }}>{item.brand_name}</div>
-                        )}
-                      </td>
-                      <td style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-muted)', fontSize: 'var(--text-xs)' }}>
-                        {[item.dosage_form, item.strength].filter(Boolean).join(' — ') || '—'}
-                      </td>
-                      <td style={{ padding: 'var(--space-2) var(--space-3)', textAlign: 'right', fontWeight: 600 }}>
-                        {item.quantity}
-                      </td>
-                      <td style={{ padding: 'var(--space-2) var(--space-3)', color: 'var(--color-muted)', fontSize: 'var(--text-xs)' }}>
-                        {item.dosage_instructions ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ color: 'var(--color-muted)', fontSize: 'var(--text-sm)', padding: 'var(--space-3)' }}>
-                Tidak ada obat dalam resep ini.
+            <strong>Daftar Obat</strong>
+            {detailLoading ? <Skeleton height={80} style={{ marginTop: 8 }} /> : selected.items?.length ? (
+              <div className={styles.tableWrapper} style={{ marginTop: 8 }}>
+                <table className={styles.table}>
+                  <thead><tr><th>Nama Obat</th><th>Bentuk / Kekuatan</th><th>Jumlah</th><th>Instruksi</th></tr></thead>
+                  <tbody>
+                    {selected.items.map((item) => (
+                      <tr key={item.id}>
+                        <td><strong>{item.generic_name ?? '—'}</strong>{item.brand_name ? <div>{item.brand_name}</div> : null}</td>
+                        <td>{[item.dosage_form, item.strength].filter(Boolean).join(' — ') || '—'}</td>
+                        <td>{item.quantity}</td>
+                        <td>{item.instructions ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
+            ) : <p style={{ color: 'var(--color-muted)' }}>Tidak ada obat dalam resep ini.</p>}
           </div>
         </Modal>
       )}
