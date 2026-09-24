@@ -51,10 +51,12 @@ let redisConnectPromise: Promise<void> | null = null;
 
 async function ensureRedis(): Promise<void> {
   if (redis.status === 'ready') return;
-  if (redis.status !== 'wait') throw new Error(`Redis belum siap: ${redis.status}`);
-  redisConnectPromise ??= redis.connect().then(() => undefined).finally(() => { redisConnectPromise = null; });
-  await redisConnectPromise;
-  if (redis.status !== 'ready') throw new Error(`Redis gagal siap: ${redis.status}`);
+  if (redisConnectPromise) await redisConnectPromise;
+  else if (redis.status === 'wait') {
+    redisConnectPromise = redis.connect().then(() => undefined).finally(() => { redisConnectPromise = null; });
+    await redisConnectPromise;
+  }
+  if (redis.status !== 'ready') throw new Error(`Redis belum siap: ${redis.status}`);
 }
 
 async function auditEvent(action: string, client: Client, details: Record<string, unknown>): Promise<void> {
@@ -142,8 +144,10 @@ function handle(client: Client, message: Incoming): void {
 
   if (message.type === 'chat.history') {
     const conversationId = String(payload.conversationId ?? '');
-    const belongsToClient = conversationId.includes(client.userId) || Boolean(client.entityId && conversationId.includes(client.entityId));
-    if (!conversationId || (!isOperator(client) && !belongsToClient)) return sendError(client, requestId, 'FORBIDDEN', 'Conversation tidak diizinkan');
+    const participants = conversationId.split(':').filter(Boolean);
+    const belongsToClient = participants.includes(client.userId) || Boolean(client.entityId && participants.includes(client.entityId));
+    const hasOperatorParticipant = participants.some((participant) => [...clients].some((target) => matchesTarget(target, participant) && isOperator(target)));
+    if (!conversationId || (!isOperator(client) && (!belongsToClient || !hasOperatorParticipant))) return sendError(client, requestId, 'FORBIDDEN', 'Conversation tidak diizinkan');
     void loadChat(conversationId).then((messages) => send(client, { type: 'chat.history', requestId, payload: { conversationId, messages } }));
     return;
   }
@@ -152,7 +156,8 @@ function handle(client: Client, message: Incoming): void {
     const recipientId = String(payload.recipientId ?? '');
     const body = String(payload.body ?? '').trim();
     const conversationId = String(payload.conversationId ?? [client.userId, recipientId].sort().join(':'));
-    const validConversation = isOperator(client) || conversationId.includes(client.userId) || conversationId.includes(recipientId);
+    const participants = conversationId.split(':').filter(Boolean);
+    const validConversation = isOperator(client) || (participants.includes(client.userId) && participants.includes(recipientId));
     if (!recipientId || !body || body.length > MAX_MESSAGE_LENGTH) return sendError(client, requestId, 'INVALID_MESSAGE', 'recipientId dan body valid wajib diisi');
     if (!validConversation || !canCommunicate(client, recipientId)) return sendError(client, requestId, 'FORBIDDEN', 'Target komunikasi tidak diizinkan');
     const chat = { id: crypto.randomUUID(), conversationId, senderId: client.userId, senderRole: client.role, recipientId, body, sentAt: new Date().toISOString() };
