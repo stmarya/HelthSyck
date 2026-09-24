@@ -5,6 +5,7 @@ import { simulationEngine } from '../simulation/SimulationEngine';
 import type { EmergencyCase, SimEvent, SimState } from '../simulation/SimulationEngine';
 import { useToast } from '../context/ToastContext';
 import CommunicationPanel, { type CommunicationContact } from '../components/CommunicationPanel';
+import OperationalControlTower from '../components/OperationalControlTower';
 import { SEED_APOTEK } from '../simulation/SimulationData';
 import styles from './Page.module.css';
 
@@ -181,6 +182,7 @@ export default function CommandCenterPage() {
         </div>
       </div>
 
+      <OperationalControlTower />
       <CommunicationPanel contacts={communicationContacts} />
     </div>
   );
