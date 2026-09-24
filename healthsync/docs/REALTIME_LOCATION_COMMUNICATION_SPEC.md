@@ -35,3 +35,11 @@ Produksi perlu menambahkan policy stale-location: `>15s` warning, `>60s` stale/c
 - Realtime service memakai JWT yang sama dengan auth-service dan Redis internal network.
 - Tambahkan rate limit, payload size limit, tenant checks, audit event, disconnect on token expiry, dan monitoring delivery latency sebelum production.
 - Endpoint health hanya menyatakan gateway hidup; readiness Redis dan dependency authorization perlu menjadi health/readiness check terpisah.
+
+## Mobile driver dan ambulans
+
+Mobile dashboard driver dan ambulans menjalankan `RealtimeLocationTracker` setelah session authenticated. Tracker meminta permission lokasi, memakai `distanceFilter: 10m`, dan mengirim `DRIVER` atau `AMBULANCE` ke gateway melalui WebSocket. URL produksi harus diberikan lewat `REALTIME_WS_URL` dan wajib menggunakan `wss://`.
+
+Perubahan role mobile memisahkan `DRIVER` dari `AMBULANCE_DRIVER` dan menambahkan route guard. Data user lama dengan role `AMBULANCE_DRIVER` harus dimigrasikan ke role driver atau ambulans yang tepat; tanpa migrasi, user lama akan masuk mode ambulans.
+
+Native release tetap harus menambahkan permission lokasi foreground/background pada Android/iOS dan menjalankan `flutter pub get`, `flutter analyze`, serta build device nyata sebelum pilot operasional.
