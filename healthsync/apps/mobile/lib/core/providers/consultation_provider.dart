@@ -145,7 +145,7 @@ class ConsultationNotifier extends StateNotifier<ConsultationsState> {
   Future<ConsultationMessage?> sendMessage({
     required String consultationId,
     required String content,
-    String messageType = 'text',
+    String messageType = 'TEXT',
   }) async {
     try {
       final response = await _api.post(
