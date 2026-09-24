@@ -11,7 +11,9 @@
   padding: 0;
 }
 
-img, video, svg {
+img,
+video,
+svg {
   display: block;
   max-width: 100%;
 }
@@ -21,154 +23,179 @@ button {
   cursor: pointer;
 }
 
-input, select, textarea {
+input,
+select,
+textarea {
   font: inherit;
 }
 
 /* ── Design Tokens — diselaraskan dengan admin panel (HackerEarth style) ── */
 :root {
   /* Warna Utama */
-  --color-primary:        #2563EB;
-  --color-primary-dark:   #1D4ED8;
-  --color-primary-light:  #DBEAFE;
-  --color-primary-glow:   rgba(37, 99, 235, 0.12);
-  --color-accent:         #7C3AED;
-  --color-accent-dark:    #6D28D9;
-  --color-accent-light:   #EDE9FE;
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-light: #dbeafe;
+  --color-primary-glow: rgba(37, 99, 235, 0.12);
+  --color-accent: #7c3aed;
+  --color-accent-dark: #6d28d9;
+  --color-accent-light: #ede9fe;
 
   /* Semantik */
-  --color-success:        #16A34A;
-  --color-success-bg:     #F0FDF4;
-  --color-success-border: #BBF7D0;
-  --color-warning:        #D97706;
-  --color-warning-bg:     #FFFBEB;
-  --color-warning-border: #FDE68A;
-  --color-danger:         #DC2626;
-  --color-danger-bg:      #FEF2F2;
-  --color-danger-border:  #FECACA;
-  --color-info:           #0284C7;
-  --color-info-bg:        #F0F9FF;
-  --color-info-border:    #BAE6FD;
+  --color-success: #16a34a;
+  --color-success-bg: #f0fdf4;
+  --color-success-border: #bbf7d0;
+  --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-info: #0284c7;
+  --color-info-bg: #f0f9ff;
+  --color-info-border: #bae6fd;
 
   /* Latar & Surface — putih bersih seperti referensi HackerEarth */
-  --color-bg:             #FFFFFF;
-  --color-surface:        #FFFFFF;
-  --color-surface-2:      #F9FAFB;
-  --color-surface-hover:  #F3F4F6;
-  --color-surface-glass:  rgba(255, 255, 255, 0.95);
-  --color-border:         #E5E7EB;
-  --color-border-focus:   #2563EB;
-  --color-border-strong:  #D1D5DB;
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #f9fafb;
+  --color-surface-hover: #f3f4f6;
+  --color-surface-glass: rgba(255, 255, 255, 0.95);
+  --color-border: #e5e7eb;
+  --color-border-focus: #2563eb;
+  --color-border-strong: #d1d5db;
 
   /* Teks */
-  --color-text:           #111827;
+  --color-text: #111827;
   --color-text-secondary: #374151;
-  --color-muted:          #6B7280;
-  --color-disabled:       #9CA3AF;
+  --color-muted: #6b7280;
+  --color-disabled: #9ca3af;
 
   /* Sidebar dark chrome */
-  --sidebar-bg:           #1a1d2e;
-  --sidebar-text:         rgba(255,255,255,0.55);
-  --sidebar-text-hover:   rgba(255,255,255,0.90);
-  --sidebar-border:       rgba(255,255,255,0.07);
-  --sidebar-active-bg:    rgba(124,58,237,0.15);
-  --sidebar-active-text:  #a78bfa;
-  --sidebar-active-bar:   #7c5cd8;
-  --sidebar-hover-bg:     rgba(255,255,255,0.05);
+  --sidebar-bg: #1a1d2e;
+  --sidebar-text: rgba(255, 255, 255, 0.55);
+  --sidebar-text-hover: rgba(255, 255, 255, 0.9);
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-active-bg: rgba(124, 58, 237, 0.15);
+  --sidebar-active-text: #a78bfa;
+  --sidebar-active-bar: #7c5cd8;
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
 
   /* Spacing */
-  --space-1:  4px;  --space-2:  8px;  --space-3: 12px;
-  --space-4: 16px;  --space-5: 20px;  --space-6: 24px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
 
   /* Tipografi */
-  --text-xs:   11px;  --text-sm:  12px;  --text-base: 14px;
-  --text-md:   15px;  --text-lg:  16px;  --text-xl:   18px;
-  --text-2xl:  22px;  --text-3xl: 26px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --text-3xl: 26px;
 
   /* Border Radius — kecil seperti referensi */
-  --radius-sm:   4px;
-  --radius-md:   6px;
-  --radius-lg:   8px;
-  --radius-xl:  10px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
   --radius-2xl: 12px;
   --radius-full: 9999px;
 
   /* Shadow — minimal */
-  --shadow-xs:  0 1px 2px rgba(0,0,0,0.04);
-  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:  0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.04);
-  --shadow-lg:  0 10px 15px -3px rgba(0,0,0,0.07), 0 4px 6px -4px rgba(0,0,0,0.04);
-  --shadow-primary: 0 4px 12px rgba(37, 99, 235, 0.20);
-  --shadow-danger:  0 4px 12px rgba(220, 38, 38, 0.20);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md:
+    0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg:
+    0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --shadow-primary: 0 4px 12px rgba(37, 99, 235, 0.2);
+  --shadow-danger: 0 4px 12px rgba(220, 38, 38, 0.2);
 
   /* Transisi */
-  --transition-fast:   0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow:   0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Layout */
-  --topbar-height:           56px;
-  --sidebar-width:           240px;
+  --topbar-height: 56px;
+  --sidebar-width: 240px;
   --sidebar-collapsed-width: 60px;
 
   /* Z-Index */
-  --z-sidebar:  100;
-  --z-topbar:   200;
+  --z-sidebar: 100;
+  --z-topbar: 200;
   --z-dropdown: 300;
-  --z-modal:    400;
-  --z-toast:    500;
+  --z-modal: 400;
+  --z-toast: 500;
 }
 
 /* ── Deteksi preferensi sistem — default dark mode jika sistem dark ── */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-bg:             #0f1117;
-    --color-surface:        #161b27;
-    --color-surface-2:      #1c2333;
-    --color-surface-hover:  #212940;
-    --color-surface-glass:  rgba(22, 27, 39, 0.95);
-    --color-border:         rgba(255,255,255,0.08);
-    --color-border-strong:  rgba(255,255,255,0.14);
-    --color-border-focus:   #60a5fa;
-    --color-text:           #F1F5F9;
-    --color-text-secondary: #CBD5E1;
-    --color-muted:          #94A3B8;
-    --color-disabled:       #64748B;
-    --color-success-bg:     rgba(16,163,74,0.12);
-    --color-success-border: rgba(16,163,74,0.30);
-    --color-warning-bg:     rgba(217,119,6,0.12);
-    --color-warning-border: rgba(217,119,6,0.30);
-    --color-danger-bg:      rgba(220,38,38,0.12);
-    --color-danger-border:  rgba(220,38,38,0.30);
-    --color-info-bg:        rgba(2,132,199,0.12);
-    --color-info-border:    rgba(2,132,199,0.30);
+    --color-bg: #0f1117;
+    --color-surface: #161b27;
+    --color-surface-2: #1c2333;
+    --color-surface-hover: #212940;
+    --color-surface-glass: rgba(22, 27, 39, 0.95);
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-border-strong: rgba(255, 255, 255, 0.14);
+    --color-border-focus: #60a5fa;
+    --color-text: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-muted: #94a3b8;
+    --color-disabled: #64748b;
+    --color-success-bg: rgba(16, 163, 74, 0.12);
+    --color-success-border: rgba(16, 163, 74, 0.3);
+    --color-warning-bg: rgba(217, 119, 6, 0.12);
+    --color-warning-border: rgba(217, 119, 6, 0.3);
+    --color-danger-bg: rgba(220, 38, 38, 0.12);
+    --color-danger-border: rgba(220, 38, 38, 0.3);
+    --color-info-bg: rgba(2, 132, 199, 0.12);
+    --color-info-border: rgba(2, 132, 199, 0.3);
   }
 }
 
 /* ── Dark Mode (manual toggle via data-theme) ── */
 [data-theme="dark"] {
-  --color-bg:             #0f1117;
-  --color-surface:        #161b27;
-  --color-surface-2:      #1c2333;
-  --color-surface-hover:  #212940;
-  --color-surface-glass:  rgba(22, 27, 39, 0.95);
-  --color-border:         rgba(255,255,255,0.08);
-  --color-border-strong:  rgba(255,255,255,0.14);
-  --color-border-focus:   #60a5fa;
-  --color-text:           #F1F5F9;
-  --color-text-secondary: #CBD5E1;
-  --color-muted:          #94A3B8;
-  --color-disabled:       #64748B;
+  /* War-room palette: plum canvas, warm peach emphasis, muted lavender */
+  --color-primary: #e89477;
+  --color-primary-dark: #cf745d;
+  --color-primary-light: rgba(232, 148, 119, 0.16);
+  --color-primary-glow: rgba(232, 148, 119, 0.16);
+  --color-accent: #ad91b8;
+  --color-accent-dark: #92759e;
+  --color-accent-light: rgba(173, 145, 184, 0.16);
+  --color-bg: #19151f;
+  --color-surface: #24202e;
+  --color-surface-2: #2b2636;
+  --color-surface-hover: #342e40;
+  --color-surface-glass: rgba(36, 32, 46, 0.96);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.16);
+  --color-border-focus: #e89477;
+  --color-text: #fff7f3;
+  --color-text-secondary: #eadde2;
+  --color-muted: #b2a4b1;
+  --color-disabled: #7c7180;
+  --color-success: #71c99e;
+  --color-warning: #e5c887;
+  --color-danger: #f07c70;
+  --color-info: #82b6d8;
 
   /* Surface override untuk card, table, form */
-  --color-success-bg:     rgba(16,163,74,0.12);
-  --color-success-border: rgba(16,163,74,0.30);
-  --color-warning-bg:     rgba(217,119,6,0.12);
-  --color-warning-border: rgba(217,119,6,0.30);
-  --color-danger-bg:      rgba(220,38,38,0.12);
-  --color-danger-border:  rgba(220,38,38,0.30);
-  --color-info-bg:        rgba(2,132,199,0.12);
-  --color-info-border:    rgba(2,132,199,0.30);
+  --color-success-bg: rgba(16, 163, 74, 0.12);
+  --color-success-border: rgba(16, 163, 74, 0.3);
+  --color-warning-bg: rgba(217, 119, 6, 0.12);
+  --color-warning-border: rgba(217, 119, 6, 0.3);
+  --color-danger-bg: rgba(220, 38, 38, 0.12);
+  --color-danger-border: rgba(220, 38, 38, 0.3);
+  --color-info-bg: rgba(2, 132, 199, 0.12);
+  --color-info-border: rgba(2, 132, 199, 0.3);
 }
 
 /* ── Dark Mode: komponen override ── */
@@ -188,6 +215,16 @@ input, select, textarea {
   background: var(--color-surface-2) !important;
   border-color: var(--color-border) !important;
   color: var(--color-text) !important;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
 }
 
 body {
@@ -210,7 +247,9 @@ a:hover {
   color: var(--color-primary-dark);
 }
 
-:focus { outline: none; }
+:focus {
+  outline: none;
+}
 
 :focus-visible {
   outline: 2px solid var(--color-border-focus);
@@ -218,8 +257,13 @@ a:hover {
   border-radius: var(--radius-sm);
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: var(--radius-full);
@@ -227,101 +271,199 @@ a:hover {
 
 /* ── Animasi Global ── */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes countUp {
-  from { opacity: 0; transform: translateY(8px) scale(0.9); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes pulseDot {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50%       { transform: scale(1.3); opacity: 0.7; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* ── Animasi tambahan — digunakan oleh komponen (NavBar, AuditLogPanel, GlobalSearch, dst.) ── */
 
 /* Badge notifikasi — berdetak perlahan */
 @keyframes pulseBadge {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
-  50%       { transform: scale(1.1); box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0);
+  }
 }
 
 /* Skeleton shimmer — loading state */
 @keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 /* Slide-in dari kanan — digunakan AuditLogPanel */
 @keyframes slideInRight {
-  from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 /* Fade overlay gelap — digunakan panel modal */
 @keyframes fadeInDark {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Slide-down + fade — digunakan GlobalSearch */
 @keyframes slideDownSearch {
-  from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* Pulse border — digunakan EmergencyPage kode aktif */
 @keyframes pulse-border {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
-  50%       { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+  }
 }
 
 /* ── Animasi Live Map & Simulation Engine ── */
 
 /* Marker darurat di peta — glow merah berkedip */
 @keyframes markerPulse {
-  0%   { opacity: 1; r: 8; filter: drop-shadow(0 0 0px rgba(220,38,38,0)); }
-  50%  { opacity: 0.7; r: 11; filter: drop-shadow(0 0 6px rgba(220,38,38,0.8)); }
-  100% { opacity: 1; r: 8; filter: drop-shadow(0 0 0px rgba(220,38,38,0)); }
+  0% {
+    opacity: 1;
+    r: 8;
+    filter: drop-shadow(0 0 0px rgba(220, 38, 38, 0));
+  }
+  50% {
+    opacity: 0.7;
+    r: 11;
+    filter: drop-shadow(0 0 6px rgba(220, 38, 38, 0.8));
+  }
+  100% {
+    opacity: 1;
+    r: 8;
+    filter: drop-shadow(0 0 0px rgba(220, 38, 38, 0));
+  }
 }
 
 /* Item baru masuk activity feed — slide dari kanan */
 @keyframes feedSlideIn {
-  from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* Angka kapasitas RS berubah — flash kuning singkat */
 @keyframes capacityFlash {
-  0%   { background-color: transparent; }
-  30%  { background-color: rgba(234, 179, 8, 0.35); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: transparent;
+  }
+  30% {
+    background-color: rgba(234, 179, 8, 0.35);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 /* Background modal darurat — flash merah */
 @keyframes emergencyAlert {
-  0%   { border-color: rgba(220,38,38,0.4); }
-  50%  { border-color: rgba(220,38,38,1); box-shadow: 0 0 0 4px rgba(220,38,38,0.2); }
-  100% { border-color: rgba(220,38,38,0.4); }
+  0% {
+    border-color: rgba(220, 38, 38, 0.4);
+  }
+  50% {
+    border-color: rgba(220, 38, 38, 1);
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.2);
+  }
+  100% {
+    border-color: rgba(220, 38, 38, 0.4);
+  }
 }
 
 /* Glow ring untuk marker yang di-focus di peta */
 @keyframes focusRing {
-  0%, 100% { stroke-opacity: 0.8; stroke-width: 2; }
-  50%       { stroke-opacity: 0.3; stroke-width: 5; }
+  0%,
+  100% {
+    stroke-opacity: 0.8;
+    stroke-width: 2;
+  }
+  50% {
+    stroke-opacity: 0.3;
+    stroke-width: 5;
+  }
 }
 
 /* Progress bar pengisian kapasitas */
@@ -363,7 +505,7 @@ a:hover {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background: rgba(0,0,0,0.55);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -383,5 +525,69 @@ a:hover {
 }
 .modalBoxEmergency {
   border: 2px solid var(--color-danger);
-  animation: emergencyAlert 1.5s ease-in-out infinite, fadeInUp 0.2s ease both;
+  animation:
+    emergencyAlert 1.5s ease-in-out infinite,
+    fadeInUp 0.2s ease both;
+}
+
+/* ── Command Center shell: hierarchy and responsive navigation ── */
+.cc-shell {
+  background:
+    radial-gradient(
+      circle at 85% -20%,
+      rgba(173, 145, 184, 0.12),
+      transparent 30rem
+    ),
+    var(--color-bg);
+}
+
+@media (max-width: 1100px) {
+  .cc-nav-bottom {
+    overflow-x: auto;
+    justify-content: flex-start !important;
+    scrollbar-width: thin;
+  }
+  .cc-nav-bottom > div {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .cc-nav-top {
+    height: auto !important;
+    min-height: 52px;
+    padding: 10px 0;
+    flex-wrap: wrap;
+  }
+  .cc-nav-top > button:first-of-type {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none !important;
+  }
+  .cc-nav-top > div:last-child {
+    gap: 6px !important;
+  }
+  .cc-nav-top > div:last-child > span {
+    display: none;
+  }
+  .cc-nav-bottom {
+    min-height: 42px !important;
+  }
+  .cc-nav-bottom > div {
+    gap: 2px !important;
+  }
+  .cc-nav-bottom a {
+    padding: 8px 9px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
