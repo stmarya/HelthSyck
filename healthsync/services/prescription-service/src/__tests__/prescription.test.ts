@@ -17,6 +17,11 @@ jest.mock('pg', () => {
       return { rows: [{ id: 'patient-uuid-1' }], rowCount: 1 };
     }
 
+    // Doctor profile lookup
+    if (s.includes('FROM DOCTORS') && s.includes('= $1')) {
+      return { rows: [{ id: 'doctor-uuid-1' }], rowCount: 1 };
+    }
+
     // Consultation check: FROM consultations WHERE id=$1
     if (s.includes('FROM CONSULTATIONS') && s.includes('= $1')) {
       const id = params?.[0];
@@ -38,7 +43,16 @@ jest.mock('pg', () => {
     if (s.includes('FROM PRESCRIPTIONS P') || (s.includes('FROM PRESCRIPTIONS') && s.includes('JOIN'))) {
       const id = params?.[0];
       if (id === 'rx-uuid-1') {
-        return { rows: [{ id: 'rx-uuid-1', patient_id: 'patient-uuid-1', status: 'PENDING_PHARMACY' }], rowCount: 1 };
+        return {
+          rows: [{
+            id: 'rx-uuid-1',
+            patient_id: 'patient-uuid-1',
+            doctor_id: 'doctor-uuid-1',
+            pharmacy_id: null,
+            status: 'PENDING_PHARMACY',
+          }],
+          rowCount: 1,
+        };
       }
       return { rows: [], rowCount: 0 };
     }

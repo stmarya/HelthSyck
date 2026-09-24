@@ -231,7 +231,7 @@ app.get(
     try {
       const rxResult = await pool.query(
         `SELECT p.*,
-                pat.full_name AS patient_name,
+                pat.name      AS patient_name,
                 u.email       AS doctor_email
          FROM prescriptions p
          JOIN patients pat ON pat.id = p.patient_id
@@ -243,6 +243,27 @@ app.get(
 
       if (rxResult.rowCount === 0) {
         res.status(404).json(buildProblem(404, 'Not Found', 'Prescription not found', req.path, authReq.requestId));
+        return;
+      }
+
+      const prescription = rxResult.rows[0] as {
+        patient_id: string;
+        doctor_id: string;
+        pharmacy_id: string | null;
+        status: string;
+      };
+      let canRead = authReq.user.role === 'ADMIN' || authReq.user.role === 'COMMAND_CENTER';
+      if (authReq.user.role === 'PATIENT') {
+        const patientId = await resolvePatientId(authReq.user.sub);
+        canRead = patientId === prescription.patient_id;
+      } else if (authReq.user.role === 'DOCTOR') {
+        const doctorId = await resolveDoctorId(authReq.user.sub);
+        canRead = doctorId === prescription.doctor_id;
+      } else if (authReq.user.role === 'PHARMACIST') {
+        canRead = prescription.pharmacy_id === authReq.user.sub || prescription.status === 'ISSUED';
+      }
+      if (!canRead) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You are not authorized to view this prescription', req.path, authReq.requestId));
         return;
       }
 
