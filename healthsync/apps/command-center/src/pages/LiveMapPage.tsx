@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode, type ReactEle
 import { simulationEngine } from '../simulation/SimulationEngine';
 import type { SimEvent } from '../simulation/SimulationEngine';
 import type { Pasien, Ambulans, DriverApotek, RumahSakit, Apotek } from '../simulation/SimulationData';
-import { SEED_RUMAH_SAKIT, SEED_APOTEK, SEED_DRIVER_APOTEK } from '../simulation/SimulationData';
+import { SEED_APOTEK } from '../simulation/SimulationData';
 import { useToast } from '../context/ToastContext';
 
 // ─── Konstanta Peta Jakarta ────────────────────────────────────────────────────
@@ -366,8 +366,8 @@ export default function LiveMapPage() {
     return {
       pasien:     s.pasien.map((p) => ({ ...p, koordinat: { ...p.koordinat } })),
       ambulans:   s.ambulans.map((a) => ({ ...a, koordinat: { ...a.koordinat } })),
-      driver:     SEED_DRIVER_APOTEK.map((d) => ({ ...d, koordinat: { ...d.koordinat } })),
-      rumahSakit: SEED_RUMAH_SAKIT.map((rs) => ({ ...rs, koordinat: { ...rs.koordinat } })),
+      driver:     s.driver.map((d) => ({ ...d, koordinat: { ...d.koordinat } })),
+      rumahSakit: s.rumahSakit.map((rs) => ({ ...rs, koordinat: { ...rs.koordinat } })),
       apotek:     SEED_APOTEK.map((ap) => ({ ...ap })),
     };
   });
