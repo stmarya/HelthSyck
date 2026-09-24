@@ -12,6 +12,11 @@ jest.mock('pg', () => {
 
     if (s.includes('COUNT(*)')) return { rows: [{ count: '0' }] };
 
+    // Patient profile lookup
+    if (s.includes('FROM PATIENTS') && s.includes('= $1')) {
+      return { rows: [{ id: 'patient-uuid-1' }], rowCount: 1 };
+    }
+
     // Consultation check: FROM consultations WHERE id=$1
     if (s.includes('FROM CONSULTATIONS') && s.includes('= $1')) {
       const id = params?.[0];

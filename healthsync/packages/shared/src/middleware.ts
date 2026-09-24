@@ -102,7 +102,11 @@ export function requestIdMiddleware(req: Request, _res: Response, next: NextFunc
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function authenticate(req: Request, res: Response, next: NextFunction): void {
-  const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+  const JWT_SECRET = process.env['JWT_SECRET'];
+  if (!JWT_SECRET) {
+    res.status(500).json(buildProblem(500, 'Configuration Error', 'JWT_SECRET is not configured', req.path));
+    return;
+  }
   const authHeader = req.headers['authorization'];
 
   if (!authHeader?.startsWith('Bearer ')) {

@@ -43,6 +43,8 @@ class HealthSyncApp extends ConsumerWidget {
     switch (role.toUpperCase()) {
       case 'PHARMACIST':
         return AppTheme.apotekTheme();
+      case 'DOCTOR':
+        return AppTheme.dokterTheme();
       case 'AMBULANCE_DRIVER':
         return AppTheme.driverTheme();
       default:

@@ -14,8 +14,7 @@ CREATE TYPE vital_source AS ENUM ('MANUAL', 'IOT_DEVICE', 'WEARABLE');
 CREATE TABLE patients (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-  nik              VARCHAR(16) NOT NULL,          -- Tokenized NIK (field-level encryption)
-  nik_token        VARCHAR(64) NOT NULL,          -- SHA-256 of actual NIK for uniqueness check
+  nik_token        VARCHAR(64) NOT NULL,          -- SHA-256 of actual NIK; raw NIK is never stored
   name             VARCHAR(255) NOT NULL,
   date_of_birth    DATE NOT NULL,
   gender           gender NOT NULL,

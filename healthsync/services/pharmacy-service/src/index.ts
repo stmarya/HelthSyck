@@ -14,6 +14,10 @@ import {
   AuthenticatedRequest,
 } from '@healthsync/shared';
 
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
+
 /** Non-blocking auth — attaches req.user if token valid, always calls next() */
 function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
   const authHeader = req.headers['authorization'];
@@ -21,7 +25,7 @@ function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
     try {
       const raw = jwt.verify(
         authHeader.slice(7),
-        process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production',
+        JWT_SECRET,
       );
       if (raw && typeof raw === 'object' && 'sub' in raw) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

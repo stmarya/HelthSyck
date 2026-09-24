@@ -60,33 +60,29 @@ describe('integration-service', () => {
       expect(res.status).toBe(422);
     });
 
-    it('syncs Patient resource successfully', async () => {
+    it('fails closed when SATUSEHAT is not configured', async () => {
       const res = await request(app)
         .post('/v1/satusehat/sync')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ resourceType: 'Patient', resourceId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', action: 'CREATE' });
-      expect(res.status).toBe(200);
-      expect(res.body.data).toHaveProperty('syncId');
-      expect(res.body.data.status).toBe('SYNCED');
+      expect(res.status).toBe(501);
     });
 
-    it('syncs Encounter resource', async () => {
+    it('fails closed for Encounter when SATUSEHAT is not configured', async () => {
       const res = await request(app)
         .post('/v1/satusehat/sync')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ resourceType: 'Encounter', resourceId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', action: 'UPDATE' });
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(501);
     });
   });
 
   describe('GET /v1/satusehat/status', () => {
-    it('returns connection status', async () => {
+    it('returns not configured until credentials are supplied', async () => {
       const res = await request(app)
         .get('/v1/satusehat/status')
         .set('Authorization', `Bearer ${adminToken}`);
-      expect(res.status).toBe(200);
-      expect(res.body.data).toHaveProperty('provider', 'SATUSEHAT');
-      expect(res.body.data).toHaveProperty('status');
+      expect(res.status).toBe(501);
     });
   });
 
@@ -99,13 +95,12 @@ describe('integration-service', () => {
       expect(res.status).toBe(422);
     });
 
-    it('checks eligibility for valid NIK', async () => {
+    it('fails closed when BPJS is not configured', async () => {
       const res = await request(app)
         .post('/v1/bpjs/eligibility')
         .set('Authorization', `Bearer ${doctorToken}`)
         .send({ nik: '3271234567890001' });
-      expect(res.status).toBe(200);
-      expect(res.body.data).toHaveProperty('isActive');
+      expect(res.status).toBe(501);
     });
   });
 
@@ -123,7 +118,7 @@ describe('integration-service', () => {
       expect(res.status).toBe(422);
     });
 
-    it('creates SEP successfully', async () => {
+    it('fails closed when BPJS is not configured', async () => {
       const res = await request(app)
         .post('/v1/bpjs/sep')
         .set('Authorization', `Bearer ${doctorToken}`)
@@ -133,9 +128,7 @@ describe('integration-service', () => {
           visitType:     'RAWAT_JALAN',
           diagnosisCode: 'I25.1',
         });
-      expect(res.status).toBe(201);
-      expect(res.body.data).toHaveProperty('sepId');
-      expect(res.body.data).toHaveProperty('sepNumber');
+      expect(res.status).toBe(501);
     });
   });
 });

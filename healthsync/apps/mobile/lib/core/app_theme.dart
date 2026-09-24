@@ -7,6 +7,7 @@ class AppTheme {
 
   // ── Warna Dasar ────────────────────────────────────
   static const Color _pasienSeed    = Color(0xFF1565C0); // Biru medis
+  static const Color _dokterSeed    = Color(0xFF5E35B1); // Ungu klinis
   static const Color _apotekSeed    = Color(0xFF2E7D32); // Hijau apotek
   static const Color _driverSeed    = Color(0xFFE65100); // Oranye driver
   static const Color _ambulansSeed  = Color(0xFFC62828); // Merah darurat
@@ -49,6 +50,7 @@ class AppTheme {
   // ── Tema per-role ─────────────────────────────────────
 
   static ThemeData pasienTheme() => _buildTheme(_pasienSeed);
+  static ThemeData dokterTheme() => _buildTheme(_dokterSeed);
   static ThemeData apotekTheme() => _buildTheme(_apotekSeed);
   static ThemeData driverTheme() => _buildTheme(_driverSeed);
   static ThemeData ambulansTheme() => _buildTheme(_ambulansSeed);
@@ -181,6 +183,8 @@ class AppTheme {
     switch (role.toUpperCase()) {
       case 'PHARMACIST':
         return _apotekSeed;
+      case 'DOCTOR':
+        return _dokterSeed;
       case 'AMBULANCE_DRIVER':
         return _driverSeed;
       default:

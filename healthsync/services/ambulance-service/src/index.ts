@@ -10,7 +10,9 @@ import Redis from 'ioredis';
 // Config
 // ─────────────────────────────────────────────
 const PORT = parseInt(process.env['PORT'] ?? '3005', 10);
-const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
 const SERVICE_NAME = 'ambulance-service';
 
 // ─────────────────────────────────────────────

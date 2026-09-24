@@ -192,47 +192,47 @@ VALUES
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. PATIENTS
 -- ─────────────────────────────────────────────────────────────────────────────
-INSERT INTO patients (id, user_id, nik, nik_token, name, date_of_birth, gender,
+INSERT INTO patients (id, user_id, nik_token, name, date_of_birth, gender,
   blood_type, phone, address, emergency_contact_name, emergency_contact_phone)
 VALUES
   ('00bb0000-0000-0000-0000-000000000001','00200000-0000-0000-0000-000000000001',
-   '3171010101650001',encode(sha256('3171010101650001'::bytea),'hex'),
+   encode(sha256('3171010101650001'::bytea),'hex'),
    'Budi Pekerti','1965-01-01','MALE','A+','+6281200000001','Jl. Sudirman No.12, Jakarta Selatan','Siti Pekerti','+6281200009001'),
 
   ('00bb0000-0000-0000-0000-000000000002','00200000-0000-0000-0000-000000000002',
-   '3171020202700002',encode(sha256('3171020202700002'::bytea),'hex'),
+   encode(sha256('3171020202700002'::bytea),'hex'),
    'Siti Aminah','1970-02-02','FEMALE','O+','+6281200000002','Jl. Gatot Subroto No.22, Jakarta Pusat','Ahmad Aminah','+6281200009002'),
 
   ('00bb0000-0000-0000-0000-000000000003','00200000-0000-0000-0000-000000000003',
-   '3171030303850003',encode(sha256('3171030303850003'::bytea),'hex'),
+   encode(sha256('3171030303850003'::bytea),'hex'),
    'Hendra Wijaya','1985-03-03','MALE','B+','+6281200000003','Jl. Rasuna Said Blok X, Jakarta Selatan','Rina Wijaya','+6281200009003'),
 
   ('00bb0000-0000-0000-0000-000000000004','00200000-0000-0000-0000-000000000004',
-   '3171040404900004',encode(sha256('3171040404900004'::bytea),'hex'),
+   encode(sha256('3171040404900004'::bytea),'hex'),
    'Rina Lestari','1990-04-04','FEMALE','AB-','+6281200000004','Jl. Kuningan Raya No.9, Jakarta Selatan','Dodi Lestari','+6281200009004'),
 
   ('00bb0000-0000-0000-0000-000000000005','00200000-0000-0000-0000-000000000005',
-   '3171050505780005',encode(sha256('3171050505780005'::bytea),'hex'),
+   encode(sha256('3171050505780005'::bytea),'hex'),
    'Doni Prasetyo','1978-05-05','MALE','O-','+6281200000005','Jl. HR Rasuna Said No.15, Kuningan','Dewi Prasetyo','+6281200009005'),
 
   ('00bb0000-0000-0000-0000-000000000006','00200000-0000-0000-0000-000000000006',
-   '3171060606920006',encode(sha256('3171060606920006'::bytea),'hex'),
+   encode(sha256('3171060606920006'::bytea),'hex'),
    'Maya Sari','1992-06-06','FEMALE','A-','+6281200000006','Jl. Kemang Raya No.88, Jakarta Selatan','Eko Sari','+6281200009006'),
 
   ('00bb0000-0000-0000-0000-000000000007','00200000-0000-0000-0000-000000000007',
-   '3171070707550007',encode(sha256('3171070707550007'::bytea),'hex'),
+   encode(sha256('3171070707550007'::bytea),'hex'),
    'Agus Salim','1955-07-07','MALE','B-','+6281200000007','Jl. Tebet Raya No.45, Jakarta Selatan','Heri Salim','+6281200009007'),
 
   ('00bb0000-0000-0000-0000-000000000008','00200000-0000-0000-0000-000000000008',
-   '3171080808880008',encode(sha256('3171080808880008'::bytea),'hex'),
+   encode(sha256('3171080808880008'::bytea),'hex'),
    'Fitri Handayani','1988-08-08','FEMALE','O+','+6281200000008','Jl. Blok M Raya No.10, Jakarta Selatan','Bayu Handayani','+6281200009008'),
 
   ('00bb0000-0000-0000-0000-000000000009','00200000-0000-0000-0000-000000000009',
-   '3171090909600009',encode(sha256('3171090909600009'::bytea),'hex'),
+   encode(sha256('3171090909600009'::bytea),'hex'),
    'Joko Widodo','1960-09-09','MALE','A+','+6281200000009','Jl. Senayan No.1, Jakarta Pusat','Iriana Widodo','+6281200009009'),
 
   ('00bb0000-0000-0000-0000-000000000010','00200000-0000-0000-0000-000000000010',
-   '3171101010950010',encode(sha256('3171101010950010'::bytea),'hex'),
+   encode(sha256('3171101010950010'::bytea),'hex'),
    'Nurul Hidayah','1995-10-10','FEMALE','AB+','+6281200000010','Jl. Menteng Raya No.30, Jakarta Pusat','Faisal Hidayah','+6281200009010');
 
 -- Patient conditions

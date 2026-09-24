@@ -12,7 +12,9 @@ import * as admin from 'firebase-admin';
 // ─────────────────────────────────────────────
 
 const PORT = parseInt(process.env['PORT'] ?? '3009', 10);
-const JWT_SECRET = process.env['JWT_SECRET'] ?? 'dev-secret-change-in-production';
+const JWT_SECRET: string = process.env['JWT_SECRET'] ?? (() => {
+  throw new Error('JWT_SECRET is required; refusing to start with a fallback secret');
+})();
 const SERVICE_NAME = 'notification-service';
 const FCM_PROJECT_ID = process.env['FCM_PROJECT_ID'];
 const SMS_API_KEY = process.env['SMS_API_KEY'];
@@ -306,7 +308,11 @@ app.get('/health', (_req, res) => {
 // POST /v1/notifications/send
 // ─────────────────────────────────────────────
 
-app.post('/v1/notifications/send', authenticate, async (req: Request, res: Response) => {
+app.post(
+  '/v1/notifications/send',
+  authenticate,
+  requireRole('ADMIN', 'COMMAND_CENTER'),
+  async (req: Request, res: Response) => {
   const parsed = SendNotificationSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
@@ -320,7 +326,8 @@ app.post('/v1/notifications/send', authenticate, async (req: Request, res: Respo
     console.error(`[${SERVICE_NAME}] send error:`, err);
     res.status(500).json(buildProblem(500, 'Internal Server Error', 'Failed to send notification', req.path));
   }
-});
+  },
+);
 
 // ─────────────────────────────────────────────
 // POST /v1/notifications/bulk  (ADMIN only)
@@ -484,7 +491,11 @@ app.delete('/v1/devices/push-token/:token', authenticate, async (req: Request, r
 // POST /v1/notifications/critical  (internal — alert-service)
 // ─────────────────────────────────────────────
 
-app.post('/v1/notifications/critical', authenticate, async (req: Request, res: Response) => {
+app.post(
+  '/v1/notifications/critical',
+  authenticate,
+  requireRole('ADMIN', 'COMMAND_CENTER'),
+  async (req: Request, res: Response) => {
   const parsed = SendNotificationSchema.safeParse({ ...req.body, priority: 'CRITICAL' });
   if (!parsed.success) {
     res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
@@ -509,12 +520,14 @@ app.post('/v1/notifications/critical', authenticate, async (req: Request, res: R
 
     // Audit log
     await db.query(
-      `INSERT INTO medical_audit_logs (id, action, entity_type, entity_id, actor_id, details, created_at)
-       VALUES ($1, 'CRITICAL_NOTIFICATION_SENT', 'notification', $2, $3, $4::jsonb, NOW())`,
+      `INSERT INTO medical_audit_logs
+         (accessor_id, accessor_role, action, resource_type, resource_id, justification, created_at)
+       SELECT $1, u.role, 'CRITICAL_NOTIFICATION_SENT', 'notification', $2, $3, NOW()
+       FROM users u
+       WHERE u.id = $1`,
       [
-        crypto.randomUUID(),
-        referenceId ?? null,
         (req as AuthRequest).user.sub,
+        referenceId ?? null,
         JSON.stringify({ userId, title, body, referenceType, channels: results.map((r) => r.channel) }),
       ]
     );
@@ -524,7 +537,8 @@ app.post('/v1/notifications/critical', authenticate, async (req: Request, res: R
     console.error(`[${SERVICE_NAME}] critical notification error:`, err);
     res.status(500).json(buildProblem(500, 'Internal Server Error', 'Failed to send critical notification', req.path));
   }
-});
+  },
+);
 
 // ─────────────────────────────────────────────
 // Error handler

@@ -150,7 +150,7 @@ refresh_tokens (id UUID PK, user_id UUID FK, token TEXT, expires_at TIMESTAMPTZ,
 ### patient-service
 
 ```sql
-patients (id UUID PK, user_id UUID UNIQUE FK→auth, nik TEXT, name TEXT, dob DATE, blood_type TEXT)
+patients (id UUID PK, user_id UUID UNIQUE FK→auth, nik_token TEXT UNIQUE, name TEXT, dob DATE, blood_type TEXT)
 vitals (id UUID PK, patient_id UUID FK, heart_rate INT, spo2 NUMERIC, recorded_at TIMESTAMPTZ, source TEXT)
 ```
 

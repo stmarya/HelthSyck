@@ -56,50 +56,50 @@ VALUES
 -- ─────────────────────────────────────────────
 -- 3. PASIEN TAMBAHAN (cek pasien yang sudah ada, sisipkan yang belum)
 -- ─────────────────────────────────────────────
-INSERT INTO patients (id, user_id, nik, nik_token, name, date_of_birth, gender,
+INSERT INTO patients (id, user_id, nik_token, name, date_of_birth, gender,
   blood_type, phone, address, emergency_contact_name, emergency_contact_phone)
 SELECT * FROM (VALUES
   ('00bb0000-0000-0000-0000-000000000011'::uuid, '00200000-0000-0000-0000-000000000011'::uuid,
-   '3271110111000011', encode(sha256('3271110111000011'::bytea),'hex'),
+   encode(sha256('3271110111000011'::bytea),'hex'),
    'Tommy Santoso','2000-11-01'::date,'MALE'::gender,'O+'::blood_type,
    '+6281200000011','Jl. Ciledug Raya No.3, Tangerang','Susi Santoso','+6281200009011'),
   ('00bb0000-0000-0000-0000-000000000012'::uuid, '00200000-0000-0000-0000-000000000012'::uuid,
-   '3271120212970012', encode(sha256('3271120212970012'::bytea),'hex'),
+   encode(sha256('3271120212970012'::bytea),'hex'),
    'Wulandari Putri','1997-12-02'::date,'FEMALE'::gender,'A-'::blood_type,
    '+6281200000012','Jl. Margonda Raya No.45, Depok','Budi Putri','+6281200009012'),
   ('00bb0000-0000-0000-0000-000000000013'::uuid, '00200000-0000-0000-0000-000000000013'::uuid,
-   '3271130313820013', encode(sha256('3271130313820013'::bytea),'hex'),
+   encode(sha256('3271130313820013'::bytea),'hex'),
    'Benny Hardian','1982-03-13'::date,'MALE'::gender,'B+'::blood_type,
    '+6281200000013','Jl. Ahmad Yani No.12, Bekasi','Rita Hardian','+6281200009013'),
   ('00bb0000-0000-0000-0000-000000000014'::uuid, '00200000-0000-0000-0000-000000000014'::uuid,
-   '3271140414030014', encode(sha256('3271140414030014'::bytea),'hex'),
+   encode(sha256('3271140414030014'::bytea),'hex'),
    'Citra Dewi','2003-04-14'::date,'FEMALE'::gender,'AB+'::blood_type,
    '+6281200000014','Jl. Cinere Raya No.7, Depok','Rian Dewi','+6281200009014'),
   ('00bb0000-0000-0000-0000-000000000015'::uuid, '00200000-0000-0000-0000-000000000015'::uuid,
-   '3271150515750015', encode(sha256('3271150515750015'::bytea),'hex'),
+   encode(sha256('3271150515750015'::bytea),'hex'),
    'Fajar Nugroho','1975-05-15'::date,'MALE'::gender,'O-'::blood_type,
    '+6281200000015','Jl. Cibubur Raya No.21, Jakarta Timur','Dewi Nugroho','+6281200009015'),
   ('00bb0000-0000-0000-0000-000000000016'::uuid, '00200000-0000-0000-0000-000000000016'::uuid,
-   '3271160616930016', encode(sha256('3271160616930016'::bytea),'hex'),
+   encode(sha256('3271160616930016'::bytea),'hex'),
    'Gita Puspita','1993-06-16'::date,'FEMALE'::gender,'A+'::blood_type,
    '+6281200000016','Jl. Pasar Minggu No.8, Jakarta Selatan','Eko Puspita','+6281200009016'),
   ('00bb0000-0000-0000-0000-000000000017'::uuid, '00200000-0000-0000-0000-000000000017'::uuid,
-   '3271170717680017', encode(sha256('3271170717680017'::bytea),'hex'),
+   encode(sha256('3271170717680017'::bytea),'hex'),
    'Hendra Maulana','1968-07-17'::date,'MALE'::gender,'B-'::blood_type,
    '+6281200000017','Jl. Kalimalang No.55, Bekasi','Sari Maulana','+6281200009017'),
   ('00bb0000-0000-0000-0000-000000000018'::uuid, '00200000-0000-0000-0000-000000000018'::uuid,
-   '3271180818880018', encode(sha256('3271180818880018'::bytea),'hex'),
+   encode(sha256('3271180818880018'::bytea),'hex'),
    'Indra Permana','1988-08-18'::date,'MALE'::gender,'AB-'::blood_type,
    '+6281200000018','Jl. Kelapa Gading Blok A, Jakarta Utara','Tini Permana','+6281200009018'),
   ('00bb0000-0000-0000-0000-000000000019'::uuid, '00200000-0000-0000-0000-000000000019'::uuid,
-   '3271190919810019', encode(sha256('3271190919810019'::bytea),'hex'),
+   encode(sha256('3271190919810019'::bytea),'hex'),
    'Juli Rahayu','1981-09-19'::date,'FEMALE'::gender,'O+'::blood_type,
    '+6281200000019','Jl. Thamrin No.6, Jakarta Pusat','Ahmad Rahayu','+6281200009019'),
   ('00bb0000-0000-0000-0000-000000000020'::uuid, '00200000-0000-0000-0000-000000000020'::uuid,
-   '3271201020020020', encode(sha256('3271201020020020'::bytea),'hex'),
+   encode(sha256('3271201020020020'::bytea),'hex'),
    'Kartika Sari','2002-10-20'::date,'FEMALE'::gender,'A+'::blood_type,
    '+6281200000020','Jl. Pondok Labu No.30, Jakarta Selatan','Wahyu Sari','+6281200009020')
-) AS v(id, user_id, nik, nik_token, name, date_of_birth, gender, blood_type, phone, address, emergency_contact_name, emergency_contact_phone)
+) AS v(id, user_id, nik_token, name, date_of_birth, gender, blood_type, phone, address, emergency_contact_name, emergency_contact_phone)
 WHERE NOT EXISTS (SELECT 1 FROM patients p WHERE p.id = v.id);
 
 -- Kondisi pasien tambahan (guard dengan NOT EXISTS)

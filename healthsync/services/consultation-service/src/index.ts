@@ -87,6 +87,22 @@ const MessageCursorSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+async function resolvePatientId(userId: string): Promise<string | null> {
+  const result = await pool.query<{ id: string }>(
+    'SELECT id FROM patients WHERE user_id = $1',
+    [userId],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+async function resolveDoctorId(userId: string): Promise<string | null> {
+  const result = await pool.query<{ id: string }>(
+    'SELECT id FROM doctors WHERE user_id = $1',
+    [userId],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,9 +134,19 @@ app.post(
       return;
     }
 
-    const { patientId, chiefComplaint, symptomData, urgency } = parsed.data;
+    const { patientId: requestedPatientId, chiefComplaint, symptomData, urgency } = parsed.data;
 
     try {
+      const patientId = authReq.user.role === 'PATIENT'
+        ? await resolvePatientId(authReq.user.sub)
+        : requestedPatientId;
+      if (!patientId || (authReq.user.role === 'PATIENT' && patientId !== requestedPatientId)) {
+        res.status(403).json(
+          buildProblem(403, 'Forbidden', 'Patients may only create consultations for their own profile', req.path, authReq.requestId),
+        );
+        return;
+      }
+
       // Check patient exists
       const patientCheck = await pool.query<{ id: string }>(
         'SELECT id FROM patients WHERE id=$1',
@@ -187,11 +213,25 @@ app.get(
       let paramIdx = 1;
 
       if (role === 'PATIENT') {
+        const profileId = await resolvePatientId(sub);
+        if (!profileId) {
+          res.status(403).json(buildProblem(403, 'Forbidden', 'Patient profile is not complete', req.path, authReq.requestId));
+          return;
+        }
         conditions.push(`c.patient_id=$${paramIdx++}`);
-        params.push(sub);
+        params.push(profileId);
       } else if (role === 'DOCTOR') {
-        conditions.push(`c.doctor_id=$${paramIdx++}`);
-        params.push(doctorId ?? sub);
+        const profileId = await resolveDoctorId(sub);
+        if (!profileId) {
+          res.status(403).json(buildProblem(403, 'Forbidden', 'Doctor profile is not registered', req.path, authReq.requestId));
+          return;
+        }
+        // Unassigned pending consultations form the doctor's work queue.
+        // All other statuses are scoped to consultations assigned to this doctor.
+        if (status !== 'PENDING') {
+          conditions.push(`c.doctor_id=$${paramIdx++}`);
+          params.push(profileId);
+        }
       } else {
         // COMMAND_CENTER / ADMIN — optional filters
         if (patientId) { conditions.push(`c.patient_id=$${paramIdx++}`); params.push(patientId); }
@@ -257,6 +297,23 @@ app.get(
         return;
       }
 
+      const row = result.rows[0] as {
+        patient_id: string;
+        doctor_id: string | null;
+        status: ConsultationStatus;
+      };
+      const isAdmin = authReq.user.role === 'ADMIN';
+      const patientId = await resolvePatientId(authReq.user.sub);
+      const doctorId = await resolveDoctorId(authReq.user.sub);
+      const canAccessUnassignedQueue =
+        authReq.user.role === 'DOCTOR' &&
+        row.status === 'PENDING' &&
+        row.doctor_id === null;
+      if (!isAdmin && !canAccessUnassignedQueue && row.patient_id !== patientId && row.doctor_id !== doctorId) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You are not a participant in this consultation', req.path, authReq.requestId));
+        return;
+      }
+
       ok(res, result.rows[0]);
     } catch (err) {
       next(err);
@@ -277,6 +334,12 @@ app.put(
     const { id } = req.params;
 
     try {
+      const doctorId = await resolveDoctorId(authReq.user.sub);
+      if (!doctorId) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'Doctor profile is not registered', req.path, authReq.requestId));
+        return;
+      }
+
       const current = await pool.query<{ status: ConsultationStatus }>(
         'SELECT status FROM consultations WHERE id=$1',
         [id],
@@ -297,10 +360,17 @@ app.put(
       const result = await pool.query(
         `UPDATE consultations
          SET status='ACCEPTED', doctor_id=$1, started_at=NOW(), updated_at=NOW()
-         WHERE id=$2
+         WHERE id=$2 AND status='PENDING' AND doctor_id IS NULL
          RETURNING *`,
-        [authReq.user.sub, id],
+        [doctorId, id],
       );
+
+      if (result.rowCount === 0) {
+        res.status(409).json(
+          buildProblem(409, 'Conflict', 'Consultation was already accepted by another doctor', req.path, authReq.requestId),
+        );
+        return;
+      }
 
       ok(res, result.rows[0]);
     } catch (err) {
@@ -322,8 +392,16 @@ app.put(
     const { id } = req.params;
 
     try {
-      const current = await pool.query<{ status: ConsultationStatus }>(
-        'SELECT status FROM consultations WHERE id=$1',
+      const doctorId = authReq.user.role === 'DOCTOR'
+        ? await resolveDoctorId(authReq.user.sub)
+        : null;
+      if (authReq.user.role === 'DOCTOR' && !doctorId) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'Doctor profile is not registered', req.path, authReq.requestId));
+        return;
+      }
+
+      const current = await pool.query<{ status: ConsultationStatus; doctor_id: string | null }>(
+        'SELECT status, doctor_id FROM consultations WHERE id=$1',
         [id],
       );
       if (current.rowCount === 0) {
@@ -332,6 +410,10 @@ app.put(
       }
 
       const fromStatus = current.rows[0]!.status;
+      if (authReq.user.role === 'DOCTOR' && current.rows[0]!.doctor_id !== doctorId) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You are not the assigned doctor', req.path, authReq.requestId));
+        return;
+      }
       if (!isValidTransition(fromStatus, 'IN_PROGRESS')) {
         res.status(409).json(
           buildProblem(409, 'Conflict', `Cannot transition from ${fromStatus} to IN_PROGRESS`, req.path, authReq.requestId),
@@ -381,7 +463,8 @@ app.put(
       }
 
       const { status: fromStatus, doctor_id } = current.rows[0]!;
-      if (doctor_id !== authReq.user.sub) {
+      const doctorId = await resolveDoctorId(authReq.user.sub);
+      if (!doctorId || doctor_id !== doctorId) {
         res.status(403).json(buildProblem(403, 'Forbidden', 'You are not the assigned doctor', req.path, authReq.requestId));
         return;
       }
@@ -420,8 +503,8 @@ app.put(
     const { id } = req.params;
 
     try {
-      const current = await pool.query<{ status: ConsultationStatus }>(
-        'SELECT status FROM consultations WHERE id=$1',
+      const current = await pool.query<{ status: ConsultationStatus; patient_id: string; doctor_id: string | null }>(
+        'SELECT status, patient_id, doctor_id FROM consultations WHERE id=$1',
         [id],
       );
       if (current.rowCount === 0) {
@@ -429,7 +512,18 @@ app.put(
         return;
       }
 
-      const fromStatus = current.rows[0]!.status;
+      const currentRow = current.rows[0]!;
+      const patientId = await resolvePatientId(authReq.user.sub);
+      const doctorId = await resolveDoctorId(authReq.user.sub);
+      const canCancel = authReq.user.role === 'ADMIN'
+        || currentRow.patient_id === patientId
+        || currentRow.doctor_id === doctorId;
+      if (!canCancel) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You are not a participant in this consultation', req.path, authReq.requestId));
+        return;
+      }
+
+      const fromStatus = currentRow.status;
       if (!isValidTransition(fromStatus, 'CANCELLED')) {
         res.status(409).json(
           buildProblem(409, 'Conflict', `Cannot transition from ${fromStatus} to CANCELLED`, req.path, authReq.requestId),
@@ -490,8 +584,16 @@ app.post(
         return;
       }
 
+      const patientUser = await pool.query<{ user_id: string }>(
+        'SELECT user_id FROM patients WHERE id = $1',
+        [patient_id],
+      );
+      const doctorUser = doctor_id
+        ? await pool.query<{ user_id: string }>('SELECT user_id FROM doctors WHERE id = $1', [doctor_id])
+        : { rows: [] as Array<{ user_id: string }> };
       const senderId = authReq.user.sub;
-      const isParticipant = senderId === patient_id || senderId === doctor_id;
+      const isParticipant = senderId === patientUser.rows[0]?.user_id
+        || senderId === doctorUser.rows[0]?.user_id;
       if (!isParticipant) {
         res.status(403).json(buildProblem(403, 'Forbidden', 'You are not a participant in this consultation', req.path, authReq.requestId));
         return;
@@ -552,9 +654,33 @@ app.get(
       return;
     }
 
-    const { after, limit } = parsed.data;
+      const { after, limit } = parsed.data;
 
     try {
+      const consult = await pool.query<{ patient_id: string; doctor_id: string | null }>(
+        'SELECT patient_id, doctor_id FROM consultations WHERE id = $1',
+        [id],
+      );
+      if (!consult.rows[0]) {
+        res.status(404).json(buildProblem(404, 'Not Found', 'Consultation not found', req.path, authReq.requestId));
+        return;
+      }
+      const patientUser = await pool.query<{ user_id: string }>(
+        'SELECT user_id FROM patients WHERE id = $1',
+        [consult.rows[0].patient_id],
+      );
+      const doctorUser = consult.rows[0].doctor_id
+        ? await pool.query<{ user_id: string }>('SELECT user_id FROM doctors WHERE id = $1', [consult.rows[0].doctor_id])
+        : { rows: [] as Array<{ user_id: string }> };
+      if (
+        authReq.user.role !== 'ADMIN'
+        && authReq.user.sub !== patientUser.rows[0]?.user_id
+        && authReq.user.sub !== doctorUser.rows[0]?.user_id
+      ) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You are not a participant in this consultation', req.path, authReq.requestId));
+        return;
+      }
+
       const params: unknown[] = [id, limit];
       let cursorClause = '';
       if (after) {
@@ -634,6 +760,21 @@ app.post(
         return;
       }
 
+      const patientId = await resolvePatientId(authReq.user.sub);
+      if (!patientId) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'Patient profile is not complete', req.path, authReq.requestId));
+        return;
+      }
+
+      const ownership = await pool.query<{ patient_id: string }>(
+        'SELECT patient_id FROM consultations WHERE id = $1',
+        [id],
+      );
+      if (ownership.rows[0]?.patient_id !== patientId) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'You may only rate your own consultation', req.path, authReq.requestId));
+        return;
+      }
+
       const { rating, review } = parsed.data;
       const ratingId = crypto.randomUUID();
 
@@ -645,7 +786,7 @@ app.post(
           `INSERT INTO consultation_ratings (id, consultation_id, doctor_id, patient_id, rating, review)
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING *`,
-          [ratingId, id, doctor_id, authReq.user.sub, rating, review ?? null],
+          [ratingId, id, doctor_id, patientId, rating, review ?? null],
         );
 
         if (doctor_id) {
