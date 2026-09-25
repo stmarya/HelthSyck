@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "simulate": "node scripts/generate-command-center-simulation.mjs",
     "test:smoke": "node scripts/command-center-smoke.mjs",
-    "test:uiux": "node scripts/command-center-uiux-audit.mjs"
+    "test:uiux": "node scripts/command-center-uiux-audit.mjs",
+    "test:integration": "node scripts/integration-contract-audit.mjs"
   },
   "dependencies": {
     "axios": "^1.6.2",
