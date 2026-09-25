@@ -5,12 +5,16 @@ on:
     paths:
       - 'healthsync/apps/command-center/**'
       - 'healthsync/contracts/**'
+      - 'healthsync/infra/k8s/command-center*.yaml'
+      - 'healthsync/infra/k8s/realtime-service.yaml'
       - 'healthsync/.github/workflows/command-center-deploy-gate.yml'
   push:
     branches: [main]
     paths:
       - 'healthsync/apps/command-center/**'
       - 'healthsync/contracts/**'
+      - 'healthsync/infra/k8s/command-center*.yaml'
+      - 'healthsync/infra/k8s/realtime-service.yaml'
       - 'healthsync/.github/workflows/command-center-deploy-gate.yml'
 
 permissions:
@@ -56,3 +60,15 @@ jobs:
       - name: Build
         working-directory: healthsync
         run: npm run build --workspace=apps/command-center
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build production Command Center image
+        uses: docker/build-push-action@v5
+        with:
+          context: healthsync
+          file: healthsync/apps/command-center/Dockerfile.prod
+          push: false
+          tags: healthsync/command-center:${{ github.sha }}
+          build-args: |
+            VITE_MAP_PROVIDER=simulator
+            VITE_LOCATION_STALE_AFTER_MS=15000
