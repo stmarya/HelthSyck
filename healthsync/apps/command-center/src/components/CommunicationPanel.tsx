@@ -44,13 +44,15 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
   const [connection, setConnection] = useState('Menghubungkan');
   const [callState, setCallState] = useState<'idle' | 'calling' | 'incoming' | 'connected'>('idle');
   const [incomingCaller, setIncomingCaller] = useState('');
+  const [contactQuery, setContactQuery] = useState('');
   const selected = useMemo(() => contacts.find((contact) => contact.id === selectedId) ?? contacts[0], [contacts, selectedId]);
   const me = currentUserId();
   const conversationId = selected ? [me, selected.id].sort().join(':') : '';
+  const visibleContacts = contacts.filter((contact) => `${contact.label} ${contact.kind} ${contact.status ?? ''}`.toLowerCase().includes(contactQuery.trim().toLowerCase()));
 
   useEffect(() => {
     const token = localStorage.getItem('hs_access_token');
-    if (!token) return;
+    if (!token) { setConnection('Offline · login diperlukan'); return; }
     const client = new RealtimeClient();
     clientRef.current = client;
     const off = client.on('*', (event: RealtimeEvent) => {
@@ -179,16 +181,16 @@ export default function CommunicationPanel({ contacts }: { contacts: Communicati
       <div><strong>Communication Hub</strong><div style={small}>Platform chat + WebRTC audio call · {connection}</div></div>
       <span style={{ ...small, color: connection === 'Terhubung' ? 'var(--color-success)' : 'var(--color-warning)' }}>● {connection}</span>
     </div>
-    <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 12, marginTop: 12 }}>
-      <div style={{ borderRight: '1px solid var(--color-border)', paddingRight: 10, maxHeight: 320, overflow: 'auto' }}>
-        {contacts.map((contact) => <button key={contact.id} onClick={() => setSelectedId(contact.id)} style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center', textAlign: 'left', padding: 9, border: 0, borderRadius: 8, background: selected?.id === contact.id ? 'var(--color-surface-hover)' : 'transparent', color: 'var(--color-text)', cursor: 'pointer' }}><span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 8, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 9, fontWeight: 800 }}>{labelFor(contact.kind)}</span><span style={{ minWidth: 0 }}><b style={{ display: 'block', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.label}</b><span style={small}>{contact.status ?? contact.id}</span></span></button>)}
+    <div className={styles.communicationGrid}>
+      <div className={styles.communicationContacts}><label className={styles.srOnly} htmlFor="contact-search">Cari kontak</label><input id="contact-search" value={contactQuery} onChange={(event) => setContactQuery(event.target.value)} placeholder="Cari RS, dokter, driver…" className={styles.contactSearch} />
+        {visibleContacts.map((contact) => <button key={contact.id} onClick={() => setSelectedId(contact.id)} style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'center', textAlign: 'left', padding: 9, border: 0, borderRadius: 8, background: selected?.id === contact.id ? 'var(--color-surface-hover)' : 'transparent', color: 'var(--color-text)', cursor: 'pointer' }}><span style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', borderRadius: 8, background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontSize: 9, fontWeight: 800 }}>{labelFor(contact.kind)}</span><span style={{ minWidth: 0 }}><b style={{ display: 'block', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.label}</b><span style={small}>{contact.status ?? contact.id}</span></span></button>)}{visibleContacts.length === 0 && <div style={{ ...small, padding: 10 }}>Kontak tidak ditemukan.</div>}
       </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}><div><b>{selected?.label ?? 'Pilih kontak'}</b><div style={small}>{selected ? labelFor(selected.kind) : ''}</div></div><div style={{ display: 'flex', gap: 6 }}>{callState === 'incoming' ? <><button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void acceptCall()}>Angkat</button><button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => stopCall(false)}>Tolak</button></> : callState === 'idle' ? <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => void startCall()} disabled={!selected}>☎ Audio Call</button> : <button className={`${styles.btn} ${styles.btnDanger}`} onClick={() => stopCall()}>Akhiri Call</button>}</div></div>
+      <div className={styles.communicationConversation}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}><div><b>{selected?.label ?? 'Pilih kontak'}</b><div style={small}>{selected ? labelFor(selected.kind) : ''}</div></div><div style={{ display: 'flex', gap: 6 }}>{callState === 'incoming' ? <><button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void acceptCall()}>Angkat</button><button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => stopCall(false)}>Tolak</button></> : callState === 'idle' ? <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={() => void startCall()} disabled={!selected || connection !== 'Terhubung'}>☎ Audio Call</button> : <button className={`${styles.btn} ${styles.btnDanger}`} onClick={() => stopCall()}>Akhiri Call</button>}</div></div>
         {callState === 'incoming' && <div style={{ padding: 9, marginBottom: 8, borderRadius: 8, background: 'var(--color-warning-bg)', color: 'var(--color-warning)', fontSize: 12 }}>Panggilan masuk dari {incomingCaller}</div>}
         {callState === 'calling' && <div style={{ ...small, marginBottom: 8 }}>Menunggu jawaban…</div>}
         <div style={{ minHeight: 150, maxHeight: 220, overflow: 'auto', padding: 10, background: 'var(--color-surface-2)', borderRadius: 8 }}>{messages.filter((message) => message.conversationId === conversationId || message.recipientId === selected?.id).map((message) => <div key={message.id} style={{ marginBottom: 8, textAlign: isMine(message) ? 'right' : 'left' }}><span style={{ display: 'inline-block', maxWidth: '85%', padding: '7px 9px', borderRadius: 8, background: isMine(message) ? 'var(--color-primary)' : 'var(--color-surface)', color: isMine(message) ? '#fff' : 'var(--color-text)', fontSize: 12 }}>{message.body}</span><div style={small}>{new Date(message.sentAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div></div>)}</div>
-        <form onSubmit={sendMessage} style={{ display: 'flex', gap: 8, marginTop: 8 }}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Kirim command atau pesan…" disabled={!selected} style={{ flex: 1, minWidth: 0, border: '1px solid var(--color-border)', background: 'var(--color-surface-2)', color: 'var(--color-text)', borderRadius: 8, padding: '9px 10px' }} /><button className={`${styles.btn} ${styles.btnPrimary}`} type="submit" disabled={!selected || !draft.trim()}>Kirim</button></form>
+        <form onSubmit={sendMessage} className={styles.messageComposer}><input aria-label="Pesan atau command" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Kirim command atau pesan…" disabled={!selected || connection !== 'Terhubung'} className={styles.messageInput} /><button className={`${styles.btn} ${styles.btnPrimary}`} type="submit" disabled={!selected || !draft.trim()}>Kirim</button></form>
       </div>
     </div>
     <audio ref={remoteAudioRef} autoPlay />

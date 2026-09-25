@@ -8,6 +8,7 @@ import type { Pasien, Ambulans, DriverApotek, RumahSakit, Apotek } from '../simu
 import { SEED_APOTEK } from '../simulation/SimulationData';
 import { useToast } from '../context/ToastContext';
 import { RealtimeClient } from '../realtime/client';
+import { getMapRuntimeConfig } from '../realtime/mapProvider';
 
 // ─── Konstanta Peta Jakarta ────────────────────────────────────────────────────
 
@@ -115,8 +116,11 @@ function Marker({ id, x, y, label, isFocused, isUrgent, onClick, children }: Mar
     <g
       transform={`translate(${x},${y})`}
       onClick={() => onClick(id)}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(id); } }}
       style={{ cursor: 'pointer' }}
       role="button"
+      tabIndex={0}
+      focusable="true"
       aria-label={label}
     >
       {/* Glow darurat */}
@@ -301,6 +305,10 @@ function SidePanel({ items, focusedId, onFocus }: SidePanelProps) {
             <div
               key={item.id}
               onClick={() => onFocus(item.id)}
+              onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onFocus(item.id); } }}
+              role="button"
+              tabIndex={0}
+              aria-pressed={isFocused}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -309,6 +317,7 @@ function SidePanel({ items, focusedId, onFocus }: SidePanelProps) {
                 cursor: 'pointer',
                 background: isFocused ? 'rgba(245,158,11,0.10)' : item.isUrgent ? 'rgba(220,38,38,0.07)' : 'transparent',
                 borderLeft: isFocused ? `3px solid ${C.focused}` : item.isUrgent ? '3px solid #DC2626' : '3px solid transparent',
+                borderTop: 0, borderRight: 0, borderBottom: 0, width: '100%', textAlign: 'left', color: 'inherit',
                 transition: 'background 0.15s',
               }}
             >
@@ -359,6 +368,7 @@ function SidePanel({ items, focusedId, onFocus }: SidePanelProps) {
 
 export default function LiveMapPage() {
   const toast = useToast();
+  const mapRuntime = getMapRuntimeConfig();
 
   // ── State entitas ──────────────────────────────────────────────────────────
 
@@ -659,18 +669,18 @@ export default function LiveMapPage() {
             Peta Live Tracking
           </h1>
           {/* Pulsing LIVE dot */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.30)', borderRadius: 99, padding: '3px 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(217,119,6,0.12)', border: '1px solid rgba(217,119,6,0.30)', borderRadius: 99, padding: '3px 10px' }}>
             <span style={{
               display: 'inline-block',
               width: 7, height: 7,
               borderRadius: '50%',
-              background: '#16A34A',
+              background: '#D97706',
               animation: 'pulseDot 1.4s ease-in-out infinite',
             }} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#16A34A', letterSpacing: 1 }}>LIVE</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#D97706', letterSpacing: 1 }}>SIMULATOR</span>
           </div>
           <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-            {totalEntitas} entitas ditampilkan · GPS stale jika >15 detik
+            {totalEntitas} entitas ditampilkan · SVG simulator · config {mapRuntime.provider}
           </span>
         </div>
 

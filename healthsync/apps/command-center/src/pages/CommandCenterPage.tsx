@@ -128,7 +128,7 @@ export default function CommandCenterPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <h1 style={{ margin: 0, fontSize: 25, fontWeight: 800 }}>Command Center</h1>
-            <StatusPill tone="warning">SIMULATION</StatusPill>
+            <StatusPill tone="warning">SIMULATOR MODE</StatusPill>
             {running && <StatusPill tone="success">LIVE ENGINE</StatusPill>}
           </div>
           <p style={{ ...muted, margin: '5px 0 0' }}>Operational war-room · seed {state.seed} · {state.elapsedSeconds}s elapsed</p>
@@ -153,6 +153,8 @@ export default function CommandCenterPage() {
         ].map(([label, value, color, icon]) => <div key={String(label)} className={styles.statCard} style={{ borderLeft: `3px solid ${color}` }}><span style={{ fontSize: 22 }}>{icon}</span><div><div className={styles.statValue} style={{ fontSize: 24 }}>{value}</div><div className={styles.statLabel}>{label}</div></div></div>)}
       </div>
 
+      <OperationalControlTower />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, .85fr) minmax(360px, 1.5fr) minmax(280px, .95fr)', gap: 14, alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 14 }}>
           <section style={panelStyle}>
@@ -165,7 +167,7 @@ export default function CommandCenterPage() {
         </div>
 
         <section style={{ ...panelStyle, minHeight: 620, background: 'linear-gradient(160deg, #211b2a, #19151f)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, color: '#fff7f3' }}><div><strong>Operational Map</strong><div style={{ color: '#b2a4b1', fontSize: 11 }}>Jakarta simulation projection · {state.ambulans.length + state.driver.length + state.pasien.length} moving entities</div></div><StatusPill tone="success">● GPS STREAM</StatusPill></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, color: '#fff7f3' }}><div><strong>Operational Map</strong><div style={{ color: '#b2a4b1', fontSize: 11 }}>Jakarta simulation projection · {state.ambulans.length + state.driver.length + state.pasien.length} moving entities</div></div><StatusPill tone="warning">● SIMULATOR MAP</StatusPill></div>
           <div style={{ height: 430, position: 'relative', overflow: 'hidden', borderRadius: 10, border: '1px solid rgba(255,255,255,.1)', background: 'radial-gradient(circle at 50% 40%, rgba(173,145,184,.14), transparent 42%), repeating-linear-gradient(0deg, transparent 0 54px, rgba(255,255,255,.06) 55px), repeating-linear-gradient(90deg, transparent 0 74px, rgba(255,255,255,.05) 75px)' }}>
             {state.rumahSakit.map((item, index) => <div key={item.id} title={item.nama} style={{ position: 'absolute', left: `${12 + (index * 17) % 78}%`, top: `${18 + (index * 23) % 66}%`, width: 12, height: 12, borderRadius: 3, background: '#ad91b8', border: '2px solid #fff7f3', boxShadow: '0 0 0 5px rgba(173,145,184,.16)' }} />)}
             {state.ambulans.map((item, index) => <div key={item.id} title={`${item.nomorUnit} · ${item.status}`} style={{ position: 'absolute', left: `${8 + (index * 29) % 82}%`, top: `${12 + (index * 31) % 75}%`, width: 14, height: 14, borderRadius: 4, background: item.status === 'Dalam Perjalanan' ? '#f07c70' : '#71c99e', border: '2px solid white', color: '#fff', fontSize: 8, textAlign: 'center' }}>+</div>)}
@@ -182,7 +184,6 @@ export default function CommandCenterPage() {
         </div>
       </div>
 
-      <OperationalControlTower />
       <CommunicationPanel contacts={communicationContacts} />
     </div>
   );
