@@ -12,8 +12,10 @@
     "typecheck": "tsc --noEmit",
     "simulate": "node scripts/generate-command-center-simulation.mjs",
     "test:smoke": "node scripts/command-center-smoke.mjs",
+    "test:config": "node scripts/command-center-config-audit.mjs",
     "test:uiux": "node scripts/command-center-uiux-audit.mjs",
-    "test:integration": "node scripts/integration-contract-audit.mjs"
+    "test:integration": "node scripts/integration-contract-audit.mjs",
+    "test:release": "npm run test:config && npm run test:integration && npm run test:smoke && npm run test:uiux"
   },
   "dependencies": {
     "axios": "^1.6.2",

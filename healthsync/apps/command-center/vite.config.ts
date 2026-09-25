@@ -28,7 +28,6 @@ const REALTIME_TARGET     = process.env['VITE_REALTIME_TARGET']     ?? 'http://l
 type ProxyEntry = { target: string; changeOrigin: boolean; rewrite?: (path: string) => string; ws?: boolean };
 
 const proxy: Record<string, ProxyEntry> = {
-  // ── API routes (digunakan axios clients dengan baseURL: '') ──────────────
   '/v1/auth':          { target: AUTH_TARGET,         changeOrigin: true },
   '/v1/patients':      { target: PATIENT_TARGET,      changeOrigin: true },
   '/v1/consultations': { target: CONSULTATION_TARGET, changeOrigin: true },
@@ -42,8 +41,6 @@ const proxy: Record<string, ProxyEntry> = {
   '/v1/notifications': { target: NOTIFICATION_TARGET, changeOrigin: true },
   '/v1/alerts':        { target: ALERT_TARGET,        changeOrigin: true },
   '/ws':               { target: REALTIME_TARGET,     changeOrigin: true, ws: true },
-
-  // ── Health-check routes (OverviewPage fetch /health/<slug>) ──────────────
   '/health/auth':         { target: AUTH_TARGET,         changeOrigin: true, rewrite: () => '/health' },
   '/health/patient':      { target: PATIENT_TARGET,      changeOrigin: true, rewrite: () => '/health' },
   '/health/consultation': { target: CONSULTATION_TARGET, changeOrigin: true, rewrite: () => '/health' },
@@ -52,6 +49,7 @@ const proxy: Record<string, ProxyEntry> = {
   '/health/referral':     { target: REFERRAL_TARGET,     changeOrigin: true, rewrite: () => '/health' },
   '/health/hospital':     { target: HOSPITAL_TARGET,     changeOrigin: true, rewrite: () => '/health' },
   '/health/pharmacy':     { target: PHARMACY_TARGET,     changeOrigin: true, rewrite: () => '/health' },
+  '/health/realtime':     { target: REALTIME_TARGET,     changeOrigin: true, rewrite: () => '/health' },
   '/health/notification': { target: NOTIFICATION_TARGET, changeOrigin: true, rewrite: () => '/health' },
   '/health/iot':          { target: IOT_TARGET,          changeOrigin: true, rewrite: () => '/health' },
   '/health/alert':        { target: ALERT_TARGET,        changeOrigin: true, rewrite: () => '/health' },
@@ -59,14 +57,6 @@ const proxy: Record<string, ProxyEntry> = {
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 5173,
-    host: '0.0.0.0',
-    proxy,
-  },
-  build: {
-    outDir: 'dist',
-    sourcemap: true,
-  },
+  server: { port: 5173, host: '0.0.0.0', proxy },
+  build: { outDir: 'dist', sourcemap: true },
 });
-
