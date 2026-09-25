@@ -7,6 +7,7 @@ WORKDIR /app
 
 # Copy root workspace manifests (node_modules excluded via .dockerignore)
 COPY package.json package-lock.json ./
+COPY apps/pharmacy/package.json ./apps/pharmacy/
 COPY packages/shared/package.json ./packages/shared/
 COPY apps/command-center/package.json ./apps/command-center/
 COPY apps/admin/package.json ./apps/admin/

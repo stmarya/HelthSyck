@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   applied_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );" 2>/dev/null || true
 
+psql "$DB_URL" -c "ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS description TEXT;" 2>/dev/null || true
+
 # Apply each migration in order
 for file in "$MIGRATIONS_DIR"/V*.sql; do
   version=$(basename "$file" .sql)

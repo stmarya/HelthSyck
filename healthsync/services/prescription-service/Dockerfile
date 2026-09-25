@@ -7,6 +7,7 @@ RUN apk add --no-cache dumb-init
 # ── Install deps ──────────────────────────────────────────────────────
 FROM base AS deps
 COPY package.json package-lock.json ./
+COPY apps/pharmacy/package.json ./apps/pharmacy/
 COPY packages/shared/package.json ./packages/shared/
 COPY services/auth-service/package.json ./services/auth-service/
 COPY services/patient-service/package.json ./services/patient-service/

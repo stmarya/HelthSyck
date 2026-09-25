@@ -169,8 +169,10 @@ services:
       - ../../infra/db/migrations:/migrations:ro
     command: >
       sh -c "
+        set -e &&
         echo '=== HealthSync DB Migration Runner ===' &&
-        psql $$DATABASE_URL -c \"CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\" &&
+        psql $$DATABASE_URL -c \"CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, description TEXT, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());\" &&
+        psql $$DATABASE_URL -c \"ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS description TEXT;\" &&
         for f in /migrations/V*.sql; do
           v=$$(basename $$f .sql);
           applied=$$(psql $$DATABASE_URL -t -c \"SELECT COUNT(*) FROM schema_migrations WHERE version='$$v';\" | tr -d ' ');
@@ -178,7 +180,7 @@ services:
             echo \"  ✓ $$v (already applied)\";
           else
             echo \"  → Applying $$v...\";
-            psql $$DATABASE_URL -f $$f && psql $$DATABASE_URL -c \"INSERT INTO schema_migrations (version) VALUES ('$$v');\" && echo \"  ✓ $$v done\";
+            psql $$DATABASE_URL -f $$f && psql $$DATABASE_URL -c \"INSERT INTO schema_migrations (version, description) VALUES ('$$v', '$$(echo $$v | sed 's/V[0-9]*__//' | tr '_' ' ')');\" && echo \"  ✓ $$v done\";
           fi;
         done &&
         echo '=== All migrations complete ==='
@@ -299,6 +301,8 @@ services:
       migrate:
         condition: service_completed_successfully
       kafka:
+        condition: service_healthy
+      notification-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3004/health || exit 1"]
