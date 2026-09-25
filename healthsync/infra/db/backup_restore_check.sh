@@ -49,7 +49,7 @@ psql "$restore_url" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS cube; 
 # the same constraint with the supported non-ONLY form below.
 pg_restore --list "$BACKUP_FILE" > "$TOC_FILE"
 grep -v 'alerts_pkey' "$TOC_FILE" > "${TOC_FILE}.filtered"
-pg_restore --dbname="$restore_url" --use-list="${TOC_FILE}.filtered" --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
+pg_restore --dbname="$restore_url" --section=post-data --use-list="${TOC_FILE}.filtered" --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "ALTER TABLE alerts ADD CONSTRAINT alerts_pkey PRIMARY KEY (id, created_at);" >/dev/null
 
 restored_tables="$(psql "$restore_url" -Atc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")"
