@@ -46,12 +46,12 @@ psql "$restore_url" -v ON_ERROR_STOP=1 -c "SELECT timescaledb_post_restore();" >
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS cube; CREATE EXTENSION IF NOT EXISTS earthdistance;" >/dev/null
 
 # TimescaleDB does not accept pg_restore's `ALTER TABLE ONLY` form for
-# constraints on the alerts hypertable. Filter those TOC entries, then
+# constraints on the Timescale hypertables. Filter those TOC entries, then
 # recreate the same constraints with supported non-ONLY forms below.
 pg_restore --list "$BACKUP_FILE" > "$TOC_FILE"
-grep -v -E 'alerts_pkey|alerts_.*_fkey|idx_.*_location' "$TOC_FILE" > "${TOC_FILE}.filtered"
+grep -v -E 'alerts_pkey|(vital_signs|ambulance_locations|alerts)_.*_fkey|idx_.*_location' "$TOC_FILE" > "${TOC_FILE}.filtered"
 PGOPTIONS="-c search_path=public,pg_catalog" pg_restore --dbname="$restore_url" --section=post-data --use-list="${TOC_FILE}.filtered" --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
-psql "$restore_url" -v ON_ERROR_STOP=1 -c "ALTER TABLE alerts ADD CONSTRAINT alerts_pkey PRIMARY KEY (id, created_at); ALTER TABLE alerts ADD CONSTRAINT alerts_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE; ALTER TABLE alerts ADD CONSTRAINT alerts_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES users(id) ON DELETE SET NULL;" >/dev/null
+psql "$restore_url" -v ON_ERROR_STOP=1 -c "ALTER TABLE alerts ADD CONSTRAINT alerts_pkey PRIMARY KEY (id, created_at); ALTER TABLE vital_signs ADD CONSTRAINT vital_signs_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE; ALTER TABLE ambulance_locations ADD CONSTRAINT ambulance_locations_ambulance_id_fkey FOREIGN KEY (ambulance_id) REFERENCES ambulances(id) ON DELETE CASCADE; ALTER TABLE alerts ADD CONSTRAINT alerts_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE; ALTER TABLE alerts ADD CONSTRAINT alerts_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES users(id) ON DELETE SET NULL;" >/dev/null
 PGOPTIONS="-c search_path=public,pg_catalog" psql "$restore_url" -v ON_ERROR_STOP=1 -c "CREATE INDEX idx_hospitals_location ON public.hospitals USING gist (public.ll_to_earth((latitude)::double precision, (longitude)::double precision)); CREATE INDEX idx_pharmacies_location ON public.pharmacies USING gist (public.ll_to_earth((latitude)::double precision, (longitude)::double precision));" >/dev/null
 
 restored_tables="$(psql "$restore_url" -Atc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")"
