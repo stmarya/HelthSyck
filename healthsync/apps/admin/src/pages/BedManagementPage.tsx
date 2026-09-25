@@ -494,7 +494,7 @@ export default function BedManagementPage() {
             </div>
 
             {/* ── Kartu Ward ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12, marginBottom: beds.length > 0 ? 16 : 0 }}>
               {wardsLoading
                 ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={110} borderRadius={12} />)
                 : wards.length === 0
@@ -518,8 +518,76 @@ export default function BedManagementPage() {
                       onClick={() => handleWardClick(w.ward)}
                     />
                   ))
-              }
+            }
             </div>
+
+            {/* ── Bed Heatmap Visual ── */}
+            {beds.length > 0 && !bedsLoading && (
+              <div className={styles.card} style={{ marginBottom: 16, padding: 16 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
+                    🗺️ Peta Visual Tempat Tidur
+                    <span style={{ fontSize: 11, color: 'var(--color-muted)', fontWeight: 400, marginLeft: 8 }}>
+                      — klik sel untuk edit status
+                    </span>
+                  </div>
+                  {/* Legenda */}
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
+                    {(Object.entries(BED_STATUS_STYLE) as [BedStatus, { bg: string; color: string; label: string; dot: string }][]).map(([, s]) => (
+                      <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+                        <div style={{ width: 12, height: 12, borderRadius: 3, background: s.dot }} />
+                        <span style={{ color: 'var(--color-text-secondary)' }}>{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Grid heatmap — dikelompokkan per ruangan */}
+                  {(() => {
+                    const byRoom: Record<string, typeof beds> = {};
+                    beds.forEach((b) => {
+                      const key = `${b.ward}/${b.room_number}`;
+                      if (!byRoom[key]) byRoom[key] = [];
+                      byRoom[key].push(b);
+                    });
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {Object.entries(byRoom).map(([room, bedList]) => (
+                          <div key={room}>
+                            <div style={{ fontSize: 11, color: 'var(--color-muted)', fontWeight: 600, marginBottom: 6 }}>
+                              {WARD_ICON[bedList[0].ward] ?? '🛏'} {room}
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {bedList.map((b) => {
+                                const st = BED_STATUS_STYLE[b.status];
+                                return (
+                                  <button
+                                    key={b.id}
+                                    title={`Bed ${b.bed_number} — ${st.label}`}
+                                    onClick={() => { setEditBed(b); setEditStatus(b.status); }}
+                                    style={{
+                                      width: 36, height: 36, borderRadius: 6,
+                                      background: st.dot,
+                                      border: `2px solid ${st.color}`,
+                                      color: '#fff',
+                                      fontSize: 10, fontWeight: 700,
+                                      cursor: 'pointer',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      transition: 'transform 0.1s, opacity 0.1s',
+                                      opacity: b.status === 'MAINTENANCE' ? 0.5 : 1,
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.12)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                                  >
+                                    {b.bed_number}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+              </div>
+            )}
 
             {/* ── Tabel Bed ── */}
             <div className={styles.card} style={{ padding: 0 }}>

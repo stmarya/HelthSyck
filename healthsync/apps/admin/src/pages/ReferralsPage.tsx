@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { referralClient } from '../api/client';
 import type { Referral, ReferralStatus, UrgencyLevel, PaginationMeta } from '../types/admin';
 import { Modal } from '../components/Modal';
@@ -121,7 +122,29 @@ export default function ReferralsPage() {
     label: opt.label,
     count: rows.filter((r) => r.status === opt.value).length,
     style: STATUS_STYLE[opt.value as ReferralStatus],
+    value: opt.value as ReferralStatus,
   }));
+
+  // ── Data pipeline bar chart (horizontal) ──
+  const pipelineData = stats
+    .filter((s) => ['SENT', 'ACCEPTED', 'IN_TRANSIT', 'ARRIVED', 'REJECTED'].includes(s.value))
+    .map((s) => ({
+      name: s.label,
+      value: s.count,
+      color: s.style.color,
+    }));
+
+  // ── Urgensi distribusi ──
+  const urgencyData = [
+    { name: 'Normal', value: rows.filter((r) => r.urgency_level === 'NORMAL' || !r.urgency_level).length, color: '#6b7280' },
+    { name: 'Urgent', value: rows.filter((r) => r.urgency_level === 'URGENT').length, color: '#d97706' },
+    { name: 'Kritis', value: rows.filter((r) => r.urgency_level === 'CRITICAL').length, color: '#f97316' },
+    { name: 'Darurat', value: rows.filter((r) => r.urgency_level === 'EMERGENCY').length, color: '#dc2626' },
+  ].filter((d) => d.value > 0);
+
+  const totalRujukan = rows.length;
+  const aktifRujukan = rows.filter((r) => r.status === 'IN_TRANSIT').length;
+  const daruratCount = rows.filter((r) => r.urgency_level === 'EMERGENCY' || r.urgency_level === 'CRITICAL').length;
 
   // ── Aksi transisi status ──
   const doAction = async () => {
@@ -151,19 +174,109 @@ export default function ReferralsPage() {
         breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Rujukan' }]}
       />
 
-      {/* ── Stat Cards ── */}
-      <div className={styles.statGrid} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className={styles.statCard}
-            style={{ cursor: 'pointer', borderLeft: `3px solid ${s.style.color}` }}
-            onClick={() => { setStatus(STATUS_OPTIONS.find((o) => o.label === s.label)?.value as ReferralStatus ?? ''); setPage(1); }}
-          >
-            <div className={styles.statValue} style={{ fontSize: 26, color: s.style.color }}>{s.count}</div>
-            <div className={styles.statLabel}>{s.label}</div>
+      {/* ── Summary Panel: Pipeline Chart + KPI + Urgency ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16, marginBottom: 20 }}>
+
+        {/* Pipeline & KPI kiri */}
+        <div style={{
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)', padding: 20,
+        }}>
+          {/* 3 KPI utama */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+            {[
+              { label: 'Total Rujukan', value: totalRujukan, color: 'var(--color-primary)', icon: '📋' },
+              { label: 'Dalam Perjalanan', value: aktifRujukan, color: '#d97706', icon: '🚑' },
+              { label: 'Kritis/Darurat', value: daruratCount, color: '#dc2626', icon: '🚨' },
+            ].map((k) => (
+              <div key={k.label} style={{
+                background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)',
+                padding: '12px 14px', border: '1px solid var(--color-border)',
+              }}>
+                <div style={{ fontSize: 11, color: 'var(--color-muted)', marginBottom: 4 }}>{k.icon} {k.label}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.value}</div>
+              </div>
+            ))}
           </div>
-        ))}
+
+          {/* Pipeline Horizontal Bar Chart */}
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
+            Pipeline Status Rujukan
+          </div>
+          {pipelineData.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--color-muted)', padding: '12px 0' }}>Tidak ada data</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart
+                data={pipelineData}
+                layout="vertical"
+                margin={{ top: 0, right: 24, left: 0, bottom: 0 }}
+              >
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
+                <Tooltip
+                  formatter={(value: number) => [`${value} rujukan`]}
+                  contentStyle={{
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {pipelineData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Panel kanan — Status chips clickable + Urgency */}
+        <div style={{
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)', padding: 20, display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+            Semua Status
+          </div>
+          {stats.map((s) => (
+            <button
+              key={s.label}
+              onClick={() => { setStatus(s.value); setPage(1); }}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '6px 10px', borderRadius: 6, border: '1px solid var(--color-border)',
+                background: status === s.value ? s.style.bg : 'var(--color-surface-2)',
+                cursor: 'pointer', width: '100%', textAlign: 'left',
+                transition: 'all 0.12s',
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>{s.label}</span>
+              <span style={{
+                fontSize: 13, fontWeight: 700, color: s.style.color,
+                background: s.style.bg, padding: '1px 8px', borderRadius: 999, minWidth: 28, textAlign: 'center',
+              }}>
+                {s.count}
+              </span>
+            </button>
+          ))}
+
+          {urgencyData.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: 8 }}>
+                Distribusi Urgensi
+              </div>
+              {urgencyData.map((u) => (
+                <div key={u.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: 'var(--color-text-secondary)' }}>{u.name}</span>
+                  <span style={{ fontWeight: 700, color: u.color }}>{u.value}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Filter ── */}

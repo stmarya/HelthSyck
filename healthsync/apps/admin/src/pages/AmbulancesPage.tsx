@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { ambulanceClient, hospitalClient } from '../api/client';
 import type { Ambulance, AmbulanceStatus, PaginationMeta } from '../types/admin';
 import { Modal, ConfirmDialog } from '../components/Modal';
@@ -239,6 +240,20 @@ export default function AmbulancesPage() {
     (s) => ({ status: s, count: rows.filter((r) => r.status === s).length }),
   );
 
+  // ── Data pie chart distribusi status ──
+  const pieData = counts
+    .filter((c) => c.count > 0)
+    .map((c) => ({
+      name: STATUS_LABEL[c.status],
+      value: c.count,
+      color: STATUS_STYLE[c.status].color,
+    }));
+
+  const totalAmbulans = rows.length;
+  const aktif = rows.filter((r) => ['DISPATCHED', 'EN_ROUTE', 'AT_SCENE', 'TRANSPORTING'].includes(r.status)).length;
+  const siap  = rows.filter((r) => r.status === 'AVAILABLE').length;
+  const offline = rows.filter((r) => r.status === 'OFFLINE').length;
+
   // ── Opsi RS untuk dropdown ──
   const hospitalSelectOpts = [
     { value: '', label: 'Pilih Rumah Sakit…' },
@@ -258,16 +273,124 @@ export default function AmbulancesPage() {
         }
       />
 
-      {/* ── Status Summary Cards ── */}
-      <div className={styles.statGrid}>
-        {counts.map(({ status: s, count }) => (
-          <div key={s} className={styles.statCard}>
-            <div className={styles.statValue} style={{ fontSize: 28, color: STATUS_STYLE[s].color }}>
-              {count}
-            </div>
-            <div className={styles.statLabel}>{STATUS_LABEL[s]}</div>
+      {/* ── Summary Panel: KPI Cards + Donut Chart ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 20 }}>
+
+        {/* KPI Cards Grid */}
+        <div style={{
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)', padding: 20,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 16 }}>
+            Ringkasan Armada
           </div>
-        ))}
+          {/* 3 KPI utama */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+            {[
+              { label: 'Total Armada', value: totalAmbulans, color: 'var(--color-primary)', icon: '🚑' },
+              { label: 'Siap Bertugas', value: siap, color: '#16a34a', icon: '✅' },
+              { label: 'Sedang Aktif', value: aktif, color: '#d97706', icon: '🔴' },
+            ].map((k) => (
+              <div key={k.label} style={{
+                background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)',
+                padding: '12px 14px', border: '1px solid var(--color-border)',
+              }}>
+                <div style={{ fontSize: 11, color: 'var(--color-muted)', marginBottom: 4 }}>{k.icon} {k.label}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+          {/* Status bar per tipe */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {counts.filter((c) => c.count > 0).map(({ status: s, count }) => (
+              <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_STYLE[s].color, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>{STATUS_LABEL[s]}</span>
+                    <span style={{ fontWeight: 700, color: STATUS_STYLE[s].color }}>{count}</span>
+                  </div>
+                  <div style={{ height: 4, background: 'var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 999,
+                      width: `${totalAmbulans > 0 ? (count / totalAmbulans) * 100 : 0}%`,
+                      background: STATUS_STYLE[s].color,
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+            {offline > 0 && (
+              <div style={{
+                marginTop: 4, fontSize: 11, color: 'var(--color-danger)',
+                background: 'var(--color-danger-bg)', borderRadius: 6,
+                padding: '4px 8px', border: '1px solid var(--color-danger-border)',
+              }}>
+                ⚠️ {offline} ambulans offline — perlu perhatian
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Donut Chart distribusi status */}
+        <div style={{
+          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)', padding: 20,
+          display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>
+            Distribusi Status
+          </div>
+          {pieData.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-muted)', fontSize: 13 }}>
+              Tidak ada data
+            </div>
+          ) : (
+            <div style={{ position: 'relative', flex: 1 }}>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={78}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number, name: string) => [`${value} unit`, name]}
+                    contentStyle={{
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  />
+                  <Legend
+                    iconSize={8}
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: 11 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Center label total */}
+              <div style={{
+                position: 'absolute', top: '42%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center', pointerEvents: 'none',
+              }}>
+                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-text)', lineHeight: 1 }}>{totalAmbulans}</div>
+                <div style={{ fontSize: 10, color: 'var(--color-muted)', marginTop: 2 }}>Unit</div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Filter ── */}

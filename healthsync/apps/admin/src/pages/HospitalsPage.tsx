@@ -234,49 +234,91 @@ function DetailPanel({ hospital, onEdit, onDeactivate }: DetailPanelProps) {
 
       <hr className={styles.divider} style={{ marginTop: 16 }} />
 
-      {/* Kapasitas */}
+      {/* Kapasitas — Visualisasi Modern */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Kapasitas Tempat Tidur</div>
+
+        {/* Dual radial progress — Bed + ICU */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          {([
-            ['Total Bed',     h.total_beds],
-            ['Tersedia',      h.available_beds],
-            ['ICU Total',     h.icu_total],
-            ['ICU Tersedia',  h.icu_available],
-          ] as [string, number][]).map(([lbl, val]) => (
-            <div key={lbl} style={{
-              background: 'var(--color-surface-2)', borderRadius: 8,
-              padding: '10px 14px', border: '1px solid var(--color-border)',
-            }}>
-              <div style={{ fontSize: 11, color: 'var(--color-muted)', marginBottom: 4 }}>{lbl}</div>
-              <div style={{
-                fontSize: 20, fontWeight: 700,
-                color: (lbl === 'Tersedia' || lbl === 'ICU Tersedia')
-                  ? bedColor(val, lbl === 'Tersedia' ? h.total_beds : h.icu_total)
-                  : undefined,
+          {[
+            {
+              label: 'Tempat Tidur',
+              available: h.available_beds,
+              total: h.total_beds,
+              pct: h.total_beds > 0 ? Math.round((h.available_beds / h.total_beds) * 100) : 0,
+            },
+            {
+              label: 'ICU',
+              available: h.icu_available,
+              total: h.icu_total,
+              pct: h.icu_total > 0 ? Math.round((h.icu_available / h.icu_total) * 100) : 0,
+            },
+          ].map((cap) => {
+            const color = cap.pct > 50 ? '#16a34a' : cap.pct > 20 ? '#d97706' : '#dc2626';
+            const circumference = 2 * Math.PI * 30; // radius 30
+            const strokeDash = (cap.pct / 100) * circumference;
+            return (
+              <div key={cap.label} style={{
+                background: 'var(--color-surface-2)', borderRadius: 10,
+                padding: '14px 12px', border: '1px solid var(--color-border)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
               }}>
-                {val ?? '—'}
+                {/* SVG Radial Progress */}
+                <div style={{ position: 'relative', width: 72, height: 72 }}>
+                  <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
+                    {/* Track */}
+                    <circle cx="36" cy="36" r="30" fill="none"
+                      stroke="var(--color-border)" strokeWidth="7" />
+                    {/* Progress */}
+                    <circle cx="36" cy="36" r="30" fill="none"
+                      stroke={color} strokeWidth="7"
+                      strokeDasharray={`${strokeDash} ${circumference}`}
+                      strokeLinecap="round"
+                      style={{ transition: 'stroke-dasharray 0.6s ease' }}
+                    />
+                  </svg>
+                  {/* Center text */}
+                  <div style={{
+                    position: 'absolute', top: '50%', left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color, lineHeight: 1 }}>{cap.pct}%</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: 2 }}>{cap.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+                    <span style={{ fontWeight: 700, color }}>{cap.available}</span>
+                    <span> / {cap.total}</span>
+                    <span style={{ display: 'block', fontSize: 10 }}>tersedia</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+
+        {/* Progress bar total */}
         {h.total_beds > 0 && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-muted)', marginBottom: 4 }}>
-              <span>Ketersediaan Bed</span>
-              <span>{bedPct}%</span>
+          <div style={{ background: 'var(--color-surface-2)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-muted)', marginBottom: 6 }}>
+              <span style={{ fontWeight: 600 }}>Hunian Keseluruhan</span>
+              <span style={{ fontWeight: 700, color: bedColor(h.available_beds, h.total_beds) }}>
+                {100 - bedPct}% terisi
+              </span>
             </div>
-            <div style={{ height: 6, background: 'var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
               <div style={{
                 height: '100%', borderRadius: 999,
                 width: `${bedPct}%`,
-                background: bedPct > 50
-                  ? 'var(--color-success, #16a34a)'
-                  : bedPct > 20
-                    ? 'var(--color-warning, #d97706)'
-                    : 'var(--color-danger, #dc2626)',
+                background: bedColor(h.available_beds, h.total_beds),
                 transition: 'width 0.4s ease',
               }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--color-muted)', marginTop: 4 }}>
+              <span>{h.available_beds} tersedia</span>
+              <span>{h.total_beds - h.available_beds} terisi</span>
             </div>
           </div>
         )}
