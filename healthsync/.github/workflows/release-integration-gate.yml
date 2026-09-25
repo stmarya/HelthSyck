@@ -65,6 +65,9 @@ jobs:
         working-directory: healthsync
         run: npm run test:release --workspace=apps/command-center
 
+      - name: Install YAML validator
+        run: python -m pip install --disable-pip-version-check pyyaml
+
       - name: Validate Kubernetes YAML syntax
         run: |
           python - <<'PY'
