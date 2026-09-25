@@ -33,6 +33,8 @@ sha256sum "$BACKUP_FILE"
 
 psql "$maintenance_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$RESTORE_DB\";"
 psql "$maintenance_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$RESTORE_DB\";"
+# Restore required extensions before indexes and TimescaleDB chunk metadata.
+psql "$restore_url" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS timescaledb; CREATE EXTENSION IF NOT EXISTS cube; CREATE EXTENSION IF NOT EXISTS earthdistance;" >/dev/null
 # TimescaleDB requires these hooks so hypertable chunks are restored after
 # the hypertable metadata has been recreated.
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "SELECT timescaledb_pre_restore();" >/dev/null
