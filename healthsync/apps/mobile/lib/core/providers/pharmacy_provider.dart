@@ -129,12 +129,13 @@ class ResepNotifier extends StateNotifier<ResepState> {
         return StatusResep.menunggu;   // ISSUED → menunggu dikonfirmasi apotek
       case 'CONFIRMED':
         return StatusResep.diproses;   // CONFIRMED → sedang diproses
-      case 'PREPARED':
+      case 'PREPARING':
         return StatusResep.diproses;
       case 'READY':
         return StatusResep.siap;       // READY → siap diambil
       case 'DELIVERED':
-      case 'COMPLETED':
+      case 'DELIVERING':
+        return StatusResep.siap;
         return StatusResep.selesai;
       case 'CANCELLED':
         return StatusResep.dibatalkan;
@@ -166,8 +167,8 @@ class ResepNotifier extends StateNotifier<ResepState> {
   String? _statusEndpoint(String status) {
     switch (status) {
       case StatusResep.diproses:   return 'confirm';  // ISSUED → CONFIRMED
-      case StatusResep.siap:       return 'ready';    // PREPARED → READY
-      case StatusResep.selesai:    return 'complete'; // READY → COMPLETED
+      case StatusResep.siap:       return 'ready';    // PREPARING → READY
+      case StatusResep.selesai:    return 'complete'; // READY/DELIVERING → DELIVERED
       default:                     return null;
     }
   }

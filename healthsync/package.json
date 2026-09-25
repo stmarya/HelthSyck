@@ -52,7 +52,8 @@
     "_comment_misc": "── LAINNYA ──────────────────────────────────────",
     "lint": "npm run lint --workspaces --if-present",
     "docs": "node tools/swagger-ui/server.js",
-    "migrate:local": "bash infra/db/run_migrations.sh"
+    "migrate:local": "bash infra/db/run_migrations.sh",
+    "validate:contracts": "node scripts/validate-contracts.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.21.0",

@@ -79,10 +79,7 @@ class ConsultationNotifier extends StateNotifier<ConsultationsState> {
 
   Future<Consultation?> bookConsultation({
     required String patientId,
-    String? preferredDoctorId,
-    required String type,
     required String chiefComplaint,
-    required DateTime scheduledAt,
   }) async {
     try {
       final response = await _api.post(
@@ -90,12 +87,6 @@ class ConsultationNotifier extends StateNotifier<ConsultationsState> {
         body: {
           'patientId': patientId,
           'chiefComplaint': chiefComplaint,
-          'symptomData': {
-            if (preferredDoctorId != null && preferredDoctorId.trim().isNotEmpty)
-              'preferredDoctorId': preferredDoctorId.trim(),
-            'consultationType': type,
-            'scheduledAt': scheduledAt.toIso8601String(),
-          },
         },
       );
       final consultation = Consultation.fromJson(

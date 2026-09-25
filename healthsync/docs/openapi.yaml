@@ -10,6 +10,10 @@ info:
     **Error Format**: RFC 7807 Problem Details (`application/problem+json`)
     
     **Rate Limits**: 100 req/min per user token, 1000 req/min per service token.
+
+    **Contract note**: request bodies use camelCase names shown on each operation.
+    DB-backed response rows currently use snake_case because services return the
+    PostgreSQL row shape. See `docs/DATABASE.md` for the authoritative FE ↔ BE ↔ DB contract.
   contact:
     name: HealthSync Engineering
     email: engineering@healthsync.id
@@ -104,28 +108,28 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        userId: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
         name: { type: string }
-        dateOfBirth: { type: string, format: date }
+        date_of_birth: { type: string, format: date }
         gender: { type: string, enum: [MALE, FEMALE, OTHER] }
-        bloodType: { type: string, enum: ["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"] }
+        blood_type: { type: string, enum: ["A+","A-","B+","B-","AB+","AB-","O+","O-","UNKNOWN"] }
         phone: { type: string }
         address: { type: string }
-        emergencyContactName: { type: string }
-        emergencyContactPhone: { type: string }
+        emergency_contact_name: { type: string }
+        emergency_contact_phone: { type: string }
         conditions: { type: array, items: { $ref: "#/components/schemas/MedicalCondition" } }
         allergies: { type: array, items: { $ref: "#/components/schemas/Allergy" } }
         devices: { type: array, items: { $ref: "#/components/schemas/IoTDevice" } }
-        createdAt: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
 
     MedicalCondition:
       type: object
       properties:
         id: { type: string, format: uuid }
-        icd10Code: { type: string }
+        icd10_code: { type: string }
         description: { type: string }
-        diagnosedAt: { type: string, format: date }
-        isActive: { type: boolean }
+        diagnosed_at: { type: string, format: date }
+        is_active: { type: boolean }
 
     Allergy:
       type: object
@@ -139,78 +143,87 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        deviceId: { type: string }
-        deviceType: { type: string }
-        firmwareVersion: { type: string }
-        lastSeenAt: { type: string, format: date-time }
-        isActive: { type: boolean }
+        device_id: { type: string }
+        device_type: { type: string }
+        firmware_version: { type: string }
+        last_seen_at: { type: string, format: date-time }
+        is_active: { type: boolean }
 
     VitalSign:
       type: object
       properties:
         id: { type: string, format: uuid }
-        patientId: { type: string, format: uuid }
-        heartRate: { type: integer, minimum: 20, maximum: 300, description: "bpm" }
+        patient_id: { type: string, format: uuid }
+        heart_rate: { type: integer, minimum: 20, maximum: 300, description: "bpm" }
         spo2: { type: number, minimum: 50, maximum: 100, description: "%" }
-        systolicBp: { type: integer, description: "mmHg" }
-        diastolicBp: { type: integer, description: "mmHg" }
+        systolic_bp: { type: integer, description: "mmHg" }
+        diastolic_bp: { type: integer, description: "mmHg" }
         temperature: { type: number, description: "°C" }
-        activityLevel: { type: string, enum: [resting, walking, running] }
+        activity_level: { type: string, enum: [resting, walking, running] }
         source: { type: string, enum: [MANUAL, IOT_DEVICE, WEARABLE] }
-        recordedAt: { type: string, format: date-time }
+        recorded_at: { type: string, format: date-time }
 
     Consultation:
+      description: No scheduled_at or type column is persisted in the current schema.
       type: object
       properties:
         id: { type: string, format: uuid }
-        patientId: { type: string, format: uuid }
-        doctorId: { type: string, format: uuid }
+        patient_id: { type: string, format: uuid }
+        doctor_id: { type: string, format: uuid }
         status:
           type: string
           enum: [PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED, EXPIRED]
-        chiefComplaint: { type: string }
+        chief_complaint: { type: string }
         diagnosis: { type: string }
-        startedAt: { type: string, format: date-time }
-        endedAt: { type: string, format: date-time }
-        createdAt: { type: string, format: date-time }
+        notes: { type: string }
+        symptom_data: { type: object }
+        urgency: { type: string, enum: [LOW, NORMAL, HIGH, CRITICAL] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
 
     ConsultationMessage:
       type: object
       properties:
         id: { type: string, format: uuid }
-        consultationId: { type: string, format: uuid }
-        senderId: { type: string, format: uuid }
-        senderEmail: { type: string }
-        messageType: { type: string, enum: [TEXT, IMAGE, FILE, SYSTEM] }
+        consultation_id: { type: string, format: uuid }
+        sender_id: { type: string, format: uuid }
+        sender_email: { type: string }
+        message_type: { type: string, enum: [TEXT, IMAGE, FILE, SYSTEM] }
         content: { type: string }
-        fileUrl: { type: string }
-        isRead: { type: boolean }
-        createdAt: { type: string, format: date-time }
+        file_url: { type: string }
+        file_name: { type: string }
+        is_read: { type: boolean }
+        created_at: { type: string, format: date-time }
 
     Prescription:
       type: object
       properties:
         id: { type: string, format: uuid }
-        consultationId: { type: string, format: uuid }
-        patientId: { type: string, format: uuid }
-        doctorId: { type: string, format: uuid }
-        pharmacyId: { type: string, format: uuid }
+        consultation_id: { type: string, format: uuid }
+        patient_id: { type: string, format: uuid }
+        doctor_id: { type: string, format: uuid }
+        pharmacy_id: { type: string, format: uuid }
+        fulfillment_type: { type: string, enum: [PICKUP, DELIVERY] }
+        delivery_address: { type: string }
+        notes: { type: string }
         status:
           type: string
           enum: [ISSUED, SENT_TO_PHARMACY, CONFIRMED, PREPARING, READY, DELIVERING, DELIVERED, CANCELLED]
         items: { type: array, items: { $ref: "#/components/schemas/PrescriptionItem" } }
-        issuedAt: { type: string, format: date-time }
-        expiresAt: { type: string, format: date-time }
+        issued_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
 
     PrescriptionItem:
       type: object
       properties:
         id: { type: string, format: uuid }
-        drugId: { type: string, format: uuid }
-        drugName: { type: string }
+        drug_id: { type: string, format: uuid }
+        drug_name: { type: string }
         dosage: { type: string, example: "1 tablet 3x/day" }
         quantity: { type: integer, minimum: 1 }
         instructions: { type: string }
+        substitution_allowed: { type: boolean }
 
     Hospital:
       type: object
@@ -223,56 +236,56 @@ components:
         latitude: { type: number }
         longitude: { type: number }
         phone: { type: string }
-        igdPhone: { type: string }
-        totalBeds: { type: integer }
-        availableBeds: { type: integer }
-        icuTotal: { type: integer }
-        icuAvailable: { type: integer }
+        igd_phone: { type: string }
+        total_beds: { type: integer }
+        available_beds: { type: integer }
+        icu_total: { type: integer }
+        icu_available: { type: integer }
         specializations: { type: array, items: { type: string } }
-        distanceKm: { type: number, description: "Only present in search results" }
+        distance_km: { type: number, description: "Only present in search results" }
 
     Ambulance:
       type: object
       properties:
         id: { type: string, format: uuid }
-        plateNumber: { type: string }
+        plate_number: { type: string }
         type: { type: string, enum: [BLS, ALS, NICU] }
         status:
           type: string
           enum: [OFFLINE, AVAILABLE, DISPATCHED, EN_ROUTE, AT_SCENE, TRANSPORTING, RETURNING]
         latitude: { type: number }
         longitude: { type: number }
-        distanceKm: { type: number, description: "Only present in nearby results" }
-        etaMinutes: { type: number }
+        distance_km: { type: number, description: "Only present in nearby results" }
+        eta_minutes: { type: number }
 
     Referral:
       type: object
       properties:
         id: { type: string, format: uuid }
-        patientId: { type: string, format: uuid }
-        patientName: { type: string }
-        fromHospitalName: { type: string }
-        toHospitalName: { type: string }
+        patient_id: { type: string, format: uuid }
+        patient_name: { type: string }
+        from_hospital_name: { type: string }
+        to_hospital_name: { type: string }
         status:
           type: string
           enum: [DRAFT, SENT, ACCEPTED, REJECTED, IN_TRANSIT, ARRIVED, CANCELLED]
         reason: { type: string }
-        urgencyLevel: { type: string, enum: [CRITICAL, URGENT, NORMAL] }
-        createdAt: { type: string, format: date-time }
+        urgency_level: { type: string, enum: [CRITICAL, URGENT, NORMAL] }
+        created_at: { type: string, format: date-time }
 
     Alert:
       type: object
       properties:
         id: { type: string, format: uuid }
-        patientId: { type: string, format: uuid }
-        patientName: { type: string }
+        patient_id: { type: string, format: uuid }
+        patient_name: { type: string }
         level: { type: string, enum: [LEVEL_1, LEVEL_2, LEVEL_3] }
         status: { type: string, enum: [ACTIVE, ACKNOWLEDGED, RESOLVED, FALSE_POSITIVE] }
-        triggerMetric: { type: string, example: "heart_rate" }
-        triggerValue: { type: number, example: 185 }
-        thresholdValue: { type: number, example: 180 }
+        trigger_metric: { type: string, example: "heart_rate" }
+        trigger_value: { type: number, example: 185 }
+        threshold_value: { type: number, example: 180 }
         message: { type: string }
-        createdAt: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
 
     Pagination:
       type: object

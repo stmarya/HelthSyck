@@ -187,6 +187,10 @@ jobs:
         working-directory: healthsync
         run: bash -n infra/k8s/deploy.sh scripts/deploy.sh scripts/start.sh
 
+      - name: Validate FE-BE-DB contracts
+        working-directory: healthsync
+        run: npm run validate:contracts
+
       - name: Validate NGINX configuration
         working-directory: healthsync
         run: |

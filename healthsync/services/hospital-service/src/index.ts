@@ -541,8 +541,7 @@ app.put(
           `UPDATE hospital_beds
            SET status      = $1,
                patient_id  = $2,
-               admitted_at = CASE WHEN $1 = 'OCCUPIED' THEN NOW() ELSE NULL END,
-               updated_at  = NOW()
+               admitted_at = CASE WHEN $1 = 'OCCUPIED' THEN NOW() ELSE NULL END
            WHERE id = $3 AND hospital_id = $4
            RETURNING id, ward, room_number, bed_number, status, patient_id, admitted_at`,
           [status, patientId ?? null, bedId, id],

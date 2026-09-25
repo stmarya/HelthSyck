@@ -25,40 +25,37 @@ class Prescription {
 
   factory Prescription.fromJson(Map<String, dynamic> json) => Prescription(
         id: json['id'] as String,
-        consultationId: json['consultationId'] as String? ?? '',
-        status: json['status'] as String? ?? 'PENDING',
+        consultationId: json['consultation_id'] as String? ?? '',
+        status: json['status'] as String? ?? 'ISSUED',
         items: (json['items'] as List<dynamic>? ?? [])
             .map((e) => PrescriptionItem.fromJson(e as Map<String, dynamic>))
             .toList(),
-        createdAt: json['createdAt'] != null
-            ? DateTime.tryParse(json['createdAt'] as String)
+        createdAt: json['issued_at'] != null
+            ? DateTime.tryParse(json['issued_at'] as String)
             : null,
         pharmacyName: json['pharmacyName'] as String?,
       );
 }
 
 class PrescriptionItem {
-  final String medicineName;
+  final String drugName;
   final String dosage;
-  final String frequency;
-  final int duration;
-  final String? notes;
+  final int quantity;
+  final String? instructions;
 
   const PrescriptionItem({
-    required this.medicineName,
+    required this.drugName,
     required this.dosage,
-    required this.frequency,
-    required this.duration,
-    this.notes,
+    required this.quantity,
+    this.instructions,
   });
 
   factory PrescriptionItem.fromJson(Map<String, dynamic> json) =>
       PrescriptionItem(
-        medicineName: json['medicineName'] as String? ?? json['medicine_name'] as String? ?? '',
+        drugName: json['drug_name'] as String? ?? '',
         dosage: json['dosage'] as String? ?? '',
-        frequency: json['frequency'] as String? ?? '',
-        duration: (json['duration'] as num?)?.toInt() ?? 0,
-        notes: json['notes'] as String?,
+        quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+        instructions: json['instructions'] as String?,
       );
 }
 
@@ -224,11 +221,12 @@ class _PrescriptionsScreenState
                                   dense: true,
                                   leading:
                                       const Icon(Icons.circle, size: 8),
-                                  title: Text(item.medicineName,
+                                  title: Text(item.drugName,
                                       style: const TextStyle(
                                           fontWeight: FontWeight.w500)),
                                   subtitle: Text(
-                                      '${item.dosage} • ${item.frequency} • ${item.duration} days${item.notes != null ? ' • ${item.notes}' : ''}'),
+                                      '${item.dosage} • Jumlah ${item.quantity}'
+                                      '${item.instructions != null && item.instructions!.isNotEmpty ? ' • ${item.instructions}' : ''}'),
                                 );
                               }).toList(),
                             ),

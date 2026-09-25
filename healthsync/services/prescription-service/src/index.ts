@@ -287,7 +287,7 @@ app.get(
          FROM prescription_items pi
          JOIN drugs d ON d.id = pi.drug_id
          WHERE pi.prescription_id=$1
-         ORDER BY pi.created_at ASC`,
+         ORDER BY pi.id ASC`,
         [id],
       );
 
@@ -360,7 +360,17 @@ app.get(
       const total = parseInt(countResult.rows[0]?.count ?? '0', 10);
 
       const dataResult = await pool.query(
-        `SELECT p.* FROM prescriptions p ${where}
+        `SELECT p.*,
+                COALESCE((
+                  SELECT json_agg(item ORDER BY item.id)
+                  FROM (
+                    SELECT pi.*, d.generic_name, d.brand_name, d.dosage_form, d.strength, d.unit
+                    FROM prescription_items pi
+                    JOIN drugs d ON d.id = pi.drug_id
+                    WHERE pi.prescription_id = p.id
+                  ) AS item
+                ), '[]'::json) AS items
+         FROM prescriptions p ${where}
          ORDER BY p.issued_at DESC
          LIMIT ${addParam(limit)} OFFSET ${addParam(offset)}`,
         params,

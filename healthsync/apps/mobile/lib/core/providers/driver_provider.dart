@@ -110,7 +110,7 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
             .where((e) {
               // Hanya resep yang butuh pengiriman (READY atau DELIVERED)
               final s = (e as Map<String, dynamic>)['status']?.toString() ?? '';
-              return ['READY', 'DELIVERED', 'CONFIRMED', 'ISSUED'].contains(s);
+              return ['READY', 'DELIVERING', 'DELIVERED', 'CONFIRMED', 'ISSUED'].contains(s);
             })
             .map((e) => _parseOrder(e as Map<String, dynamic>))
             .toList();
@@ -225,10 +225,11 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
     switch (s.toUpperCase()) {
       case 'ISSUED':     return StatusOrder.menunggu;
       case 'CONFIRMED':  return StatusOrder.diterima;
-      case 'PREPARED':   return StatusOrder.diambil;
+      case 'PREPARING':  return StatusOrder.diambil;
       case 'READY':      return StatusOrder.diantar;
+      case 'DELIVERING': return StatusOrder.diantar;
       case 'DELIVERED':
-      case 'COMPLETED':  return StatusOrder.selesai;
+        return StatusOrder.selesai;
       case 'CANCELLED':  return StatusOrder.dibatalkan;
       default:           return StatusOrder.menunggu;
     }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../core/models/consultation.dart';
 import '../core/providers/consultation_provider.dart';
@@ -67,21 +66,22 @@ class _ConsultationListScreenState
                   children: [
                     _ConsultationList(
                       items: state.items
-                          .where((c) => c.status == 'scheduled')
+                          .where((c) => c.status == 'PENDING' || c.status == 'ACCEPTED')
                           .toList(),
                       emptyText: 'No upcoming consultations',
                     ),
                     _ConsultationList(
                       items: state.items
-                          .where((c) => c.status == 'in_progress')
+                          .where((c) => c.status == 'IN_PROGRESS')
                           .toList(),
                       emptyText: 'No active consultations',
                     ),
                     _ConsultationList(
                       items: state.items
                           .where((c) =>
-                              c.status == 'completed' ||
-                              c.status == 'cancelled')
+                              c.status == 'COMPLETED' ||
+                              c.status == 'CANCELLED' ||
+                              c.status == 'EXPIRED')
                           .toList(),
                       emptyText: 'No past consultations',
                     ),
@@ -130,11 +130,13 @@ class _ConsultationCard extends ConsumerWidget {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'in_progress':
+      case 'IN_PROGRESS':
         return Colors.green;
-      case 'scheduled':
+      case 'PENDING':
+      case 'ACCEPTED':
         return Colors.blue;
-      case 'cancelled':
+      case 'CANCELLED':
+      case 'EXPIRED':
         return Colors.red;
       default:
         return Colors.grey;
@@ -209,21 +211,7 @@ class _ConsultationCard extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-              if (item.scheduledAt != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.schedule, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Text(
-                      DateFormat('dd MMM yyyy, HH:mm')
-                          .format(item.scheduledAt!.toLocal()),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ],
-              if (item.status == 'in_progress') ...[
+              if (item.status == 'IN_PROGRESS') ...[
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: () => context.push('/consultations/${item.id}'),

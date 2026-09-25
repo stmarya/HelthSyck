@@ -6,7 +6,7 @@
 2. [Services Reference](#services-reference)
 3. [API Conventions](#api-conventions)
 4. [Authentication & Authorization](#authentication--authorization)
-5. [Database Schemas](#database-schemas)
+5. [Database & API Contract](DATABASE.md)
 6. [Event Bus (Kafka Topics)](#event-bus-kafka-topics)
 7. [IoT & MQTT](#iot--mqtt)
 8. [Environment Variables](#environment-variables)
@@ -23,7 +23,7 @@ HealthSync follows a **microservices architecture** with:
 - **Asynchronous communication**: Apache Kafka for events
 - **IoT pipeline**: EMQX (MQTT broker) → `iot-ingestion` → Kafka → `alert-service`
 - **Auth**: JWT (short-lived access token + refresh token rotation)
-- **Data stores**: PostgreSQL per service (database-per-service pattern), Redis for cache/sessions
+- **Data stores**: one PostgreSQL schema currently shared by the services (logical ownership is documented in [DATABASE.md](DATABASE.md)), Redis for cache/sessions
 
 ---
 
@@ -136,51 +136,21 @@ Response envelope:
 
 ---
 
-## Database Schemas
+## Database & API Contract
 
-Each service maintains its own PostgreSQL database. Key tables:
+The canonical FE ↔ BE ↔ DB contract is maintained in [`DATABASE.md`](DATABASE.md). It is generated from and reviewed against the migrations in [`infra/db/migrations`](../infra/db/migrations).
 
-### auth-service
+Key rules:
 
-```sql
-users (id UUID PK, email TEXT UNIQUE, password_hash TEXT, role TEXT, created_at TIMESTAMPTZ)
-refresh_tokens (id UUID PK, user_id UUID FK, token TEXT, expires_at TIMESTAMPTZ, revoked BOOLEAN)
-```
-
-### patient-service
-
-```sql
-patients (id UUID PK, user_id UUID UNIQUE FK→auth, nik_token TEXT UNIQUE, name TEXT, dob DATE, blood_type TEXT)
-vitals (id UUID PK, patient_id UUID FK, heart_rate INT, spo2 NUMERIC, recorded_at TIMESTAMPTZ, source TEXT)
-```
-
-### consultation-service
-
-```sql
-consultations (id UUID PK, patient_id UUID, doctor_id UUID, status TEXT, scheduled_at TIMESTAMPTZ, notes TEXT)
-```
-
-### prescription-service
-
-```sql
-prescriptions (id UUID PK, consultation_id UUID, patient_id UUID, doctor_id UUID, issued_at TIMESTAMPTZ)
-prescription_items (id UUID PK, prescription_id UUID FK, drug_code TEXT, dosage TEXT, frequency TEXT)
-```
-
----
+- DB-backed response fields currently use `snake_case`; request bodies use the service validators' `camelCase` fields.
+- Roles are `PATIENT`, `DOCTOR`, `COMMAND_CENTER`, `PHARMACIST`, `AMBULANCE_DRIVER`, and `ADMIN`.
+- Consultation status is `PENDING`, `ACCEPTED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`, or `EXPIRED`; there is no persisted `scheduled_at` field.
+- Prescription status is `ISSUED`, `SENT_TO_PHARMACY`, `CONFIRMED`, `PREPARING`, `READY`, `DELIVERING`, `DELIVERED`, or `CANCELLED`.
+- Referral status is `DRAFT`, `SENT`, `ACCEPTED`, `REJECTED`, `IN_TRANSIT`, `ARRIVED`, or `CANCELLED`; urgency is `NORMAL`, `URGENT`, or `CRITICAL`.
 
 ## Event Bus (Kafka Topics)
 
-| Topic | Producer | Consumer(s) | Payload |
-|-------|----------|-------------|---------|
-| `hs.vitals.ingested` | `iot-ingestion` | `alert-service`, `patient-service` | `{ patientId, heartRate, spo2, timestamp }` |
-| `hs.alert.triggered` | `alert-service` | `notification-service`, `ambulance-service` | `{ alertId, patientId, type, severity }` |
-| `hs.consultation.created` | `consultation-service` | `notification-service` | `{ consultationId, patientId, doctorId }` |
-| `hs.prescription.issued` | `prescription-service` | `pharmacy-service`, `notification-service` | `{ prescriptionId, patientId }` |
-| `hs.ambulance.dispatched` | `ambulance-service` | `notification-service` | `{ ambulanceId, patientId, eta }` |
-| `hs.referral.created` | `referral-service` | `notification-service`, `hospital-service` | `{ referralId, patientId, targetHospitalId }` |
-
----
+The active Kafka pipeline is IoT/alert processing (`KAFKA_TOPIC_VITALS` and `KAFKA_TOPIC_ALERTS`). The former `hs.*` application-event table was aspirational and is not currently emitted by the Node services; it is therefore not a contract for FE or BE integration.
 
 ## IoT & MQTT
 
