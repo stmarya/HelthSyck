@@ -235,7 +235,7 @@ export default function OverviewPage() {
   const activeAmbs = ambulances.filter((a) => activeStatuses.includes(a.status)).length;
 
   // ── Agregasi Rujukan ──
-  const pendingReferrals = referrals.filter((r) => r.status === 'PENDING').length;
+  const pendingReferrals = referrals.filter((r) => r.status === 'SENT').length;
   const inTransitReferrals = referrals.filter((r) => r.status === 'IN_TRANSIT').length;
   const criticalReferrals = referrals.filter(
     (r) => r.urgency_level === 'CRITICAL' || r.urgency_level === 'EMERGENCY',
@@ -258,7 +258,7 @@ export default function OverviewPage() {
 
   // ── Data grafik batang: urgency rujukan ──
   const referralUrgencyData = [
-    { name: 'Rutin', value: referrals.filter((r) => r.urgency_level === 'ROUTINE').length, color: '#6b7280' },
+    { name: 'Normal', value: referrals.filter((r) => r.urgency_level === 'NORMAL').length, color: '#6b7280' },
     { name: 'Mendesak', value: referrals.filter((r) => r.urgency_level === 'URGENT').length, color: '#f59e0b' },
     { name: 'Kritis', value: referrals.filter((r) => r.urgency_level === 'CRITICAL').length, color: '#ef4444' },
     { name: 'Darurat', value: referrals.filter((r) => r.urgency_level === 'EMERGENCY').length, color: '#7c2d12' },
@@ -614,7 +614,7 @@ export default function OverviewPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {[
               { label: 'Total Pasien', value: patients.length > 0 ? patients.length : '—', color: 'var(--color-primary)' },
-              { label: 'Rujukan Aktif', value: referrals.filter(r => !['COMPLETED','CANCELLED'].includes(r.status)).length, color: 'var(--color-warning)' },
+              { label: 'Rujukan Aktif', value: referrals.filter(r => !['REJECTED','ARRIVED','CANCELLED'].includes(r.status)).length, color: 'var(--color-warning)' },
               { label: 'Konsultasi Selesai', value: consultations.filter(c => c.status === 'COMPLETED').length, color: 'var(--color-success)' },
               { label: 'RS Mitra EMT', value: hospitals.filter(h => h.is_emt_partner).length, color: '#7c3aed' },
             ].map(({ label, value, color }) => (

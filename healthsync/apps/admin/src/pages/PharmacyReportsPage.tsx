@@ -1,365 +1,150 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { pharmacyClient } from '../api/client';
 import { useToast } from '../components/Toast';
 import PageHeader from '../components/PageHeader';
 import { Skeleton } from '../components/Skeleton';
 import styles from './Page.module.css';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipe Data
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface Pharmacy {
+interface PharmacySummary {
   id: string;
   name: string;
-  address: string;
-  phone: string | null;
-  license_number?: string;
-  drug_count?: number;
-  low_stock_count?: number;
+  license_number: string;
+  is_active: boolean;
+  drug_count: number;
+  total_units: number;
+  low_stock_count: number;
+  expired_count: number;
+  expiring_soon_count: number;
+  total_value: string | number;
 }
-
-interface InventoryItem {
-  drug_id: string;
+interface Totals {
+  pharmacy_count: number;
+  drug_count: number;
+  total_units: number;
+  low_stock_count: number;
+  expired_count: number;
+  expiring_soon_count: number;
+  total_value: string | number;
+}
+interface TopDrug {
+  id: string;
   generic_name: string;
-  brand_name: string;
-  dosage_form: string;
-  strength: string;
-  stock_qty: number;
-  unit_price: number;
-  batch_number: string;
-  expires_at: string;
-  reorder_level: number;
-  is_low_stock?: boolean;
+  brand_name: string | null;
+  total_units: number;
+  total_value: string | number;
+}
+interface ReportData {
+  pharmacies: PharmacySummary[];
+  totals: Totals;
+  topDrugs: TopDrug[];
+  generatedAt: string;
 }
 
-interface PharmacyReport {
-  pharmacy: Pharmacy;
-  inventory: InventoryItem[];
-  loading: boolean;
-  error: string | null;
+function money(value: string | number): string {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-function isExpired(iso: string): boolean {
-  return new Date(iso) < new Date();
+function csv(value: unknown): string { return `"${String(value ?? '').replace(/"/g, '""')}"`; }
+function message(error: unknown): string {
+  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    ?? (error instanceof Error ? error.message : 'Gagal memuat laporan farmasi');
 }
-
-function isExpiringSoon(iso: string, days = 30): boolean {
-  const limit = new Date();
-  limit.setDate(limit.getDate() + days);
-  return new Date(iso) >= new Date() && new Date(iso) <= limit;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(amount);
-}
-
-function exportReportCSV(reports: PharmacyReport[]) {
-  const rows: string[] = [];
-  rows.push('Apotek,Jenis Obat,Total Unit,Stok Rendah,Segera Kadaluarsa,Sudah Kadaluarsa,Nilai Inventori (Rp)');
-  for (const r of reports) {
-    if (r.loading || r.error) continue;
-    const inv = r.inventory;
-    const totalUnit    = inv.reduce((s, i) => s + i.stock_qty, 0);
-    const lowStock     = inv.filter((i) => i.is_low_stock ?? (i.stock_qty <= i.reorder_level)).length;
-    const expiringSoon = inv.filter((i) => i.expires_at && isExpiringSoon(i.expires_at)).length;
-    const expired      = inv.filter((i) => i.expires_at && isExpired(i.expires_at)).length;
-    const totalValue   = inv.reduce((s, i) => s + i.stock_qty * i.unit_price, 0);
-    rows.push([
-      `"${r.pharmacy.name}"`,
-      inv.length,
-      totalUnit,
-      lowStock,
-      expiringSoon,
-      expired,
-      totalValue,
-    ].join(','));
-  }
-  const csv  = rows.join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `laporan-farmasi-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
+function exportCsv(report: ReportData): void {
+  const rows = [
+    ['Apotek', 'Status', 'Jenis Obat', 'Total Unit', 'Stok Rendah', 'Segera Kedaluwarsa', 'Kedaluwarsa', 'Nilai Inventori'],
+    ...report.pharmacies.map((item) => [
+      item.name, item.is_active ? 'Aktif' : 'Nonaktif', item.drug_count, item.total_units,
+      item.low_stock_count, item.expiring_soon_count, item.expired_count, Number(item.total_value),
+    ]),
+  ];
+  const blob = new Blob(['\uFEFF' + rows.map((row) => row.map(csv).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `laporan-farmasi-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Komponen Utama
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function PharmacyReportsPage() {
   const { showToast } = useToast();
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [pharmacies,       setPharmacies]       = useState<Pharmacy[]>([]);
-  const [loadingList,      setLoadingList]       = useState(true);
-  const [reports,          setReports]           = useState<PharmacyReport[]>([]);
-  const [loadingReports,   setLoadingReports]    = useState(false);
-
-  // ── Fetch daftar apotek ──
-  useEffect(() => {
-    const run = async () => {
-      setLoadingList(true);
-      try {
-        const res = await pharmacyClient.get<{ data: Pharmacy[]; meta: { total: number } }>(
-          '/v1/pharmacies?limit=100'
-        );
-        setPharmacies(res.data.data ?? []);
-      } catch {
-        showToast('Gagal memuat daftar apotek', 'error');
-      } finally {
-        setLoadingList(false);
-      }
-    };
-    void run();
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await pharmacyClient.get<{ data: ReportData }>('/v1/pharmacies/reports/summary');
+      setReport(response.data.data);
+    } catch (loadError) {
+      const detail = message(loadError);
+      setError(detail);
+      setReport(null);
+      showToast(detail, 'error');
+    } finally { setLoading(false); }
   }, [showToast]);
 
-  // ── Fetch inventori semua apotek secara paralel ──
-  const fetchAllInventory = useCallback(async (list: Pharmacy[]) => {
-    setLoadingReports(true);
-    // Inisialisasi state loading untuk semua apotek
-    setReports(list.map((p) => ({ pharmacy: p, inventory: [], loading: true, error: null })));
+  useEffect(() => { void load(); }, [load]);
 
-    const results = await Promise.allSettled(
-      list.map((p) =>
-        pharmacyClient
-          .get<{ data: InventoryItem[] }>(`/v1/pharmacies/${p.id}/inventory`)
-          .then((r) => ({ pharmacyId: p.id, data: r.data.data ?? [] }))
-      )
-    );
+  const totals = report?.totals;
+  return <div className={styles.page}>
+    <PageHeader title="Laporan Farmasi"
+      subtitle={report ? `Snapshot konsisten ${new Date(report.generatedAt).toLocaleString('id-ID')}` : 'Agregasi inventori server-side'}
+      breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Farmasi', to: '/pharmacy' }, { label: 'Laporan Farmasi' }]}
+      actions={<div style={{ display: 'flex', gap: 8 }}>
+        <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => void load()} disabled={loading}>↻ Refresh</button>
+        <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => report && exportCsv(report)} disabled={!report || loading}>⬇ CSV lengkap</button>
+      </div>}
+    />
 
-    setReports(list.map((p, i) => {
-      const result = results[i];
-      if (result?.status === 'fulfilled') {
-        return { pharmacy: p, inventory: result.value.data, loading: false, error: null };
-      } else {
-        return { pharmacy: p, inventory: [], loading: false, error: 'Gagal memuat inventori' };
-      }
-    }));
+    {error ? <div className={styles.errorState}><span>⚠ {error}</span>
+      <button className={`${styles.btn} ${styles.btnSm}`} onClick={() => void load()}>Coba Lagi</button></div> : null}
 
-    setLoadingReports(false);
-  }, []);
-
-  useEffect(() => {
-    if (pharmacies.length > 0) void fetchAllInventory(pharmacies);
-  }, [pharmacies, fetchAllInventory]);
-
-  // ── Hitung agregat semua apotek ──
-  const allInventory = reports.flatMap((r) => r.inventory);
-  const grandTotalItems    = allInventory.length;
-  const grandTotalUnits    = allInventory.reduce((s, i) => s + i.stock_qty, 0);
-  const grandLowStock      = allInventory.filter((i) => i.is_low_stock ?? (i.stock_qty <= i.reorder_level)).length;
-  const grandExpiringSoon  = allInventory.filter((i) => i.expires_at && isExpiringSoon(i.expires_at)).length;
-  const grandExpired       = allInventory.filter((i) => i.expires_at && isExpired(i.expires_at)).length;
-  const grandTotalValue    = allInventory.reduce((s, i) => s + i.stock_qty * i.unit_price, 0);
-
-  // ── Top 10 obat stok terbanyak ──
-  const drugAgg = allInventory.reduce<Record<string, { name: string; totalQty: number; totalValue: number }>>((acc, item) => {
-    const key = item.drug_id;
-    if (!acc[key]) acc[key] = { name: `${item.generic_name}${item.brand_name ? ` (${item.brand_name})` : ''}`, totalQty: 0, totalValue: 0 };
-    acc[key]!.totalQty   += item.stock_qty;
-    acc[key]!.totalValue += item.stock_qty * item.unit_price;
-    return acc;
-  }, {});
-  const topDrugs = Object.values(drugAgg)
-    .sort((a, b) => b.totalValue - a.totalValue)
-    .slice(0, 10);
-
-  return (
-    <div className={styles.page}>
-      <PageHeader
-        title="Laporan Farmasi"
-        subtitle={`Agregat inventori dari ${pharmacies.length} apotek`}
-        breadcrumbs={[
-          { label: 'Dashboard', to: '/' },
-          { label: 'Farmasi', to: '/pharmacy' },
-          { label: 'Laporan Farmasi' },
-        ]}
-        actions={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className={`${styles.btn} ${styles.btnOutline}`}
-              onClick={() => { if (pharmacies.length > 0) void fetchAllInventory(pharmacies); }}
-              disabled={loadingReports}
-            >
-              ↻ Refresh
-            </button>
-            <button
-              className={`${styles.btn} ${styles.btnOutline}`}
-              onClick={() => exportReportCSV(reports)}
-              disabled={reports.length === 0 || loadingReports}
-            >
-              ⬇ CSV
-            </button>
-          </div>
-        }
-      />
-
-      {/* ── KPI Cards Agregat ── */}
-      {loadingList || loadingReports ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height={80} />)}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
+    {loading ? <div className={styles.statGrid}>{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} height={88} />)}</div>
+      : totals ? <>
+        <div className={styles.statGrid}>
           {[
-            { label: 'Total Apotek',   value: pharmacies.length,               color: 'var(--color-primary)',      icon: '🏪' },
-            { label: 'Jenis Obat',     value: grandTotalItems.toLocaleString('id-ID'), color: 'var(--color-text)', icon: '💊' },
-            { label: 'Total Unit',     value: grandTotalUnits.toLocaleString('id-ID'), color: 'var(--color-text)', icon: '📦' },
-            { label: 'Stok Rendah',    value: grandLowStock,                   color: '#d97706',                   icon: '⚠' },
-            { label: 'Segera Exp.',    value: grandExpiringSoon,               color: '#ea580c',                   icon: '🗓' },
-            { label: 'Sudah Exp.',     value: grandExpired,                    color: 'var(--color-danger, #dc2626)', icon: '🚨' },
-          ].map((kpi) => (
-            <div key={kpi.label} style={{
-              background: 'var(--color-surface)', borderRadius: 10, padding: '14px 16px',
-              border: '1px solid var(--color-border)', textAlign: 'center',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-            }}>
-              <div style={{ fontSize: 22, marginBottom: 4 }}>{kpi.icon}</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: kpi.color, lineHeight: 1 }}>
-                {typeof kpi.value === 'number' ? kpi.value.toLocaleString('id-ID') : kpi.value}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 4 }}>{kpi.label}</div>
-            </div>
-          ))}
+            ['Total Apotek', totals.pharmacy_count, '🏪'], ['Jenis/Bets Obat', totals.drug_count, '💊'],
+            ['Total Unit', totals.total_units, '📦'], ['Stok Rendah', totals.low_stock_count, '⚠'],
+            ['Segera Kedaluwarsa', totals.expiring_soon_count, '🗓'], ['Sudah Kedaluwarsa', totals.expired_count, '🚨'],
+          ].map(([label, value, icon]) => <div key={String(label)} className={styles.statCard}>
+            <div style={{ fontSize: 22 }}>{icon}</div><div className={styles.statValue}>{Number(value).toLocaleString('id-ID')}</div>
+            <div className={styles.statLabel}>{label}</div></div>)}
         </div>
-      )}
+        <div className={styles.card}><div style={{ color: 'var(--color-muted)', fontSize: 12 }}>TOTAL NILAI INVENTORI</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-primary)' }}>{money(totals.total_value)}</div></div>
 
-      {/* ── Nilai Inventori Total ── */}
-      {!loadingReports && (
-        <div className={styles.card} style={{ marginBottom: 20, padding: '16px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 4 }}>TOTAL NILAI INVENTORI</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-primary)' }}>
-                {formatCurrency(grandTotalValue)}
-              </div>
-            </div>
-            <div style={{ fontSize: 40 }}>💰</div>
+        <div className={styles.responsiveTwoCol}>
+          <div className={styles.card} style={{ padding: 0 }}>
+            <div style={{ padding: 16, fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Ringkasan per Apotek</div>
+            <div className={styles.tableWrapper}><table className={styles.table}>
+              <thead><tr><th>Apotek</th><th>Status</th><th>Obat</th><th>Rendah</th><th>Kedaluwarsa</th><th>Nilai</th></tr></thead>
+              <tbody>{report!.pharmacies.map((item) => <tr key={item.id}>
+                <td><strong>{item.name}</strong><div><code>{item.license_number}</code></div></td>
+                <td><span className={styles.badge} style={{ color: item.is_active ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                  {item.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
+                <td>{item.drug_count}</td><td>{item.low_stock_count}</td><td>{item.expired_count}</td><td>{money(item.total_value)}</td>
+              </tr>)}</tbody>
+            </table></div>
           </div>
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
-
-        {/* ── Tabel Per Apotek ── */}
-        <div className={styles.card} style={{ padding: 0 }}>
-          <div style={{ padding: 'var(--space-3) var(--space-4)', borderBottom: '1px solid var(--color-border)', fontWeight: 600 }}>
-            Ringkasan per Apotek
-          </div>
-          {loadingList || loadingReports ? (
-            <div style={{ padding: 'var(--space-4)' }}>
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={44} style={{ marginBottom: 6 }} />)}
-            </div>
-          ) : reports.length === 0 ? (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyStateIcon}>🏪</div>
-              <div className={styles.emptyStateTitle}>Belum ada apotek terdaftar</div>
-            </div>
-          ) : (
-            <div className={styles.tableWrapper}>
-              <table className={`${styles.table} ${styles.tableHover}`}>
-                <thead>
-                  <tr>
-                    <th>Apotek</th>
-                    <th style={{ textAlign: 'center' }}>Obat</th>
-                    <th style={{ textAlign: 'center' }}>Rendah</th>
-                    <th style={{ textAlign: 'center' }}>Exp.</th>
-                    <th style={{ textAlign: 'right' }}>Nilai (Rp)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reports.map((r) => {
-                    const inv          = r.inventory;
-                    const lowStockCt   = inv.filter((i) => i.is_low_stock ?? (i.stock_qty <= i.reorder_level)).length;
-                    const expiredCt    = inv.filter((i) => i.expires_at && isExpired(i.expires_at)).length;
-                    const totalValue   = inv.reduce((s, i) => s + i.stock_qty * i.unit_price, 0);
-                    return (
-                      <tr key={r.pharmacy.id}>
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{r.pharmacy.name}</div>
-                          {r.error && <div style={{ fontSize: 11, color: 'var(--color-danger, #dc2626)' }}>⚠ Gagal memuat</div>}
-                          {r.loading && <div style={{ fontSize: 11, color: 'var(--color-muted)' }}>Memuat…</div>}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>{r.loading ? '…' : inv.length}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          {r.loading ? '…' : (
-                            <span style={{ color: lowStockCt > 0 ? '#d97706' : undefined, fontWeight: lowStockCt > 0 ? 700 : undefined }}>
-                              {lowStockCt}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          {r.loading ? '…' : (
-                            <span style={{ color: expiredCt > 0 ? 'var(--color-danger, #dc2626)' : undefined, fontWeight: expiredCt > 0 ? 700 : undefined }}>
-                              {expiredCt}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'right', fontSize: 'var(--text-sm)', fontWeight: 600 }}>
-                          {r.loading ? '…' : formatCurrency(totalValue)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ── Top 10 Obat Tertinggi Nilai ── */}
-        <div className={styles.card} style={{ padding: 0 }}>
-          <div style={{ padding: 'var(--space-3) var(--space-4)', borderBottom: '1px solid var(--color-border)', fontWeight: 600 }}>
-            Top 10 Obat — Nilai Inventori Tertinggi
-          </div>
-          {loadingReports ? (
-            <div style={{ padding: 'var(--space-4)' }}>
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height={36} style={{ marginBottom: 6 }} />)}
-            </div>
-          ) : topDrugs.length === 0 ? (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyStateIcon}>📊</div>
-              <div className={styles.emptyStateTitle}>Belum ada data inventori</div>
-            </div>
-          ) : (
-            <div style={{ padding: 'var(--space-3)' }}>
-              {topDrugs.map((drug, idx) => {
-                const pct = grandTotalValue > 0 ? (drug.totalValue / grandTotalValue) * 100 : 0;
-                return (
-                  <div key={drug.name} style={{ marginBottom: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-sm)', marginBottom: 3 }}>
-                      <span style={{ fontWeight: 600 }}>
-                        <span style={{ color: 'var(--color-muted)', marginRight: 6 }}>#{idx + 1}</span>
-                        {drug.name}
-                      </span>
-                      <span style={{ color: 'var(--color-muted)', flexShrink: 0, marginLeft: 8 }}>
-                        {drug.totalQty.toLocaleString('id-ID')} unit
-                      </span>
-                    </div>
-                    {/* Progress bar */}
-                    <div style={{ height: 6, borderRadius: 999, background: 'var(--color-border)', overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', width: `${pct}%`, borderRadius: 999,
-                        background: 'var(--color-primary)', transition: 'width 0.4s',
-                      }} />
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--color-muted)', marginTop: 2, textAlign: 'right' }}>
-                      {formatCurrency(drug.totalValue)} ({pct.toFixed(1)}%)
-                    </div>
+          <div className={styles.card} style={{ padding: 0 }}>
+            <div style={{ padding: 16, fontWeight: 600, borderBottom: '1px solid var(--color-border)' }}>Top 10 Nilai Inventori</div>
+            {report!.topDrugs.length === 0 ? <div className={styles.emptyState}>Belum ada inventori</div>
+              : <div style={{ padding: 16 }}>{report!.topDrugs.map((drug, index) => {
+                const percentage = Number(totals.total_value) > 0 ? Number(drug.total_value) / Number(totals.total_value) * 100 : 0;
+                return <div key={drug.id} style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <strong>#{index + 1} {drug.generic_name}{drug.brand_name ? ` (${drug.brand_name})` : ''}</strong>
+                    <span>{Number(drug.total_units).toLocaleString('id-ID')} unit</span>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div style={{ height: 6, background: 'var(--color-border)', borderRadius: 99, overflow: 'hidden', margin: '5px 0' }}>
+                    <div style={{ height: '100%', width: `${percentage}%`, background: 'var(--color-primary)' }} /></div>
+                  <div style={{ textAlign: 'right', color: 'var(--color-muted)', fontSize: 12 }}>{money(drug.total_value)} ({percentage.toFixed(1)}%)</div>
+                </div>;
+              })}</div>}
+          </div>
         </div>
-
-      </div>
-    </div>
-  );
+      </> : null}
+  </div>;
 }

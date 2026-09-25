@@ -78,6 +78,7 @@ const PaginationSchema = z.object({
   page:      z.coerce.number().int().min(1).default(1),
   limit:     z.coerce.number().int().min(1).max(100).default(20),
   status:    z.string().optional(),
+  search:    z.string().trim().min(1).optional(),
   doctorId:  z.string().uuid().optional(),
   patientId: z.string().uuid().optional(),
 });
@@ -177,7 +178,7 @@ app.get(
       return;
     }
 
-    const { page, limit, status, doctorId, patientId } = parsed.data;
+    const { page, limit, status, search, doctorId, patientId } = parsed.data;
     const offset = (page - 1) * limit;
     const { role, sub } = authReq.user;
 
@@ -199,6 +200,20 @@ app.get(
       }
 
       if (status) { conditions.push(`c.status=$${paramIdx++}`); params.push(status); }
+      if (search) {
+        const searchValue = `%${search}%`;
+        conditions.push(
+          `(EXISTS (SELECT 1 FROM patients p WHERE p.id = c.patient_id AND p.name ILIKE $${paramIdx})
+            OR EXISTS (
+              SELECT 1
+              FROM doctors d
+              JOIN users u ON u.id = d.user_id
+              WHERE d.id = c.doctor_id AND u.email ILIKE $${paramIdx}
+            ))`,
+        );
+        params.push(searchValue);
+        paramIdx += 1;
+      }
 
       const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -729,6 +744,33 @@ app.get(
       ok(res, result.rows.map((r) => ({
         day:   parseInt(r.day,   10),
         count: parseInt(r.count, 10),
+      })));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /v1/consultations/stats/status — consultation count by status
+// Used by Analytics page (Admin Panel). ADMIN only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get(
+  '/v1/consultations/stats/status',
+  authenticate,
+  requireRole('ADMIN'),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await pool.query<{ status: string; count: string }>(`
+        SELECT status, COUNT(*) AS count
+        FROM consultations
+        GROUP BY status
+        ORDER BY status
+      `);
+      ok(res, result.rows.map((row) => ({
+        status: row.status,
+        count: parseInt(row.count, 10),
       })));
     } catch (err) {
       next(err);

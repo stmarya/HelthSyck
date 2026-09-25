@@ -45,11 +45,54 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-function calcAge(dob: string): number {
-  return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+function calcAge(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const parsed = new Date(dob).getTime();
+  if (Number.isNaN(parsed)) return null;
+  return Math.floor((Date.now() - parsed) / (1000 * 60 * 60 * 24 * 365.25));
 }
 
-const GENDER_LABEL: Record<string, string> = { MALE: 'Laki-laki', FEMALE: 'Perempuan' };
+function redactName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'Pasien';
+  if (parts.length === 1) return `${parts[0].slice(0, 1).toUpperCase()}***`;
+  return parts.map((part, index) => (index === 0 ? `${part.slice(0, 1).toUpperCase()}***` : `${part.slice(0, 1).toUpperCase()}.`)).join(' ');
+}
+
+function redactPhone(phone: string | null): string {
+  if (!phone) return '—';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 4) return '***';
+  return `${digits.slice(0, 2)}****${digits.slice(-2)}`;
+}
+
+function exportPatientsCsv(patients: Patient[]) {
+  const rows = [
+    ['Nama (Redacted)', 'Jenis Kelamin', 'Usia', 'Gol. Darah', 'Telepon (Redacted)', 'Terdaftar'],
+    ...patients.map((patient) => [
+      redactName(patient.name),
+      GENDER_LABEL[patient.gender] ?? patient.gender,
+      calcAge(patient.date_of_birth) != null ? String(calcAge(patient.date_of_birth)) : '—',
+      patient.blood_type,
+      redactPhone(patient.phone),
+      formatDate(patient.created_at),
+    ]),
+  ];
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `pasien-terlihat-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+const GENDER_LABEL: Record<string, string> = {
+  MALE: 'Laki-laki',
+  FEMALE: 'Perempuan',
+  OTHER: 'Lainnya',
+};
 
 const BLOOD_COLOR: Record<string, string> = {
   'A+': '#e53935', 'A-': '#e53935', 'B+': '#e65100', 'B-': '#e65100',
@@ -81,6 +124,11 @@ export default function PatientsPage() {
   const [selected, setSelected]   = useState<PatientDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  const visiblePatients = patients;
+  const missingPhoneCount = visiblePatients.filter((patient) => !patient.phone?.trim()).length;
+  const unknownBloodTypeCount = visiblePatients.filter((patient) => patient.blood_type === 'UNKNOWN').length;
+  const incompleteBirthDateCount = visiblePatients.filter((patient) => calcAge(patient.date_of_birth) == null).length;
+
   // ── Fetch list pasien ──
   // Response shape dari /v1/patients:
   //   { data: { patients: Patient[], meta: PaginationMeta }, meta: { timestamp } }
@@ -89,17 +137,13 @@ export default function PatientsPage() {
     setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+      if (search.trim()) params.set('search', search.trim());
       const res = await patientClient.get<{
         data: { patients: Patient[]; meta: PaginationMeta };
         meta: { timestamp: string };
       }>(`/v1/patients?${params.toString()}`);
 
-      let data: Patient[] = res.data.data?.patients ?? [];
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        data = data.filter((p) => p.name.toLowerCase().includes(q));
-      }
-      setPatients(data);
+      setPatients(res.data.data?.patients ?? []);
       setMeta(res.data.data?.meta ?? null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Gagal memuat data pasien';
@@ -148,9 +192,48 @@ export default function PatientsPage() {
           </div>
           <button className={`${styles.btn} ${styles.btnOutline}`}
             onClick={() => { setSearch(''); setPage(1); }}>Reset</button>
+          <button
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            onClick={() => {
+              exportPatientsCsv(visiblePatients);
+              showToast(`${visiblePatients.length} pasien pada tampilan saat ini berhasil diekspor dengan redaksi aman.`, 'success');
+            }}
+            disabled={loading || visiblePatients.length === 0}
+          >
+            ↓ Ekspor CSV Aman
+          </button>
           <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={fetchData} style={{ marginLeft: 'auto' }}>
             ↻ Muat Ulang
           </button>
+        </div>
+      </div>
+
+      <div className={styles.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div>
+            <div className={styles.cardTitle} style={{ marginBottom: 4 }}>Ringkasan Kualitas Data</div>
+            <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+              Dihitung dari data pasien pada halaman yang sedang terlihat sesuai filter yang aktif.
+            </div>
+          </div>
+        </div>
+        <div className={styles.statGrid} style={{ marginBottom: 0 }}>
+          <div className={styles.statCard}>
+            <div className={styles.statValue}>{visiblePatients.length}</div>
+            <div className={styles.statLabel}>Pasien pada Tampilan</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statValue} style={{ color: missingPhoneCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>{missingPhoneCount}</div>
+            <div className={styles.statLabel}>Tanpa Nomor Telepon</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statValue} style={{ color: unknownBloodTypeCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>{unknownBloodTypeCount}</div>
+            <div className={styles.statLabel}>Golongan Darah Unknown</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statValue} style={{ color: incompleteBirthDateCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>{incompleteBirthDateCount}</div>
+            <div className={styles.statLabel}>Tanggal Lahir Tidak Lengkap</div>
+          </div>
         </div>
       </div>
 
@@ -190,12 +273,24 @@ export default function PatientsPage() {
                 </tr>
               </thead>
               <tbody>
-                {patients.map((p) => (
-                  <tr key={p.id} onClick={() => void handleSelectPatient(p)}>
+                {visiblePatients.map((p) => (
+                  <tr
+                    key={p.id}
+                    onClick={() => void handleSelectPatient(p)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void handleSelectPatient(p);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Buka detail pasien ${p.name}`}
+                  >
                     <td style={{ fontWeight: 600 }}>{p.name}</td>
                     <td>{GENDER_LABEL[p.gender] ?? p.gender}</td>
                     <td>{formatDate(p.date_of_birth)}</td>
-                    <td>{calcAge(p.date_of_birth)} th</td>
+                    <td>{calcAge(p.date_of_birth) != null ? `${calcAge(p.date_of_birth)} th` : '—'}</td>
                     <td>
                       <span className={styles.badge} style={{
                         background: BLOOD_COLOR[p.blood_type] + '20',
@@ -252,7 +347,10 @@ export default function PatientsPage() {
                     { label: 'ID Pengguna', value: <code style={{ fontSize: 11 }}>{selected.user_id}</code> },
                     { label: 'Nama', value: selected.name },
                     { label: 'Jenis Kelamin', value: GENDER_LABEL[selected.gender] ?? selected.gender },
-                    { label: 'Tanggal Lahir', value: `${formatDate(selected.date_of_birth)} (${calcAge(selected.date_of_birth)} tahun)` },
+                    {
+                      label: 'Tanggal Lahir',
+                      value: `${formatDate(selected.date_of_birth)}${calcAge(selected.date_of_birth) != null ? ` (${calcAge(selected.date_of_birth)} tahun)` : ''}`,
+                    },
                     { label: 'Golongan Darah', value: (
                       <span className={styles.badge} style={{ background: BLOOD_COLOR[selected.blood_type] + '20', color: BLOOD_COLOR[selected.blood_type] }}>
                         {selected.blood_type}

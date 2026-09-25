@@ -64,7 +64,7 @@ const STATUS_OPTIONS_FILTER = [
   { value: 'MAINTENANCE',label: 'Maintenance' },
 ];
 
-const STATUS_OPTIONS_EDIT = STATUS_OPTIONS_FILTER.slice(1);
+const STATUS_OPTIONS_EDIT = STATUS_OPTIONS_FILTER.filter((option) => option.value !== 'OCCUPIED');
 
 const BED_STATUS_STYLE: Record<BedStatus, { bg: string; color: string; label: string; dot: string }> = {
   AVAILABLE:   { bg: '#f0fdf4', color: '#15803d', label: 'Tersedia',   dot: '#22c55e' },
@@ -306,6 +306,8 @@ export default function BedManagementPage() {
     const icu = parseInt(capIcuAvailable, 10);
     if (isNaN(av) || av < 0) { showToast('Jumlah bed tersedia tidak valid', 'warning'); return; }
     if (isNaN(icu) || icu < 0) { showToast('Jumlah ICU tersedia tidak valid', 'warning'); return; }
+    if (av > selectedHospital.total_beds) { showToast('Bed tersedia tidak boleh melebihi total bed', 'warning'); return; }
+    if (icu > selectedHospital.icu_total) { showToast('ICU tersedia tidak boleh melebihi total ICU', 'warning'); return; }
     setCapBusy(true);
     try {
       await hospitalClient.put(`/v1/hospitals/${selectedHospital.id}/capacity`, {
@@ -387,7 +389,7 @@ export default function BedManagementPage() {
         }
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
+      <div className={styles.pageSplit}>
 
         {/* ════ Panel Kiri: Daftar RS ════ */}
         <div>
@@ -461,7 +463,7 @@ export default function BedManagementPage() {
                 </div>
               </div>
               {/* KPI aggregate */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
                 {[
                   { label: 'Total Bed', value: totalBeds, color: 'var(--color-text)' },
                   { label: 'Tersedia',  value: totalAvail, color: '#16a34a' },
@@ -780,11 +782,10 @@ export default function BedManagementPage() {
               onChange={(e) => setEditStatus(e.target.value as BedStatus)}
               options={STATUS_OPTIONS_EDIT}
             />
-            {editStatus === 'OCCUPIED' && (
-              <div style={{ fontSize: 12, color: '#d97706', padding: '8px 12px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
-                ⚠️ Mengisi status TERISI memerlukan ID pasien. Hubungkan melalui sistem admisi pasien.
-              </div>
-            )}
+            <div className={styles.warningBanner} style={{ marginBottom: 0 }}>
+              <span>⚠️</span>
+              <span>Status <strong>Terisi</strong> memerlukan patientId dari backend admisi dan belum bisa diubah dari Admin.</span>
+            </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => setEditBed(null)}>Batal</button>
               <button
@@ -807,14 +808,14 @@ export default function BedManagementPage() {
               Gunakan fitur ini untuk menyinkronkan jumlah bed tersedia jika terjadi perbedaan dengan data lapangan.
             </div>
             <InputField
-              label="Bed Tersedia (dari total {selectedHospital.total_beds})"
+              label={`Bed Tersedia (dari total ${selectedHospital.total_beds})`}
               type="number"
               value={capAvailable}
               onChange={(e) => setCapAvailable(e.target.value)}
               placeholder={`0 – ${selectedHospital.total_beds}`}
             />
             <InputField
-              label="ICU Tersedia (dari total {selectedHospital.icu_total})"
+              label={`ICU Tersedia (dari total ${selectedHospital.icu_total})`}
               type="number"
               value={capIcuAvailable}
               onChange={(e) => setCapIcuAvailable(e.target.value)}

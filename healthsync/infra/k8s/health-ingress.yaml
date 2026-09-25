@@ -1,0 +1,103 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: healthsync-health-ingress
+  namespace: healthsync
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /health
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "10"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.healthsync.id
+      secretName: healthsync-tls
+  rules:
+    - host: api.healthsync.id
+      http:
+        paths:
+          - path: /health/auth
+            pathType: Exact
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 3001
+          - path: /health/patient
+            pathType: Exact
+            backend:
+              service:
+                name: patient-service
+                port:
+                  number: 3002
+          - path: /health/consultation
+            pathType: Exact
+            backend:
+              service:
+                name: consultation-service
+                port:
+                  number: 3003
+          - path: /health/prescription
+            pathType: Exact
+            backend:
+              service:
+                name: prescription-service
+                port:
+                  number: 3004
+          - path: /health/ambulance
+            pathType: Exact
+            backend:
+              service:
+                name: ambulance-service
+                port:
+                  number: 3005
+          - path: /health/referral
+            pathType: Exact
+            backend:
+              service:
+                name: referral-service
+                port:
+                  number: 3006
+          - path: /health/hospital
+            pathType: Exact
+            backend:
+              service:
+                name: hospital-service
+                port:
+                  number: 3007
+          - path: /health/pharmacy
+            pathType: Exact
+            backend:
+              service:
+                name: pharmacy-service
+                port:
+                  number: 3008
+          - path: /health/notification
+            pathType: Exact
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 3009
+          - path: /health/integration
+            pathType: Exact
+            backend:
+              service:
+                name: integration-service
+                port:
+                  number: 3010
+          - path: /health/iot
+            pathType: Exact
+            backend:
+              service:
+                name: iot-ingestion
+                port:
+                  number: 4001
+          - path: /health/alert
+            pathType: Exact
+            backend:
+              service:
+                name: alert-service
+                port:
+                  number: 4002

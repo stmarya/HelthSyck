@@ -46,16 +46,18 @@ function BloodTypeBadge({ type }: { type: string }) {
 }
 
 function GenderBadge({ gender }: { gender: string }) {
-  const isL = gender === 'MALE' || gender === 'L';
+  const isMale = gender === 'MALE' || gender === 'L';
+  const isOther = gender === 'OTHER';
+  const label = isMale ? 'L' : isOther ? 'Lainnya' : 'P';
   return (
     <span style={{
       fontSize: 11, fontWeight: 600,
-      color: isL ? '#2563eb' : '#be185d',
-      background: isL ? '#dbeafe' : '#fce7f3',
+      color: isMale ? '#2563eb' : isOther ? '#6b21a8' : '#be185d',
+      background: isMale ? '#dbeafe' : isOther ? '#f3e8ff' : '#fce7f3',
       padding: '2px 7px', borderRadius: 999,
-      border: `1px solid ${isL ? '#bfdbfe' : '#fbcfe8'}`,
+      border: `1px solid ${isMale ? '#bfdbfe' : isOther ? '#e9d5ff' : '#fbcfe8'}`,
     }}>
-      {isL ? 'L' : 'P'}
+      {label}
     </span>
   );
 }
@@ -178,7 +180,8 @@ export default function PatientsPage() {
 
   // ── Hitung statistik dari data pasien yang ada ──────────────────────────
   const maleCount   = patients.filter((p) => p.gender === 'MALE' || p.gender === 'L').length;
-  const femaleCount = patients.filter((p) => p.gender !== 'MALE' && p.gender !== 'L').length;
+  const femaleCount = patients.filter((p) => p.gender === 'FEMALE' || p.gender === 'P').length;
+  const otherCount  = patients.filter((p) => p.gender === 'OTHER').length;
 
   const ages = patients.map((p) => getAge(p.date_of_birth)).filter((a) => a > 0);
   const avgAge = ages.length > 0 ? Math.round(ages.reduce((s, a) => s + a, 0) / ages.length) : 0;
@@ -213,6 +216,7 @@ export default function PatientsPage() {
   const genderData = [
     { name: 'Laki-laki', value: maleCount,   fill: '#3b82f6' },
     { name: 'Perempuan', value: femaleCount,  fill: '#ec4899' },
+    { name: 'Lainnya', value: otherCount, fill: '#8b5cf6' },
   ];
 
   // ── Fungsi toggle sort ────────────────────────────────────────────────────

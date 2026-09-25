@@ -13,8 +13,8 @@ interface Prescription {
   id: string;
   patient_id: string;
   doctor_id: string;
-  status: 'PENDING' | 'DISPENSED' | 'CANCELLED' | 'EXPIRED';
-  created_at: string;
+  status: 'ISSUED' | 'SENT_TO_PHARMACY' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'DELIVERING' | 'DELIVERED' | 'CANCELLED';
+  issued_at: string;
   notes: string | null;
 }
 
@@ -37,10 +37,14 @@ interface PharmaciesMeta {
 // ─── Konfigurasi badge status resep ───────────────────────────────────────
 
 const RESEP_STATUS: Record<string, { label: string; cls: string; color: string }> = {
-  PENDING:   { label: 'Menunggu',    cls: styles.badgeWarning,  color: '#f59e0b' },
-  DISPENSED: { label: 'Selesai',     cls: styles.badgeOk,       color: '#10b981' },
+  ISSUED:           { label: 'Diterbitkan',  cls: styles.badgePending,  color: '#0284c7' },
+  SENT_TO_PHARMACY: { label: 'Ke Apotek',    cls: styles.badgeWarning,  color: '#f59e0b' },
+  CONFIRMED:        { label: 'Dikonfirmasi', cls: styles.badgePending,  color: '#6366f1' },
+  PREPARING:        { label: 'Disiapkan',    cls: styles.badgeWarning,  color: '#d97706' },
+  READY:            { label: 'Siap',         cls: styles.badgeOk,       color: '#10b981' },
+  DELIVERING:       { label: 'Dikirim',      cls: styles.badgePending,  color: '#0284c7' },
+  DELIVERED:        { label: 'Selesai',      cls: styles.badgeOk,       color: '#10b981' },
   CANCELLED: { label: 'Dibatalkan',  cls: styles.badgeCritical, color: '#ef4444' },
-  EXPIRED:   { label: 'Kedaluwarsa', cls: styles.badgeCritical, color: '#dc2626' },
 };
 
 // ─── Skeleton loading ─────────────────────────────────────────────────────
@@ -108,10 +112,10 @@ function TabResep() {
   for (const p of prescriptions) {
     statusCounts[p.status] = (statusCounts[p.status] ?? 0) + 1;
   }
-  const pending   = statusCounts['PENDING']   ?? 0;
-  const dispensed = statusCounts['DISPENSED'] ?? 0;
+  const pending = ['ISSUED', 'SENT_TO_PHARMACY', 'CONFIRMED', 'PREPARING', 'READY', 'DELIVERING']
+    .reduce((sum, status) => sum + (statusCounts[status] ?? 0), 0);
+  const dispensed = statusCounts['DELIVERED'] ?? 0;
   const cancelled = statusCounts['CANCELLED'] ?? 0;
-  const expired   = statusCounts['EXPIRED']   ?? 0;
 
   // Data Donut Chart distribusi status
   const donutData = Object.entries(statusCounts)
@@ -130,7 +134,6 @@ function TabResep() {
           <MiniKpiCard label="Menunggu"     value={pending}   icon="⏳" color="#f59e0b" trend={pending > 0 ? 'up' : 'neutral'} />
           <MiniKpiCard label="Selesai"      value={dispensed} icon="✅" color="#10b981" />
           <MiniKpiCard label="Dibatalkan"   value={cancelled} icon="❌" color="#ef4444" />
-          <MiniKpiCard label="Kedaluwarsa"  value={expired}   icon="⌛" color="#dc2626" />
           <MiniKpiCard label="Total Resep"  value={total}     icon="📋" color="var(--color-primary)" />
         </div>
       )}
@@ -222,8 +225,8 @@ function TabResep() {
                   return (
                     <tr
                       key={p.id}
-                      style={p.status === 'EXPIRED' ? { background: 'var(--color-danger-bg)' }
-                        : p.status === 'PENDING' ? { background: 'rgba(245,158,11,0.05)' }
+                      style={p.status === 'CANCELLED' ? { background: 'var(--color-danger-bg)' }
+                        : !['DELIVERED', 'CANCELLED'].includes(p.status) ? { background: 'rgba(245,158,11,0.05)' }
                         : undefined}
                     >
                       <td style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--color-muted)' }}>{p.id.slice(0, 8)}…</td>
@@ -233,18 +236,16 @@ function TabResep() {
                         {p.notes ?? <span style={{ color: 'var(--color-disabled)', fontStyle: 'italic' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
-                        {new Date(p.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {new Date(p.issued_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td>
-                        {p.status === 'PENDING' ? (
+                        {!['DELIVERED', 'CANCELLED'].includes(p.status) ? (
                           <DurasiAktif
-                            isoString={p.created_at}
+                            isoString={p.issued_at}
                             warnAfterMinutes={30}
                             criticalAfterMinutes={60}
                             prefix="⏳ "
                           />
-                        ) : p.status === 'EXPIRED' ? (
-                          <span style={{ color: 'var(--color-danger)', fontSize: 11, fontWeight: 700 }}>Kedaluwarsa</span>
                         ) : (
                           <span style={{ color: 'var(--color-disabled)', fontStyle: 'italic', fontSize: 11 }}>—</span>
                         )}

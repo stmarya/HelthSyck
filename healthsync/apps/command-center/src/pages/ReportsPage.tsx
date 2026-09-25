@@ -102,9 +102,9 @@ function useReportData(periode: PeriodeDays): ReportData {
           : [];
 
       // ── Alert ──
-      const alerts: Array<{ severity: string; created_at: string }> =
+      const alerts: Array<{ level: string; created_at: string }> =
         alertRes.status === 'fulfilled'
-          ? (alertRes.value.data as { data: Array<{ severity: string; created_at: string }> }).data ?? []
+          ? (alertRes.value.data as { data: Array<{ level: string; created_at: string }> }).data ?? []
           : [];
 
       // ── Referral ──
@@ -116,13 +116,13 @@ function useReportData(periode: PeriodeDays): ReportData {
       // ── KPI Shift ──
       const pendingKonsultasi = consultations.filter((c) => c.status === 'PENDING').length;
       const activeAmbulance   = ambulances.filter((a) => ['DISPATCHED', 'EN_ROUTE', 'AT_SCENE', 'TRANSPORTING'].includes(a.status)).length;
-      const criticalAlerts    = alerts.filter((a) => a.severity === 'CRITICAL' || a.severity === 'HIGH').length;
-      const pendingReferrals  = referrals.filter((r) => r.status === 'PENDING').length;
+      const criticalAlerts    = alerts.filter((a) => a.level === 'LEVEL_3' || a.level === 'LEVEL_2').length;
+      const pendingReferrals  = referrals.filter((r) => r.status === 'SENT').length;
 
       const kpiShift: KpiShift[] = [
         { label: 'Konsultasi Aktif',  value: pendingKonsultasi, icon: '🩺', color: 'var(--color-info)',    keterangan: 'Status PENDING saat ini' },
         { label: 'Ambulans Bertugas', value: activeAmbulance,   icon: '🚑', color: 'var(--color-warning)', keterangan: 'Dispatched / En Route / At Scene' },
-        { label: 'Alert Kritis',      value: criticalAlerts,    icon: '⚠️', color: 'var(--color-danger)',  keterangan: 'Severity HIGH atau CRITICAL' },
+        { label: 'Alert Kritis',      value: criticalAlerts,    icon: '⚠️', color: 'var(--color-danger)',  keterangan: 'Level 2 atau Level 3' },
         { label: 'Rujukan Menunggu',  value: pendingReferrals,  icon: '📋', color: 'var(--color-primary)', keterangan: 'Belum direspon' },
       ];
 
@@ -130,11 +130,11 @@ function useReportData(periode: PeriodeDays): ReportData {
       const konsStatCount: Record<string, number> = {};
       consultations.forEach((c) => { konsStatCount[c.status] = (konsStatCount[c.status] ?? 0) + 1; });
       const KONS_COLORS: Record<string, string> = {
-        PENDING: '#f59e0b', ONGOING: '#3b82d4', COMPLETED: '#22c55e',
-        CANCELLED: '#ef4444', REFERRED: '#7c5cd8',
+        PENDING: '#f59e0b', ACCEPTED: '#6366f1', IN_PROGRESS: '#3b82d4',
+        COMPLETED: '#22c55e', CANCELLED: '#ef4444', EXPIRED: '#6b7280',
       };
       const konsultasiByStatus: PieItem[] = Object.entries(konsStatCount).map(([k, v]) => ({
-        label: { PENDING: 'Menunggu', ONGOING: 'Berlangsung', COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan', REFERRED: 'Dirujuk' }[k] ?? k,
+        label: { PENDING: 'Menunggu', ACCEPTED: 'Diterima', IN_PROGRESS: 'Berlangsung', COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan', EXPIRED: 'Kedaluwarsa' }[k] ?? k,
         value: v,
         color: KONS_COLORS[k] ?? '#9ca3af',
       }));
@@ -154,10 +154,10 @@ function useReportData(periode: PeriodeDays): ReportData {
 
       // ── Distribusi severity alert ──
       const alertSevCount: Record<string, number> = {};
-      alerts.forEach((a) => { alertSevCount[a.severity] = (alertSevCount[a.severity] ?? 0) + 1; });
-      const ALERT_COLORS: Record<string, string> = { CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#f59e0b', LOW: '#22c55e', INFO: '#3b82d4' };
+      alerts.forEach((a) => { alertSevCount[a.level] = (alertSevCount[a.level] ?? 0) + 1; });
+      const ALERT_COLORS: Record<string, string> = { LEVEL_3: '#ef4444', LEVEL_2: '#f97316', LEVEL_1: '#f59e0b' };
       const alertBySeverity: PieItem[] = Object.entries(alertSevCount).map(([k, v]) => ({
-        label: { CRITICAL: 'Kritis', HIGH: 'Tinggi', MEDIUM: 'Sedang', LOW: 'Rendah', INFO: 'Info' }[k] ?? k,
+        label: { LEVEL_3: 'Level 3 — Kritis', LEVEL_2: 'Level 2 — Mendesak', LEVEL_1: 'Level 1 — Peringatan' }[k] ?? k,
         value: v,
         color: ALERT_COLORS[k] ?? '#9ca3af',
       }));
@@ -165,9 +165,9 @@ function useReportData(periode: PeriodeDays): ReportData {
       // ── Distribusi urgensi rujukan ──
       const refUrgCount: Record<string, number> = {};
       referrals.forEach((r) => { refUrgCount[r.urgency_level] = (refUrgCount[r.urgency_level] ?? 0) + 1; });
-      const REF_COLORS: Record<string, string> = { ROUTINE: '#22c55e', URGENT: '#f59e0b', CRITICAL: '#f97316', EMERGENCY: '#ef4444' };
+      const REF_COLORS: Record<string, string> = { NORMAL: '#22c55e', URGENT: '#f59e0b', CRITICAL: '#f97316', EMERGENCY: '#ef4444' };
       const referralByUrgency: PieItem[] = Object.entries(refUrgCount).map(([k, v]) => ({
-        label: { ROUTINE: 'Rutin', URGENT: 'Mendesak', CRITICAL: 'Kritis', EMERGENCY: 'Darurat' }[k] ?? k,
+        label: { NORMAL: 'Normal', URGENT: 'Mendesak', CRITICAL: 'Kritis', EMERGENCY: 'Darurat' }[k] ?? k,
         value: v,
         color: REF_COLORS[k] ?? '#9ca3af',
       }));

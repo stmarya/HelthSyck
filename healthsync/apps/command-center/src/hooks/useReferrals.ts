@@ -8,8 +8,8 @@ export interface Referral {
   patient_id: string;
   from_hospital_id: string | null;
   to_hospital_id: string | null;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'IN_TRANSIT' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED';
-  urgency_level: 'ROUTINE' | 'URGENT' | 'CRITICAL' | 'EMERGENCY';
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'IN_TRANSIT' | 'ARRIVED' | 'CANCELLED';
+  urgency_level: 'NORMAL' | 'URGENT' | 'EMERGENCY' | 'CRITICAL';
   reason: string | null;
   sent_at: string | null;
   accepted_at: string | null;

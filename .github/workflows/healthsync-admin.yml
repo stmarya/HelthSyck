@@ -1,0 +1,119 @@
+name: HealthSync Production Readiness
+on:
+  push:
+    branches: [main, copilot/admin-readiness-production-safe]
+    paths: ['.github/workflows/healthsync-admin.yml', 'healthsync/**']
+  pull_request:
+    paths: ['.github/workflows/healthsync-admin.yml', 'healthsync/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  DATABASE_URL: postgresql://healthsync:healthsync_test@localhost:5432/healthsync_test
+  JWT_SECRET: ci-test-secret-do-not-use-in-production
+  REDIS_URL: redis://localhost:6379
+  PORT: '0'
+  NODE_ENV: test
+jobs:
+  admin:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: healthsync } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm, cache-dependency-path: healthsync/package-lock.json }
+      - run: npm ci
+      - run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
+      - run: npm exec --workspace=apps/admin -- tsc --noEmit
+      - run: npm exec --workspace=apps/admin -- eslint src --ext ts,tsx --max-warnings 0
+      - run: npm exec --workspace=apps/admin -- vite build
+  services:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [services/auth-service, services/patient-service, services/consultation-service, services/prescription-service, services/ambulance-service, services/referral-service, services/hospital-service, services/pharmacy-service, services/notification-service, services/integration-service]
+    defaults: { run: { working-directory: healthsync } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm, cache-dependency-path: healthsync/package-lock.json }
+      - run: npm ci
+      - run: npm exec --workspace=packages/shared -- tsc --project tsconfig.json
+      - run: npx tsc --project ${{ matrix.workspace }}/tsconfig.json --noEmit
+      - run: npm exec --workspace=${{ matrix.workspace }} -- jest --runInBand --passWithNoTests
+  go-services:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { service: [iot-ingestion, alert-service] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22', cache-dependency-path: 'healthsync/services/${{ matrix.service }}/go.sum' }
+      - run: go vet ./... && go test ./... -race -count=1 && go build ./...
+        working-directory: healthsync/services/${{ matrix.service }}
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg15
+        env: { POSTGRES_USER: healthsync, POSTGRES_PASSWORD: healthsync_test, POSTGRES_DB: healthsync_test }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U healthsync -d healthsync_test" --health-interval 10s --health-timeout 5s --health-retries 10
+    defaults: { run: { working-directory: healthsync } }
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash infra/db/run_migrations.sh && bash infra/db/run_migrations.sh
+      - run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM schema_migrations WHERE version='V014__remove_legacy_pharmacy_aliases') THEN 1 ELSE 0 END)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='pharmacy_staff') THEN 1 ELSE 0 END)"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='alerts'::regclass AND contype='p') THEN 1 ELSE 0 END)"
+      - name: Verify backup and restore
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          set +e
+          bash infra/db/backup_restore_check.sh 2>&1 | tee /tmp/backup-restore.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Database backup/restore validation failed'
+              echo
+              echo '```text'
+              tail -n 120 /tmp/backup-restore.log
+              echo '```'
+            } > /tmp/backup-restore-comment.md
+            gh pr comment 5 --body-file /tmp/backup-restore-comment.md || true
+          fi
+          exit "$status"
+  docker:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth-service, patient-service, consultation-service, prescription-service, ambulance-service, referral-service, hospital-service, pharmacy-service, notification-service, integration-service, iot-ingestion, alert-service, admin, command-center]
+    defaults: { run: { working-directory: healthsync } }
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cat > infra/docker/.env.ci <<'ENV'
+          POSTGRES_USER=healthsync
+          POSTGRES_PASSWORD=healthsync_test
+          POSTGRES_DB=healthsync_test
+          DATABASE_URL=postgresql://healthsync:healthsync_test@postgres:5432/healthsync_test
+          REDIS_URL=redis://redis:6379
+          JWT_SECRET=ci-test-secret-do-not-use-in-production
+          JWT_EXPIRES_IN=15m
+          NODE_ENV=test
+          LOG_LEVEL=warn
+          KAFKA_BROKERS=kafka:29092
+          KAFKA_TOPIC_VITALS=hs.vitals.ingested
+          KAFKA_TOPIC_ALERTS=hs.alert.triggered
+          MQTT_BROKER=tcp://emqx:1883
+          ENV
+          docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.ci config --quiet
+      - run: docker compose -f infra/docker/docker-compose.dev.yml --env-file infra/docker/.env.ci build ${{ matrix.service }}
