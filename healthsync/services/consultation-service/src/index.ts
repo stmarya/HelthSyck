@@ -737,6 +737,33 @@ app.get(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /v1/consultations/stats/status — consultation count by status
+// Used by Analytics page (Admin Panel). ADMIN only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get(
+  '/v1/consultations/stats/status',
+  authenticate,
+  requireRole('ADMIN'),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await pool.query<{ status: string; count: string }>(`
+        SELECT status, COUNT(*) AS count
+        FROM consultations
+        GROUP BY status
+        ORDER BY status
+      `);
+      ok(res, result.rows.map((row) => ({
+        status: row.status,
+        count: parseInt(row.count, 10),
+      })));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Error handler & shutdown
 // ─────────────────────────────────────────────────────────────────────────────
 

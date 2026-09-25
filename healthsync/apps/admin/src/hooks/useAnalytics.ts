@@ -10,51 +10,15 @@ export interface AnalyticsData {
   kpis: KpiRow[];
   consultationsByDay: { day: string; count: number }[];
   usersByRole: { name: string; value: number }[];
-  // TODO: Replace with real endpoints when available
-  userGrowthMock: { label: string; total: number; patients: number; doctors: number }[];
-  consultationStatusMock: { name: string; value: number }[];
-  topDoctorsMock: { name: string; consultations: number }[];
+  userGrowth: { label: string; total: number; patients: number; doctors: number }[];
+  userGrowthUnavailableReason?: string;
+  consultationStatus: { name: string; value: number }[];
+  consultationStatusUnavailableReason?: string;
+  topDoctors: { name: string; consultations: number }[];
+  topDoctorsUnavailableReason?: string;
 }
 
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-
-// Mock data helpers — realistic approximations until dedicated endpoints exist
-// TODO: Replace with real endpoint when available
-function makeMockGrowth(): AnalyticsData['userGrowthMock'] {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep'];
-  let total = 8; let patients = 5; let doctors = 2;
-  return months.map((label) => {
-    const addP = Math.floor(Math.random() * 3);
-    const addD = Math.random() > 0.6 ? 1 : 0;
-    patients += addP;
-    doctors  += addD;
-    total    += addP + addD + Math.floor(Math.random() * 2);
-    return { label, total, patients, doctors };
-  });
-}
-
-// TODO: Replace with real endpoint when available
-function makeMockConsultStatus(total: number): AnalyticsData['consultationStatusMock'] {
-  const completed  = Math.round(total * 0.6);
-  const cancelled  = Math.round(total * 0.12);
-  const inProgress = Math.round(total * 0.2);
-  const pending    = total - completed - cancelled - inProgress;
-  return [
-    { name: 'Selesai',       value: completed },
-    { name: 'Dibatalkan',    value: cancelled },
-    { name: 'Sedang Berjalan', value: inProgress },
-    { name: 'Menunggu',      value: Math.max(0, pending) },
-  ];
-}
-
-// TODO: Replace with real endpoint when available
-const TOP_DOCTORS_MOCK: AnalyticsData['topDoctorsMock'] = [
-  { name: 'Dr Budi Santoso',  consultations: 45 },
-  { name: 'Dr Siti Rahayu',   consultations: 38 },
-  { name: 'Dr Ahmad Fauzi',   consultations: 32 },
-  { name: 'Dr Dewi Kusuma',   consultations: 28 },
-  { name: 'Dr Rizal Hakim',   consultations: 21 },
-];
 
 export function useAnalytics() {
   const [data,    setData]    = useState<AnalyticsData | null>(null);
@@ -68,10 +32,11 @@ export function useAnalytics() {
       setLoading(true);
       setError(null);
 
-      const [consultResult, usersResult, kpiResult] = await Promise.allSettled([
+      const [consultResult, usersResult, kpiResult, consultStatusResult] = await Promise.allSettled([
         consultationClient.get<{ data: DayCount[] }>('/v1/consultations/stats/weekly'),
         authClient.get<{ data: RoleCount[] }>('/v1/auth/users/stats/by-role'),
         authClient.get<{ data: KpiRow[] }>('/v1/admin/kpis'),
+        consultationClient.get<{ data: Array<{ status: string; count: number }> }>('/v1/consultations/stats/status'),
       ]);
 
       if (cancelled) return;
@@ -97,7 +62,22 @@ export function useAnalytics() {
           ? (kpiResult.value.data.data ?? [])
           : [];
 
-      const totalConsult = kpis.find((k) => k.metric === 'Consultations')?.current ?? 8;
+      const hasConsultationStatus = consultStatusResult.status === 'fulfilled';
+      const consultationStatus = hasConsultationStatus
+        ? (consultStatusResult.value.data.data ?? []).map((entry) => ({
+            name:
+              entry.status === 'PENDING'
+                ? 'Menunggu'
+                : entry.status === 'IN_PROGRESS'
+                  ? 'Sedang Berjalan'
+                  : entry.status === 'COMPLETED'
+                    ? 'Selesai'
+                    : entry.status === 'CANCELLED'
+                      ? 'Dibatalkan'
+                      : entry.status,
+            value: entry.count,
+          }))
+        : [];
 
       const allFailed =
         consultResult.status === 'rejected' &&
@@ -112,9 +92,14 @@ export function useAnalytics() {
           kpis,
           consultationsByDay: consultsByDay,
           usersByRole: byRole,
-          userGrowthMock: makeMockGrowth(),
-          consultationStatusMock: makeMockConsultStatus(totalConsult),
-          topDoctorsMock: TOP_DOCTORS_MOCK,
+          userGrowth: [],
+          userGrowthUnavailableReason: 'Data historis pertumbuhan pengguna belum tersedia dari backend.',
+          consultationStatus,
+          consultationStatusUnavailableReason: hasConsultationStatus
+            ? undefined
+            : 'Ringkasan status konsultasi belum tersedia dari backend.',
+          topDoctors: [],
+          topDoctorsUnavailableReason: 'Peringkat dokter berdasarkan jumlah konsultasi belum tersedia dari backend.',
         });
         setLoading(false);
       }

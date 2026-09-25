@@ -218,7 +218,14 @@ app.get('/health', async (_req: Request, res: Response) => {
   let redisOk = false;
   try { await getPool().query('SELECT 1'); dbOk = true; } catch { /* swallowed */ }
   try { await getRedis().ping(); redisOk = true; } catch { /* swallowed */ }
-  res.json({ status: 'ok', service: SERVICE_NAME, db: dbOk, redis: redisOk, timestamp: new Date().toISOString() });
+  const healthy = dbOk && redisOk;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    service: SERVICE_NAME,
+    db: dbOk,
+    redis: redisOk,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ─────────────────────────────────────────────

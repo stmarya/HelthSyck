@@ -180,6 +180,15 @@ function ChartCard({
   );
 }
 
+function UnavailableState({ message }: { message: string }) {
+  return (
+    <div className={styles.emptyState} style={{ padding: '30px 0' }}>
+      <div className={styles.emptyStateTitle}>Data belum tersedia</div>
+      <div className={styles.emptyStateDesc}>{message}</div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AnalyticsPage Utama
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,13 +208,28 @@ function exportAnalyticsCSV(data: ReturnType<typeof useAnalytics>['data']) {
     ['', '', ''],
     ['Distribusi Peran', 'Peran', 'Jumlah'],
     ...data.usersByRole.map((r) => ['Role', r.name, String(r.value)]),
-    ['', '', ''],
-    ['Pertumbuhan Pengguna', 'Bulan', 'Total'],
-    ...data.userGrowthMock.map((g) => ['Pertumbuhan', g.label, String(g.total)]),
-    ['', '', ''],
-    ['Top Dokter', 'Nama', 'Konsultasi'],
-    ...data.topDoctorsMock.map((d) => ['Dokter', d.name, String(d.consultations)]),
   ];
+  if (data.consultationStatus.length > 0) {
+    rows.push(
+      ['', '', ''],
+      ['Status Konsultasi', 'Status', 'Jumlah'],
+      ...data.consultationStatus.map((entry) => ['Status', entry.name, String(entry.value)]),
+    );
+  }
+  if (data.userGrowth.length > 0) {
+    rows.push(
+      ['', '', ''],
+      ['Pertumbuhan Pengguna', 'Bulan', 'Total'],
+      ...data.userGrowth.map((g) => ['Pertumbuhan', g.label, String(g.total)]),
+    );
+  }
+  if (data.topDoctors.length > 0) {
+    rows.push(
+      ['', '', ''],
+      ['Top Dokter', 'Nama', 'Konsultasi'],
+      ...data.topDoctors.map((d) => ['Dokter', d.name, String(d.consultations)]),
+    );
+  }
   const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
@@ -222,6 +246,11 @@ function exportAnalyticsCSV(data: ReturnType<typeof useAnalytics>['data']) {
 
 export default function AnalyticsPage() {
   const { data, loading, error } = useAnalytics();
+  const hasUnavailableData = Boolean(
+    data?.consultationStatusUnavailableReason
+    || data?.userGrowthUnavailableReason
+    || data?.topDoctorsUnavailableReason,
+  );
 
   const [consultChartType, setConsultChartType] = useState<'bar' | 'line' | 'area'>('area');
   const [growthChartType,  setGrowthChartType]  = useState<'line' | 'bar' | 'area'>('area');
@@ -249,19 +278,28 @@ export default function AnalyticsPage() {
             Analitik & Laporan
           </h1>
           <p style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 4, margin: '4px 0 0' }}>
-            Data performa sistem HealthSync secara real-time
+            Data performa sistem HealthSync berdasarkan endpoint yang tersedia
           </p>
         </div>
         {/* Kanan: badge status + tombol export CSV */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            fontSize: 11, color: 'var(--color-success)', fontWeight: 600,
-            background: 'var(--color-success-bg)', border: '1px solid var(--color-success-border)',
+            fontSize: 11,
+            color: hasUnavailableData ? 'var(--color-warning)' : 'var(--color-success)',
+            fontWeight: 600,
+            background: hasUnavailableData ? 'var(--color-warning-bg)' : 'var(--color-success-bg)',
+            border: `1px solid ${hasUnavailableData ? 'var(--color-warning-border)' : 'var(--color-success-border)'}`,
             borderRadius: 999, padding: '4px 12px',
           }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
-            Data real-time
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: hasUnavailableData ? 'var(--color-warning)' : 'var(--color-success)',
+              display: 'inline-block',
+            }} />
+            {hasUnavailableData ? 'Sebagian data belum tersedia' : 'Data real-time'}
           </div>
           <button
             onClick={handleExport}
@@ -349,13 +387,15 @@ export default function AnalyticsPage() {
         <ChartCard
           title="Status Konsultasi"
           subtitle="Komposisi berdasarkan status"
-          badge="Data Mock"
+          badge={data?.consultationStatusUnavailableReason ? 'Belum tersedia' : undefined}
         >
-          {loading ? <SkeletonChart height={240} /> : (
+          {loading ? <SkeletonChart height={240} /> : (data?.consultationStatus ?? []).length === 0 ? (
+            <UnavailableState message={data?.consultationStatusUnavailableReason ?? 'Data status konsultasi belum tersedia.'} />
+          ) : (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie
-                  data={data?.consultationStatusMock ?? []}
+                  data={data?.consultationStatus ?? []}
                   cx="50%" cy="45%"
                   innerRadius={60} outerRadius={90}
                   paddingAngle={3}
@@ -363,7 +403,7 @@ export default function AnalyticsPage() {
                   label={({ percent }: { percent: number }) => `${(percent * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
-                  {(data?.consultationStatusMock ?? []).map((entry) => (
+                  {(data?.consultationStatus ?? []).map((entry) => (
                     <Cell key={entry.name} fill={STATUS_COLORS[entry.name] ?? '#9E9E9E'} />
                   ))}
                 </Pie>
@@ -384,7 +424,7 @@ export default function AnalyticsPage() {
         <ChartCard
           title="Pertumbuhan Pengguna"
           subtitle="Tren pertumbuhan total, pasien, dan dokter"
-          badge="Data Mock"
+          badge={data?.userGrowthUnavailableReason ? 'Belum tersedia' : undefined}
           controls={
             <ChartToggle
               value={growthChartType}
@@ -392,10 +432,12 @@ export default function AnalyticsPage() {
             />
           }
         >
-          {loading ? <SkeletonChart height={240} /> : (
+          {loading ? <SkeletonChart height={240} /> : (data?.userGrowth ?? []).length === 0 ? (
+            <UnavailableState message={data?.userGrowthUnavailableReason ?? 'Data historis belum tersedia.'} />
+          ) : (
             <ResponsiveContainer width="100%" height={240}>
               {growthChartType === 'area' ? (
-                <AreaChart data={data?.userGrowthMock ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
+                <AreaChart data={data?.userGrowth ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
                   <defs>
                     <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor="#7C3AED" stopOpacity={0.25} />
@@ -416,7 +458,7 @@ export default function AnalyticsPage() {
                   <Area type="monotone" dataKey="doctors"  name="Dokter" stroke="#059669" fill="none"              strokeWidth={2} strokeDasharray="4 2" />
                 </AreaChart>
               ) : growthChartType === 'line' ? (
-                <LineChart data={data?.userGrowthMock ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
+                <LineChart data={data?.userGrowth ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
@@ -427,7 +469,7 @@ export default function AnalyticsPage() {
                   <Line type="monotone" dataKey="doctors"  name="Dokter" stroke="#059669" strokeWidth={2}   dot={{ r: 3 }} />
                 </LineChart>
               ) : (
-                <BarChart data={data?.userGrowthMock ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
+                <BarChart data={data?.userGrowth ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
@@ -478,13 +520,15 @@ export default function AnalyticsPage() {
       <ChartCard
         title="Top 5 Dokter berdasarkan Konsultasi"
         subtitle="Ranking dokter berdasarkan jumlah konsultasi ditangani"
-        badge="Data Mock"
+        badge={data?.topDoctorsUnavailableReason ? 'Belum tersedia' : undefined}
       >
-        {loading ? <SkeletonChart height={200} /> : (
+        {loading ? <SkeletonChart height={200} /> : (data?.topDoctors ?? []).length === 0 ? (
+          <UnavailableState message={data?.topDoctorsUnavailableReason ?? 'Data ranking dokter belum tersedia.'} />
+        ) : (
           <ResponsiveContainer width="100%" height={200}>
             <BarChart
               layout="vertical"
-              data={data?.topDoctorsMock ?? []}
+              data={data?.topDoctors ?? []}
               margin={{ top: 0, right: 30, bottom: 0, left: 110 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
@@ -495,7 +539,7 @@ export default function AnalyticsPage() {
                 formatter={(v: number) => [`${v} konsultasi`, 'Jumlah']}
               />
               <Bar dataKey="consultations" radius={[0, 8, 8, 0]}>
-                {(data?.topDoctorsMock ?? []).map((_, index) => (
+                {(data?.topDoctors ?? []).map((_, index) => (
                   <Cell key={`bar-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                 ))}
               </Bar>
@@ -511,17 +555,19 @@ export default function AnalyticsPage() {
         <ChartCard
           title="Komposisi Status Konsultasi"
           subtitle="Proporsi setiap status terhadap total konsultasi"
-          badge="Data Mock"
+          badge={data?.consultationStatusUnavailableReason ? 'Belum tersedia' : undefined}
         >
-          {loading ? <SkeletonChart height={220} /> : (
+          {loading ? <SkeletonChart height={220} /> : (data?.consultationStatus ?? []).length === 0 ? (
+            <UnavailableState message={data?.consultationStatusUnavailableReason ?? 'Data status konsultasi belum tersedia.'} />
+          ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart
                 data={[{
                   name: 'Status',
-                  Selesai:          data?.consultationStatusMock?.find(c => c.name === 'Selesai')?.value ?? 0,
-                  'Sedang Berjalan': data?.consultationStatusMock?.find(c => c.name === 'Sedang Berjalan')?.value ?? 0,
-                  Menunggu:          data?.consultationStatusMock?.find(c => c.name === 'Menunggu')?.value ?? 0,
-                  Dibatalkan:        data?.consultationStatusMock?.find(c => c.name === 'Dibatalkan')?.value ?? 0,
+                  Selesai:          data?.consultationStatus?.find(c => c.name === 'Selesai')?.value ?? 0,
+                  'Sedang Berjalan': data?.consultationStatus?.find(c => c.name === 'Sedang Berjalan')?.value ?? 0,
+                  Menunggu:          data?.consultationStatus?.find(c => c.name === 'Menunggu')?.value ?? 0,
+                  Dibatalkan:        data?.consultationStatus?.find(c => c.name === 'Dibatalkan')?.value ?? 0,
                 }]}
                 layout="vertical"
                 margin={{ top: 0, right: 30, bottom: 0, left: 20 }}
@@ -544,11 +590,13 @@ export default function AnalyticsPage() {
         <ChartCard
           title="Tren Pertumbuhan Pengguna Bulanan"
           subtitle="Total pengguna baru per bulan (9 bulan terakhir)"
-          badge="Data Mock"
+          badge={data?.userGrowthUnavailableReason ? 'Belum tersedia' : undefined}
         >
-          {loading ? <SkeletonChart height={220} /> : (
+          {loading ? <SkeletonChart height={220} /> : (data?.userGrowth ?? []).length === 0 ? (
+            <UnavailableState message={data?.userGrowthUnavailableReason ?? 'Data historis belum tersedia.'} />
+          ) : (
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={data?.userGrowthMock ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
+              <AreaChart data={data?.userGrowth ?? []} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
                 <defs>
                   <linearGradient id="totalGradR4" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%"  stopColor="#059669" stopOpacity={0.25} />
