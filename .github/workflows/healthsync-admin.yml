@@ -71,6 +71,8 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM schema_migrations WHERE version='V014__remove_legacy_pharmacy_aliases') THEN 1 ELSE 0 END)"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='pharmacy_staff') THEN 1 ELSE 0 END)"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='alerts'::regclass AND contype='p') THEN 1 ELSE 0 END)"
+      - name: Verify backup and restore
+        run: bash infra/db/backup_restore_check.sh
   docker:
     runs-on: ubuntu-latest
     strategy:
