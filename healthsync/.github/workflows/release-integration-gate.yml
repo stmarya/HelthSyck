@@ -1,0 +1,77 @@
+name: HealthSync Release Integration Gate
+
+on:
+  push:
+    branches: [release/healthsync-integration]
+    paths:
+      - 'healthsync/**'
+      - 'healthsync/.github/workflows/release-integration-gate.yml'
+  pull_request:
+    branches: [release/healthsync-integration]
+    paths:
+      - 'healthsync/**'
+      - 'healthsync/.github/workflows/release-integration-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monorepo:
+    name: Monorepo integration gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: healthsync/package-lock.json
+
+      - name: Install deterministic workspace dependencies
+        working-directory: healthsync
+        run: npm ci
+
+      - name: Build shared package
+        working-directory: healthsync
+        run: npm run build --workspace=packages/shared
+
+      - name: Type-check all Node workspaces
+        working-directory: healthsync
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Lint all Node workspaces
+        working-directory: healthsync
+        run: npm run lint --workspaces --if-present
+
+      - name: Build all Node workspaces
+        working-directory: healthsync
+        run: npm run build --workspaces --if-present
+
+      - name: Test all Node workspaces
+        working-directory: healthsync
+        run: npm test --workspaces --if-present
+        env:
+          NODE_ENV: test
+          PORT: '0'
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          JWT_SECRET: ci-test-secret-do-not-use-in-production
+          REDIS_URL: redis://localhost:6379
+
+      - name: Command Center release tests
+        working-directory: healthsync
+        run: npm run test:release --workspace=apps/command-center
+
+      - name: Validate Kubernetes YAML syntax
+        run: |
+          python - <<'PY'
+          import glob
+          import yaml
+          for path in glob.glob('healthsync/infra/k8s/*.yaml'):
+              with open(path, encoding='utf-8') as handle:
+                  list(yaml.safe_load_all(handle))
+              print(f'validated {path}')
+          PY
