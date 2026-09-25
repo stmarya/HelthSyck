@@ -1,6 +1,7 @@
 ﻿# Bob AI artefak & file sementara
 .bob/
 *.html
+!healthsync/apps/**/index.html
 
 # Node modules (semua service)
 **/node_modules/
