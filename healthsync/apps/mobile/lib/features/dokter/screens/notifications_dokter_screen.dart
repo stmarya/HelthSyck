@@ -47,6 +47,12 @@ class _NotificationsDokterScreenState
         _loading = false;
         _error = error.detail;
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Gagal memuat notifikasi.';
+      });
     }
   }
 
@@ -76,9 +82,21 @@ class _NotificationsDokterScreenState
     }
   }
 
-  void _openReference(Map<String, dynamic> item) {
+  Future<void> _openReference(Map<String, dynamic> item) async {
     final id = item['reference_id']?.toString();
     if (id == null || id.isEmpty) return;
+    final notificationId = item['id']?.toString();
+    if (item['read_at'] == null && notificationId != null && notificationId.isNotEmpty) {
+      try {
+        await _api.put(
+          '/v1/notifications/read',
+          port: 3009,
+          body: {'notificationIds': [notificationId]},
+        );
+      } on ApiException {
+        // Navigation should remain available if marking read is temporarily unavailable.
+      }
+    }
     switch (item['reference_type']?.toString()) {
       case 'CONSULTATION':
         context.push('/doctor/consultations/$id');

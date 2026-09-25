@@ -132,6 +132,12 @@ class _PrescriptionCreateScreenState extends ConsumerState<PrescriptionCreateScr
         _submitting = false;
         _error = error.detail;
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = 'Gagal menerbitkan resep. Silakan coba lagi.';
+      });
     }
   }
 

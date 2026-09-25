@@ -116,11 +116,20 @@ class _RujukanDokterScreenState extends ConsumerState<RujukanDokterScreen> {
       );
       final referralId = (response['data'] as Map?)?['id']?.toString();
       if (referralId != null && referralId.isNotEmpty) {
-        await _api.put('/v1/referrals/$referralId/send', port: 3006);
+        try {
+          await _api.put('/v1/referrals/$referralId/send', port: 3006);
+        } on ApiException catch (error) {
+          if (!mounted) return;
+          setState(() {
+            _submitting = false;
+            _error = 'Rujukan tersimpan sebagai draft, tetapi gagal dikirim: ${error.detail}';
+          });
+          return;
+        }
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Draft rujukan berhasil dibuat.')),
+        const SnackBar(content: Text('Rujukan berhasil dibuat dan dikirim.')),
       );
       context.go('/doctor/referrals');
     } on ApiException catch (error) {

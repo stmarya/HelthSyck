@@ -20,6 +20,8 @@ class _DashboardDokterScreenState extends ConsumerState<DashboardDokterScreen> {
   bool _loading = true;
   String? _error;
   bool _showProfileDetails = false;
+  final _scrollController = ScrollController();
+  final _queueSectionKey = GlobalKey();
 
   ApiClient get _api => ref.read(apiClientProvider);
 
@@ -27,6 +29,12 @@ class _DashboardDokterScreenState extends ConsumerState<DashboardDokterScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -138,6 +146,7 @@ class _DashboardDokterScreenState extends ConsumerState<DashboardDokterScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator(color: DoctorUi.primary))
             : ListView(
+                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
                 children: [
@@ -220,11 +229,14 @@ class _DashboardDokterScreenState extends ConsumerState<DashboardDokterScreen> {
                     onTap: () => context.push('/doctor/referrals'),
                   ),
                   const SizedBox(height: 24),
-                  DoctorSectionHeader(
-                    title: 'Antrian konsultasi',
-                    subtitle: _queue.isEmpty
-                        ? 'Belum ada pasien yang menunggu'
-                        : '${_queue.length} pasien membutuhkan perhatian',
+                  Container(
+                    key: _queueSectionKey,
+                    child: DoctorSectionHeader(
+                      title: 'Antrian konsultasi',
+                      subtitle: _queue.isEmpty
+                          ? 'Belum ada pasien yang menunggu'
+                          : '${_queue.length} pasien membutuhkan perhatian',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   if (_queue.isEmpty)
@@ -277,8 +289,13 @@ class _DashboardDokterScreenState extends ConsumerState<DashboardDokterScreen> {
   }
 
   void _showQueueHint() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Antrian konsultasi ada di bagian bawah halaman.')),
+    final sectionContext = _queueSectionKey.currentContext;
+    if (sectionContext == null) return;
+    Scrollable.ensureVisible(
+      sectionContext,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      alignment: 0.08,
     );
   }
 }

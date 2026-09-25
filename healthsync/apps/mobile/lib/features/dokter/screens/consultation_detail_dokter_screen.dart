@@ -21,6 +21,7 @@ class _ConsultationDetailDokterScreenState
   List<Map<String, dynamic>> _prescriptions = const [];
   bool _loading = true;
   bool _submitting = false;
+  String? _error;
   final _messageController = TextEditingController();
 
   ApiClient get _api => ref.read(apiClientProvider);
@@ -38,7 +39,10 @@ class _ConsultationDetailDokterScreenState
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final detail = await _api.get('/v1/consultations/${widget.consultationId}', port: 3003);
       final messages = await _api.get('/v1/consultations/${widget.consultationId}/messages', port: 3003);
@@ -66,13 +70,13 @@ class _ConsultationDetailDokterScreenState
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.detail)));
+      setState(() => _error = e.detail);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal memuat konsultasi')),
-      );
+      setState(() {
+        _loading = false;
+        _error = 'Gagal memuat konsultasi.';
+      });
     }
   }
 
@@ -116,7 +120,11 @@ class _ConsultationDetailDokterScreenState
         ],
       ),
     );
-    if (submitted != true) return;
+    if (submitted != true) {
+      diagnosis.dispose();
+      notes.dispose();
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -138,16 +146,19 @@ class _ConsultationDetailDokterScreenState
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
-    _messageController.clear();
+    setState(() => _submitting = true);
     try {
       await _api.post(
         '/v1/consultations/${widget.consultationId}/messages',
         port: 3003,
         body: {'content': text, 'messageType': 'TEXT'},
       );
+      _messageController.clear();
       await _load();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.detail)));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -172,6 +183,11 @@ class _ConsultationDetailDokterScreenState
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _ErrorBanner(message: _error!, onRetry: _load),
+                  ),
                 DoctorSurface(
                   margin: const EdgeInsets.all(16),
                   child: Padding(
@@ -378,6 +394,33 @@ class _InfoRow extends StatelessWidget {
             TextSpan(text: value),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorBanner({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return DoctorSurface(
+      color: const Color(0xFFFFF5F4),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline_rounded, color: DoctorUi.danger),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: DoctorUi.ink, fontSize: 13),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Coba lagi')),
+        ],
       ),
     );
   }
