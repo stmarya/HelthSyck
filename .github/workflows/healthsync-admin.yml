@@ -6,7 +6,9 @@ on:
   pull_request:
     paths: ['.github/workflows/healthsync-admin.yml', 'healthsync/**']
   workflow_dispatch:
-permissions: { contents: read }
+permissions:
+  contents: read
+  pull-requests: write
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -72,7 +74,22 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='pharmacy_staff') THEN 1 ELSE 0 END)"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1/(CASE WHEN EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='alerts'::regclass AND contype='p') THEN 1 ELSE 0 END)"
       - name: Verify backup and restore
-        run: bash infra/db/backup_restore_check.sh
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          set +e
+          bash infra/db/backup_restore_check.sh 2>&1 | tee /tmp/backup-restore.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Database backup/restore validation failed'
+              echo
+              echo '```text'
+              tail -n 120 /tmp/backup-restore.log
+              echo '```'
+            } > /tmp/backup-restore-comment.md
+            gh pr comment 5 --body-file /tmp/backup-restore-comment.md || true
+          fi
+          exit "$status"
   docker:
     runs-on: ubuntu-latest
     strategy:
