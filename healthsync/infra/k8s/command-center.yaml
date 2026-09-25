@@ -10,7 +10,6 @@ data:
   VITE_LOCATION_STALE_AFTER_MS: "15000"
   VITE_TURN_URL: ""
   VITE_TURN_USERNAME: ""
-  VITE_TURN_CREDENTIAL: ""
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,6 +41,19 @@ spec:
           envFrom:
             - configMapRef:
                 name: command-center-config
+          env:
+            - name: VITE_MAP_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: command-center-runtime
+                  key: VITE_MAP_ACCESS_TOKEN
+                  optional: true
+            - name: VITE_TURN_CREDENTIAL
+              valueFrom:
+                secretKeyRef:
+                  name: command-center-runtime
+                  key: VITE_TURN_CREDENTIAL
+                  optional: true
           resources:
             requests:
               cpu: "100m"
