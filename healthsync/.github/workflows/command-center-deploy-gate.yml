@@ -1,0 +1,55 @@
+name: Command Center Deploy Gate
+
+on:
+  pull_request:
+    paths:
+      - 'healthsync/apps/command-center/**'
+      - 'healthsync/contracts/**'
+      - 'healthsync/.github/workflows/command-center-deploy-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'healthsync/apps/command-center/**'
+      - 'healthsync/contracts/**'
+      - 'healthsync/.github/workflows/command-center-deploy-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  command-center:
+    name: Command Center deploy gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: healthsync/package-lock.json
+      - name: Install dependencies
+        working-directory: healthsync
+        run: npm ci
+      - name: Build shared package
+        working-directory: healthsync
+        run: npm run build --workspace=packages/shared
+      - name: Contract audit
+        working-directory: healthsync
+        run: npm run test:integration --workspace=apps/command-center
+      - name: Smoke test
+        working-directory: healthsync
+        run: npm run test:smoke --workspace=apps/command-center
+      - name: UI/UX audit
+        working-directory: healthsync
+        run: npm run test:uiux --workspace=apps/command-center
+      - name: Type-check
+        working-directory: healthsync
+        run: npm run typecheck --workspace=apps/command-center
+      - name: Lint
+        working-directory: healthsync
+        run: npm run lint --workspace=apps/command-center
+      - name: Build
+        working-directory: healthsync
+        run: npm run build --workspace=apps/command-center
