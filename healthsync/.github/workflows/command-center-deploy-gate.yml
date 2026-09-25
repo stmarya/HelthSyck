@@ -35,6 +35,9 @@ jobs:
       - name: Build shared package
         working-directory: healthsync
         run: npm run build --workspace=packages/shared
+      - name: Configuration audit
+        working-directory: healthsync
+        run: npm run test:config --workspace=apps/command-center
       - name: Contract audit
         working-directory: healthsync
         run: npm run test:integration --workspace=apps/command-center

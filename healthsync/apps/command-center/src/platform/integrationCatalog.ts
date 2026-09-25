@@ -30,7 +30,7 @@ export const INTEGRATIONS: IntegrationDescriptor[] = [
   { id: 'realtime-gateway', label: 'Realtime Gateway', owner: 'realtime-gateway', kind: 'realtime', healthPath: '/health/realtime', contractVersion: 'realtime.v1', consumers: ['command-center', 'mobile'], critical: true },
   { id: 'map-routing', label: 'Map & Routing', owner: 'platform', kind: 'client', contractVersion: 'map-routing.v1', consumers: ['command-center', 'mobile'], critical: false, requiredEnv: ['VITE_MAP_PROVIDER', 'VITE_ROUTING_URL'] },
   { id: 'event-envelope', label: 'Event Envelope', owner: 'platform', kind: 'contract', contractVersion: 'command-center-event.v1', consumers: ['admin', 'command-center', 'mobile'], critical: true },
-  { id: 'communication', label: 'Chat & WebRTC Call', owner: 'realtime-gateway', kind: 'realtime', contractVersion: 'communication.v1', consumers: ['command-center', 'admin', 'mobile'], critical: true, requiredEnv: ['VITE_TURN_URL', 'VITE_TURN_USERNAME', 'VITE_TURN_CREDENTIAL'] },
+  { id: 'communication', label: 'Chat & WebRTC Call', owner: 'realtime-gateway', kind: 'realtime', healthPath: '/health/realtime', contractVersion: 'communication.v1', consumers: ['command-center', 'admin', 'mobile'], critical: true, requiredEnv: ['VITE_TURN_URL', 'VITE_TURN_USERNAME', 'VITE_TURN_CREDENTIAL'] },
 ];
 
 export const COMPATIBILITY_LINKS: CompatibilityLink[] = [
