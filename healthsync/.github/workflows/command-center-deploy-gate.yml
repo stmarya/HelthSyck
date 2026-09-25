@@ -8,6 +8,7 @@ on:
       - 'healthsync/infra/k8s/command-center*.yaml'
       - 'healthsync/infra/k8s/realtime-service.yaml'
       - 'healthsync/.github/workflows/command-center-deploy-gate.yml'
+      - 'healthsync/.github/workflows/command-center-deploy.yml'
   push:
     branches: [main]
     paths:
@@ -16,6 +17,7 @@ on:
       - 'healthsync/infra/k8s/command-center*.yaml'
       - 'healthsync/infra/k8s/realtime-service.yaml'
       - 'healthsync/.github/workflows/command-center-deploy-gate.yml'
+      - 'healthsync/.github/workflows/command-center-deploy.yml'
 
 permissions:
   contents: read
