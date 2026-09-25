@@ -7,7 +7,7 @@ class AppTheme {
 
   // ── Warna Dasar ────────────────────────────────────
   static const Color _pasienSeed    = Color(0xFF1565C0); // Biru medis
-  static const Color _dokterSeed    = Color(0xFF5E35B1); // Ungu klinis
+  static const Color _dokterSeed    = Color(0xFF2783DE); // Biru klinis
   static const Color _apotekSeed    = Color(0xFF2E7D32); // Hijau apotek
   static const Color _driverSeed    = Color(0xFFE65100); // Oranye driver
   static const Color _ambulansSeed  = Color(0xFFC62828); // Merah darurat

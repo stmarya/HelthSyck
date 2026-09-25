@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api_client.dart';
+import '../widgets/doctor_ui.dart';
 
 class ConsultationDetailDokterScreen extends ConsumerStatefulWidget {
   final String consultationId;
@@ -159,21 +160,41 @@ class _ConsultationDetailDokterScreenState
     final symptomData = consultation['symptom_data'];
 
     return Scaffold(
-      appBar: AppBar(title: Text('Konsultasi $patient')),
+      backgroundColor: DoctorUi.canvas,
+      appBar: AppBar(
+        backgroundColor: DoctorUi.canvas,
+        title: Text(
+          'Konsultasi $patient',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                Card(
+                DoctorSurface(
                   margin: const EdgeInsets.all(16),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.zero,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(consultation['chief_complaint']?.toString() ?? '-', style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        _InfoRow(label: 'Status', value: status),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                consultation['chief_complaint']?.toString() ?? '-',
+                                style: const TextStyle(
+                                  color: DoctorUi.ink,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            DoctorStatusPill.fromStatus(status),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
                         _InfoRow(label: 'Prioritas', value: consultation['urgency']?.toString() ?? 'NORMAL'),
                         _InfoRow(label: 'Dibuat', value: consultation['created_at']?.toString() ?? '-'),
                         _InfoRow(label: 'Dimulai', value: consultation['started_at']?.toString() ?? '-'),
@@ -182,10 +203,19 @@ class _ConsultationDetailDokterScreenState
                         _InfoRow(label: 'Catatan medis', value: consultation['notes']?.toString() ?? 'Belum dicatat'),
                         if (symptomData is Map && symptomData.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          Text('Data gejala', style: Theme.of(context).textTheme.titleSmall),
-                          const SizedBox(height: 4),
+                          const Text(
+                            'Data gejala',
+                            style: TextStyle(
+                              color: DoctorUi.ink,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
                           ...symptomData.entries.map(
-                            (entry) => _InfoRow(label: entry.key.toString(), value: entry.value?.toString() ?? '-'),
+                            (entry) => _InfoRow(
+                              label: entry.key.toString(),
+                              value: entry.value?.toString() ?? '-',
+                            ),
                           ),
                         ],
                         const SizedBox(height: 12),
@@ -224,12 +254,35 @@ class _ConsultationDetailDokterScreenState
                 ),
                 if (_prescriptions.isNotEmpty)
                   _PrescriptionSummaryList(items: _prescriptions),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Percakapan konsultasi',
+                          style: TextStyle(
+                            color: DoctorUi.ink,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      DoctorStatusPill(
+                        label: '${_messages.length} pesan',
+                        color: DoctorUi.mutedInk,
+                        icon: Icons.forum_outlined,
+                      ),
+                    ],
+                  ),
+                ),
                 if (_messages.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('Belum ada pesan dalam konsultasi ini.'),
+                    child: DoctorEmptyState(
+                      title: 'Belum ada pesan',
+                      message: 'Kirim pesan pertama untuk memulai percakapan.',
+                      icon: Icons.chat_bubble_outline_rounded,
                     ),
                   ),
                 Expanded(
@@ -237,30 +290,38 @@ class _ConsultationDetailDokterScreenState
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      return ListTile(
-                        leading: Icon(
-                          message['message_type']?.toString() == 'SYSTEM'
-                              ? Icons.info_outline
-                              : Icons.chat_bubble_outline,
-                        ),
-                        title: Text(message['content']?.toString() ?? ''),
-                        subtitle: Text(
-                          '${message['sender_email']?.toString() ?? '-'}'
-                          ' • ${message['message_type']?.toString() ?? 'TEXT'}'
-                          ' • ${message['created_at']?.toString() ?? '-'}',
-                        ),
-                      );
+                      return _MessageBubble(message: _messages[index]);
                     },
                   ),
                 ),
                 SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                     child: Row(
                       children: [
-                        Expanded(child: TextField(controller: _messageController, decoration: const InputDecoration(hintText: 'Tulis pesan...'))),
-                        IconButton(onPressed: _submitting ? null : _sendMessage, icon: const Icon(Icons.send)),
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _submitting ? null : _sendMessage(),
+                            decoration: InputDecoration(
+                              hintText: 'Tulis catatan untuk pasien...',
+                              prefixIcon: const Icon(Icons.chat_bubble_outline_rounded),
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: DoctorUi.border),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filled(
+                          tooltip: 'Kirim pesan',
+                          onPressed: _submitting ? null : _sendMessage,
+                          icon: const Icon(Icons.send_rounded),
+                        ),
                       ],
                     ),
                   ),
@@ -305,8 +366,58 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text('$label: $value'),
+      padding: const EdgeInsets.only(bottom: 5),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(color: DoctorUi.mutedInk, fontSize: 13, height: 1.35),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(color: DoctorUi.ink, fontWeight: FontWeight.w700),
+            ),
+            TextSpan(text: value),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageBubble extends StatelessWidget {
+  final Map<String, dynamic> message;
+
+  const _MessageBubble({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final isSystem = message['message_type']?.toString() == 'SYSTEM';
+    return Align(
+      alignment: isSystem ? Alignment.center : Alignment.centerLeft,
+      child: Container(
+        width: isSystem ? double.infinity : null,
+        constraints: const BoxConstraints(maxWidth: 420),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSystem ? DoctorUi.canvas : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: DoctorUi.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message['content']?.toString() ?? '',
+              style: const TextStyle(color: DoctorUi.ink, fontSize: 14, height: 1.35),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${message['sender_email']?.toString() ?? '-'} • ${message['created_at']?.toString() ?? '-'}',
+              style: const TextStyle(color: DoctorUi.mutedInk, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -318,11 +429,15 @@ class _PrescriptionSummaryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return DoctorSurface(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: EdgeInsets.zero,
       child: ExpansionTile(
-        leading: const Icon(Icons.receipt_long),
-        title: Text('Resep (${items.length})'),
+        leading: const Icon(Icons.receipt_long, color: DoctorUi.primary),
+        title: Text(
+          'Resep (${items.length})',
+          style: const TextStyle(color: DoctorUi.ink, fontWeight: FontWeight.w800),
+        ),
         children: items
             .map(
               (item) => ListTile(
