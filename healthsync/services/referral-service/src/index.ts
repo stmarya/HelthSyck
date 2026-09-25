@@ -49,7 +49,7 @@ const CreateReferralSchema = z.object({
   toHospitalId:           z.string().uuid(),
   reason:                 z.string().min(20),
   diagnosis:              z.string().optional(),
-  urgencyLevel:           z.enum(['CRITICAL', 'URGENT', 'NORMAL']),
+  urgencyLevel:           z.enum(['CRITICAL', 'URGENT', 'EMERGENCY', 'NORMAL']),
   requiredSpecialization: z.string().optional(),
   notes:                  z.string().optional(),
 });
@@ -72,7 +72,7 @@ const ListReferralQuerySchema = z.object({
   page:         z.coerce.number().int().min(1).default(1),
   limit:        z.coerce.number().int().min(1).max(100).default(20),
   status:       z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'IN_TRANSIT', 'ARRIVED', 'CANCELLED']).optional(),
-  urgencyLevel: z.enum(['CRITICAL', 'URGENT', 'NORMAL']).optional(),
+  urgencyLevel: z.enum(['CRITICAL', 'URGENT', 'EMERGENCY', 'NORMAL']).optional(),
 });
 
 // ─────────────────────────────────────────────
@@ -524,12 +524,16 @@ app.get('/v1/referrals', authenticate, async (req: Request, res: Response, next:
         'SELECT hospital_id FROM command_center_users WHERE user_id = $1',
         [caller.sub],
       );
-      if (hospRow.rows[0]) {
-        const hId = hospRow.rows[0].hospital_id;
-        conditions.push(
-          `(r.from_hospital_id = $${params.push(hId)} OR r.to_hospital_id = $${params.push(hId)})`,
-        );
+      if (!hospRow.rows[0]) {
+        // A Command Center user without an explicit hospital mapping must not
+        // fall through to the unscoped ADMIN-like query.
+        paginated(res, [], page, limit, 0);
+        return;
       }
+      const hId = hospRow.rows[0].hospital_id;
+      conditions.push(
+        `(r.from_hospital_id = $${params.push(hId)} OR r.to_hospital_id = $${params.push(hId)})`,
+      );
     }
     // ADMIN: no scoping — sees all
 

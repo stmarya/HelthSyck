@@ -7,7 +7,7 @@ export interface Consultation {
   id: string;
   patient_id: string;
   doctor_id: string;
-  status: 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  status: 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
   chief_complaint: string | null;
   diagnosis: string | null;
   notes: string | null;

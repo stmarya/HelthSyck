@@ -11,7 +11,7 @@ MANIFESTS=(
   consultation-service.yaml prescription-service.yaml ambulance-service.yaml
   referral-service.yaml hospital-service.yaml pharmacy-service.yaml
   notification-service.yaml integration-service.yaml iot-ingestion.yaml
-  alert-service.yaml hpa.yaml ingress.yaml
+  alert-service.yaml hpa.yaml ingress.yaml health-ingress.yaml
 )
 DEPLOYMENTS=(
   auth-service patient-service consultation-service prescription-service

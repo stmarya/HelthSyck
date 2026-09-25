@@ -23,7 +23,7 @@ export interface ServiceHealth { name: string; port: number; url: string; status
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 export interface Toast { id: string; type: ToastType; message: string }
 export interface ConsultationRow { id: string; patient_id: string; doctor_id: string; status: ConsultationStatus; chief_complaint: string | null; diagnosis: string | null; notes: string | null; symptom_data: Record<string, unknown> | null; started_at: string | null; ended_at: string | null; created_at: string; updated_at: string; patient_name: string | null; doctor_email: string | null }
-export type GenderType = 'MALE' | 'FEMALE';
+export type GenderType = 'MALE' | 'FEMALE' | 'OTHER';
 export type BloodType = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-' | 'UNKNOWN';
 export interface Patient { id: string; user_id: string; name: string; date_of_birth: string; blood_type: BloodType; gender: GenderType; phone: string | null; created_at: string }
 export interface PatientsApiResponse { data: { patients: Patient[]; meta: PaginationMeta }; meta: { timestamp: string } }

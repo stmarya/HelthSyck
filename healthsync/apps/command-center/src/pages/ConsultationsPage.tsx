@@ -15,6 +15,7 @@ const STATUS_CONFIG: Record<string, { label: string; cls: string; color: string 
   IN_PROGRESS: { label: 'Berlangsung', cls: styles.badgeWarning,  color: '#d97706' },
   COMPLETED:   { label: 'Selesai',     cls: styles.badgeOk,       color: '#10b981' },
   CANCELLED:   { label: 'Dibatalkan',  cls: styles.badgeCritical, color: '#ef4444' },
+  EXPIRED:     { label: 'Kedaluwarsa', cls: styles.badgeCritical, color: '#6b7280' },
 };
 
 // ─── Skeleton loading ─────────────────────────────────────────────────────
@@ -204,6 +205,7 @@ export default function ConsultationsPage() {
             <option value="IN_PROGRESS">Berlangsung</option>
             <option value="COMPLETED">Selesai</option>
             <option value="CANCELLED">Dibatalkan</option>
+            <option value="EXPIRED">Kedaluwarsa</option>
           </select>
         </div>
 

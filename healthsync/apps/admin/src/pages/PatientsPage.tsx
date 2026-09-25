@@ -88,7 +88,11 @@ function exportPatientsCsv(patients: Patient[]) {
   URL.revokeObjectURL(url);
 }
 
-const GENDER_LABEL: Record<string, string> = { MALE: 'Laki-laki', FEMALE: 'Perempuan' };
+const GENDER_LABEL: Record<string, string> = {
+  MALE: 'Laki-laki',
+  FEMALE: 'Perempuan',
+  OTHER: 'Lainnya',
+};
 
 const BLOOD_COLOR: Record<string, string> = {
   'A+': '#e53935', 'A-': '#e53935', 'B+': '#e65100', 'B-': '#e65100',
