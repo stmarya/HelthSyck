@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api_client.dart';
+import '../widgets/doctor_ui.dart';
 
 class PrescriptionCreateScreen extends ConsumerStatefulWidget {
   final String consultationId;
@@ -144,16 +145,17 @@ class _PrescriptionCreateScreenState extends ConsumerState<PrescriptionCreateScr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Buat resep')),
+      backgroundColor: DoctorUi.canvas,
+      appBar: AppBar(
+        backgroundColor: DoctorUi.canvas,
+        title: const Text('Buat resep'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            'Pasien ${widget.patientId.substring(
-              0,
-              widget.patientId.length < 8 ? widget.patientId.length : 8,
-            )}',
-            style: Theme.of(context).textTheme.bodySmall,
+          const Text(
+            'Resep untuk pasien dari konsultasi ini',
+            style: TextStyle(color: DoctorUi.mutedInk, fontSize: 13),
           ),
           const SizedBox(height: 12),
           TextField(

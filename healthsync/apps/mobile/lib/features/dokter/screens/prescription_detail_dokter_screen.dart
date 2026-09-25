@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api_client.dart';
+import '../widgets/doctor_ui.dart';
 
 class PrescriptionDetailDokterScreen extends ConsumerStatefulWidget {
   final String prescriptionId;
@@ -73,7 +74,9 @@ class _PrescriptionDetailDokterScreenState
     final prescription = _prescription ?? const <String, dynamic>{};
     final items = _items(prescription['items']);
     return Scaffold(
+      backgroundColor: DoctorUi.canvas,
       appBar: AppBar(
+        backgroundColor: DoctorUi.canvas,
         title: const Text('Detail resep'),
         actions: [
           IconButton(
@@ -110,7 +113,7 @@ class _PrescriptionDetailDokterScreenState
                       _Row(label: 'Dokter', value: prescription['doctor_email']),
                       _Row(label: 'Diterbitkan', value: prescription['issued_at']),
                       _Row(label: 'Berlaku sampai', value: prescription['expires_at']),
-                      _Row(label: 'Apotek', value: prescription['pharmacy_id']),
+                      _Row(label: 'Apotek ID', value: prescription['pharmacy_id']),
                       _Row(label: 'Metode pemenuhan', value: prescription['fulfillment_type']),
                       _Row(label: 'Catatan', value: prescription['notes']),
                     ],

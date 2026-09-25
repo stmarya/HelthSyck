@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api_client.dart';
+import '../widgets/doctor_ui.dart';
 
 class NotificationsDokterScreen extends ConsumerStatefulWidget {
   const NotificationsDokterScreen({super.key});
@@ -113,7 +114,9 @@ class _NotificationsDokterScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: DoctorUi.canvas,
       appBar: AppBar(
+        backgroundColor: DoctorUi.canvas,
         title: const Text('Notifikasi'),
         actions: [
           TextButton(

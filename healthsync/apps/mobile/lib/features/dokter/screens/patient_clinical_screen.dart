@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api_client.dart';
+import '../widgets/doctor_ui.dart';
 
 class PatientClinicalScreen extends ConsumerStatefulWidget {
   final String patientId;
@@ -100,7 +101,9 @@ class _PatientClinicalScreenState extends ConsumerState<PatientClinicalScreen> {
     final allergies = _asMapList(patient['allergies']);
 
     return Scaffold(
+      backgroundColor: DoctorUi.canvas,
       appBar: AppBar(
+        backgroundColor: DoctorUi.canvas,
         title: Text(patient['name']?.toString() ?? 'Data klinis pasien'),
         actions: [
           IconButton(

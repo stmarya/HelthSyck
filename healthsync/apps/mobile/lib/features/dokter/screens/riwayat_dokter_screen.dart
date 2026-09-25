@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api_client.dart';
+import '../widgets/doctor_ui.dart';
 
 class RiwayatDokterScreen extends ConsumerStatefulWidget {
   const RiwayatDokterScreen({super.key});
@@ -60,7 +61,9 @@ class _RiwayatDokterScreenState extends ConsumerState<RiwayatDokterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: DoctorUi.canvas,
       appBar: AppBar(
+        backgroundColor: DoctorUi.canvas,
         title: const Text('Riwayat konsultasi'),
         actions: [
           IconButton(

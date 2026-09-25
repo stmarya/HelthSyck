@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api_client.dart';
+import '../widgets/doctor_ui.dart';
 
 class RujukanDokterScreen extends ConsumerStatefulWidget {
   final String? patientId;
@@ -144,7 +145,9 @@ class _RujukanDokterScreenState extends ConsumerState<RujukanDokterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: DoctorUi.canvas,
       appBar: AppBar(
+        backgroundColor: DoctorUi.canvas,
         title: Text(_isCreate ? 'Buat rujukan' : 'Rujukan pasien'),
         actions: [
           IconButton(
@@ -166,9 +169,9 @@ class _RujukanDokterScreenState extends ConsumerState<RujukanDokterScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         if (_error != null) _ErrorCard(message: _error!),
-        Text(
-          'Pasien ${widget.patientId}',
-          style: Theme.of(context).textTheme.bodySmall,
+        const Text(
+          'Lengkapi informasi klinis dan rumah sakit tujuan',
+          style: TextStyle(color: DoctorUi.mutedInk, fontSize: 13),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
