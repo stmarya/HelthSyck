@@ -7,6 +7,7 @@ set -Eeuo pipefail
 : "${DATABASE_URL:?DATABASE_URL must be set}"
 RESTORE_DB="${RESTORE_DB:-healthsync_restore_check}"
 BACKUP_FILE="${BACKUP_FILE:-$(mktemp "${TMPDIR:-/tmp}/healthsync-db-XXXXXX.dump")}"
+TOC_FILE="$(mktemp "${TMPDIR:-/tmp}/healthsync-db-XXXXXX.toc")"
 
 if [[ ! "$RESTORE_DB" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
   echo "RESTORE_DB must be a simple PostgreSQL identifier" >&2
@@ -19,7 +20,7 @@ restore_url="${base_url}/${RESTORE_DB}"
 
 cleanup() {
   psql "$maintenance_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$RESTORE_DB\";" >/dev/null 2>&1 || true
-  rm -f "$BACKUP_FILE"
+  rm -f "$BACKUP_FILE" "$TOC_FILE" "${TOC_FILE}.filtered"
 }
 trap cleanup EXIT
 
@@ -42,11 +43,19 @@ psql "$restore_url" -v ON_ERROR_STOP=1 -c "SELECT timescaledb_pre_restore();" >/
 pg_restore --dbname="$restore_url" --section=data --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "SELECT timescaledb_post_restore();" >/dev/null
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS cube; CREATE EXTENSION IF NOT EXISTS earthdistance;" >/dev/null
-pg_restore --dbname="$restore_url" --section=post-data --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
+
+# TimescaleDB does not accept pg_restore's `ALTER TABLE ONLY` form for the
+# composite alerts hypertable key. Filter only that TOC entry, then recreate
+# the same constraint with the supported non-ONLY form below.
+pg_restore --list "$BACKUP_FILE" > "$TOC_FILE"
+grep -v 'alerts_pkey' "$TOC_FILE" > "${TOC_FILE}.filtered"
+pg_restore --dbname="$restore_url" --use-list="${TOC_FILE}.filtered" --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
+psql "$restore_url" -v ON_ERROR_STOP=1 -c "ALTER TABLE alerts ADD CONSTRAINT alerts_pkey PRIMARY KEY (id, created_at);" >/dev/null
 
 restored_tables="$(psql "$restore_url" -Atc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")"
-if [[ "$restored_tables" -lt 1 ]]; then
-  echo "Restore completed but no public tables were found" >&2
+restored_alert_pk="$(psql "$restore_url" -Atc "SELECT COUNT(*) FROM pg_constraint WHERE conrelid='alerts'::regclass AND conname='alerts_pkey';")"
+if [[ "$restored_tables" -lt 1 || "$restored_alert_pk" -ne 1 ]]; then
+  echo "Restore completed but critical schema checks failed" >&2
   exit 1
 fi
-printf 'Backup/restore verification passed: %s public tables restored.\n' "$restored_tables"
+printf 'Backup/restore verification passed: %s public tables restored; alerts_pkey verified.\n' "$restored_tables"
