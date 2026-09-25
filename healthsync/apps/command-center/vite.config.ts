@@ -23,8 +23,9 @@ const PHARMACY_TARGET     = process.env['VITE_PHARMACY_TARGET']     ?? 'http://l
 const NOTIFICATION_TARGET = process.env['VITE_NOTIFICATION_TARGET'] ?? 'http://localhost:3009';
 const IOT_TARGET          = process.env['VITE_IOT_TARGET']          ?? 'http://localhost:4001';
 const ALERT_TARGET        = process.env['VITE_ALERT_TARGET']        ?? 'http://localhost:4002';
+const REALTIME_TARGET     = process.env['VITE_REALTIME_TARGET']     ?? 'http://localhost:3011';
 
-type ProxyEntry = { target: string; changeOrigin: boolean; rewrite?: (path: string) => string };
+type ProxyEntry = { target: string; changeOrigin: boolean; rewrite?: (path: string) => string; ws?: boolean };
 
 const proxy: Record<string, ProxyEntry> = {
   // ── API routes (digunakan axios clients dengan baseURL: '') ──────────────
@@ -40,6 +41,7 @@ const proxy: Record<string, ProxyEntry> = {
   '/v1/drugs':         { target: PHARMACY_TARGET,     changeOrigin: true },
   '/v1/notifications': { target: NOTIFICATION_TARGET, changeOrigin: true },
   '/v1/alerts':        { target: ALERT_TARGET,        changeOrigin: true },
+  '/ws':               { target: REALTIME_TARGET,     changeOrigin: true, ws: true },
 
   // ── Health-check routes (OverviewPage fetch /health/<slug>) ──────────────
   '/health/auth':         { target: AUTH_TARGET,         changeOrigin: true, rewrite: () => '/health' },
@@ -67,3 +69,4 @@ export default defineConfig({
     sourcemap: true,
   },
 });
+

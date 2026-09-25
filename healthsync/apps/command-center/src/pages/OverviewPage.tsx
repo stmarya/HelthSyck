@@ -50,6 +50,24 @@ const SERVICE_LIST: [string, string][] = [
   ['Alert',        '/health/alert'],
 ];
 
+async function checkServiceHealth(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    const body = (await response.clone().json().catch(() => null)) as
+      | { status?: string; db?: boolean; redis?: boolean; kafka?: boolean; mqtt?: boolean }
+      | null;
+    const dependencyFlags = [body?.db, body?.redis, body?.kafka, body?.mqtt];
+    const dependenciesHealthy = dependencyFlags.every((value) => value === undefined || value === true);
+    return response.ok && body?.status !== 'error' && dependenciesHealthy;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Komponen Tooltip Kustom
 // ─────────────────────────────────────────────────────────────────────────────
@@ -251,9 +269,7 @@ export default function OverviewPage() {
     const checkHealth = () => {
       Promise.allSettled(
         SERVICE_LIST.map(([name, url]) =>
-          fetch(url, { signal: AbortSignal.timeout(3000) })
-            .then((r) => [name, r.ok] as [string, boolean])
-            .catch(() => [name, false] as [string, boolean]),
+          checkServiceHealth(url).then((healthy) => [name, healthy] as [string, boolean]),
         ),
       ).then((results) => {
         const health: Record<string, boolean> = {};

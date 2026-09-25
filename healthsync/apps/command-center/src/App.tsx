@@ -34,10 +34,18 @@ function useBackendStatus() {
   const [online, setOnline] = useState<boolean | null>(null);
   useEffect(() => {
     const check = async () => {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 3000);
       try {
-        const r = await fetch('/health/auth', { signal: AbortSignal.timeout(3000) });
-        setOnline(r.ok);
+        const r = await fetch('/health/auth', { signal: controller.signal });
+        const body = (await r.clone().json().catch(() => null)) as
+          | { status?: string; db?: boolean; redis?: boolean; kafka?: boolean; mqtt?: boolean }
+          | null;
+        const dependencyFlags = [body?.db, body?.redis, body?.kafka, body?.mqtt];
+        const dependenciesHealthy = dependencyFlags.every((value) => value === undefined || value === true);
+        setOnline(r.ok && body?.status !== 'error' && dependenciesHealthy);
       } catch { setOnline(false); }
+      finally { window.clearTimeout(timeoutId); }
     };
     void check();
     const iv = setInterval(() => void check(), 30000);
@@ -104,14 +112,14 @@ function NavBar({
   });
 
   return (
-    <nav style={{
+    <nav className={`${styles.navbar} cc-nav`} style={{
       background: '#1f2328', color: '#fff',
       padding: '0 16px',
       position: 'sticky', top: 0, zIndex: 200,
       boxShadow: '0 1px 0 rgba(255,255,255,0.05)',
     }}>
       {/* ── Baris atas: Logo + kontrol ── */}
-      <div style={{
+      <div className={`${styles.navbarTop} cc-nav-top`} style={{
         height: '44px', display: 'flex',
         alignItems: 'center', justifyContent: 'space-between',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -125,6 +133,7 @@ function NavBar({
         {/* Global Search Bar (trigger) */}
         <button
           onClick={onSearchOpen}
+          aria-label="Buka pencarian global"
           style={{
             flex: 1, maxWidth: 320,
             display: 'flex', alignItems: 'center', gap: 8,
@@ -178,6 +187,7 @@ function NavBar({
           {/* Audit log button */}
           <button
             onClick={onAuditOpen}
+            aria-label="Buka audit trail"
             style={{
               background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
               borderRadius: 6, color: '#9ca3af', fontSize: 11,
@@ -191,6 +201,7 @@ function NavBar({
           {/* Dark mode toggle */}
           <button
             onClick={toggleTheme}
+            aria-label={isDark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'}
             style={{
               background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
               borderRadius: 6, color: '#9ca3af', fontSize: 13,
@@ -207,6 +218,7 @@ function NavBar({
           </span>
           <button
             onClick={logout}
+            aria-label="Keluar dari Command Center"
             style={{
               padding: '3px 9px', background: 'transparent',
               border: '1px solid #374151', borderRadius: '5px',
@@ -219,7 +231,7 @@ function NavBar({
       </div>
 
       {/* ── Baris bawah: Navigasi ── */}
-      <div style={{
+      <div className={`${styles.navbarBottom} cc-nav-bottom`} style={{
         height: '36px', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between',
       }}>
@@ -261,8 +273,9 @@ function NavBar({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  const { isAuthenticated, user } = useAuth();
+  const canAccess = user?.role === 'COMMAND_CENTER' || user?.role === 'ADMIN';
+  return isAuthenticated && canAccess ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -312,7 +325,7 @@ function AppShell() {
         </Suspense>
       )}
 
-      <div className={styles.layout} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div className={`${styles.layout} ${styles.appShell} cc-shell`} style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <NavBar
           onSearchOpen={() => setSearchOpen(true)}
           onAuditOpen={() => setAuditOpen(true)}

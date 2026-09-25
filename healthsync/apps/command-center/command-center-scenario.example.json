@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "mode": "SIMULATION",
+  "seed": 20260924,
+  "clock": {
+    "startAt": "2026-09-24T14:15:00.000Z",
+    "tickMs": 1000,
+    "durationSeconds": 60
+  },
+  "emergencyScenario": {
+    "enabled": true,
+    "triggerAfterSeconds": 12,
+    "patientId": "patient-001",
+    "kind": "heart_attack",
+    "vitals": [
+      { "heartRate": 96, "spo2": 96, "systolicBp": 128, "respiratoryRate": 18 },
+      { "heartRate": 124, "spo2": 91, "systolicBp": 98, "respiratoryRate": 26 },
+      { "heartRate": 138, "spo2": 86, "systolicBp": 82, "respiratoryRate": 32 }
+    ]
+  },
+  "doctors": [
+    { "id": "doctor-001", "name": "Dr. Budi Santoso", "specialty": "Kardiologi", "status": "Available" },
+    { "id": "doctor-002", "name": "Dr. Siti Rahayu", "specialty": "Neurologi", "status": "In-Consultation" },
+    { "id": "doctor-003", "name": "Dr. Ahmad Fauzi", "specialty": "Pediatri", "status": "Offline" }
+  ],
+  "patients": [
+    {
+      "id": "patient-001",
+      "displayName": "Pasien Simulasi 001",
+      "condition": "Nyeri dada akut",
+      "bloodType": "O+",
+      "location": { "lat": -6.1843, "lng": 106.8195, "accuracyM": 12 },
+      "emergencyContact": { "name": "Rina Setiawan", "phone": "+6281234567890" }
+    },
+    {
+      "id": "patient-002",
+      "displayName": "Pasien Simulasi 002",
+      "condition": "Demam tinggi",
+      "bloodType": "A+",
+      "location": { "lat": -6.2102, "lng": 106.8312, "accuracyM": 25 },
+      "emergencyContact": { "name": "Hendri Putra", "phone": "+6281298765432" }
+    }
+  ],
+  "ambulances": [
+    { "id": "ambulance-001", "unit": "AMB-JKT-01", "capabilities": ["ALS", "ECG"], "status": "STANDBY", "location": { "lat": -6.1892, "lng": 106.8148 } },
+    { "id": "ambulance-002", "unit": "AMB-JKT-02", "capabilities": ["BLS"], "status": "EN_ROUTE", "location": { "lat": -6.2145, "lng": 106.8502 } }
+  ],
+  "drivers": [
+    { "id": "driver-001", "name": "Surya Dinata", "status": "AVAILABLE", "location": { "lat": -6.1880, "lng": 106.8160 } },
+    { "id": "driver-002", "name": "Eko Purwanto", "status": "BUSY", "location": { "lat": -6.2145, "lng": 106.8502 } }
+  ],
+  "hospitals": [
+    {
+      "id": "hospital-001",
+      "name": "RSUP Dr. Cipto Mangunkusumo",
+      "location": { "lat": -6.1913, "lng": 106.8454 },
+      "resources": { "igd": { "available": 5, "total": 20 }, "icu": { "available": 2, "total": 15 }, "ward": { "available": 34, "total": 120 }, "or": { "available": 3, "total": 8 } },
+      "bloodStock": { "O+": 20, "O-": 3, "A+": 15, "A-": 4 },
+      "dutySpecialists": ["Gawat Darurat", "Kardiologi", "Bedah"],
+      "connectivity": "ONLINE"
+    },
+    {
+      "id": "hospital-002",
+      "name": "RS Fatmawati",
+      "location": { "lat": -6.2942, "lng": 106.7992 },
+      "resources": { "igd": { "available": 8, "total": 18 }, "icu": { "available": 4, "total": 12 }, "ward": { "available": 50, "total": 150 }, "or": { "available": 2, "total": 6 } },
+      "bloodStock": { "O+": 14, "O-": 2, "A+": 10, "A-": 2 },
+      "dutySpecialists": ["Gawat Darurat", "Penyakit Dalam"],
+      "connectivity": "ONLINE"
+    }
+  ]
+}
