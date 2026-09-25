@@ -33,13 +33,16 @@ sha256sum "$BACKUP_FILE"
 
 psql "$maintenance_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$RESTORE_DB\";"
 psql "$maintenance_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$RESTORE_DB\";"
-# Restore required extensions before indexes and TimescaleDB chunk metadata.
+
+# Restore in explicit sections. This lets required extensions exist before
+# post-data indexes such as hospitals.location are recreated.
+pg_restore --dbname="$restore_url" --section=pre-data --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS timescaledb; CREATE EXTENSION IF NOT EXISTS cube; CREATE EXTENSION IF NOT EXISTS earthdistance;" >/dev/null
-# TimescaleDB requires these hooks so hypertable chunks are restored after
-# the hypertable metadata has been recreated.
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "SELECT timescaledb_pre_restore();" >/dev/null
-pg_restore --dbname="$restore_url" --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
+pg_restore --dbname="$restore_url" --section=data --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
 psql "$restore_url" -v ON_ERROR_STOP=1 -c "SELECT timescaledb_post_restore();" >/dev/null
+psql "$restore_url" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS cube; CREATE EXTENSION IF NOT EXISTS earthdistance;" >/dev/null
+pg_restore --dbname="$restore_url" --section=post-data --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
 
 restored_tables="$(psql "$restore_url" -Atc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")"
 if [[ "$restored_tables" -lt 1 ]]; then
