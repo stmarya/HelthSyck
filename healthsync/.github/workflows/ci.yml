@@ -141,6 +141,13 @@ jobs:
           channel: stable
           cache: true
 
+      # The repository stores the shared Flutter application code but not the
+      # generated platform shell. Create Android scaffolding in CI so the
+      # release build is reproducible without committing Gradle boilerplate.
+      - name: Generate Android platform shell
+        working-directory: healthsync/apps/mobile
+        run: flutter create --platforms=android --org=id.healthsync .
+
       - name: Install dependencies
         working-directory: healthsync/apps/mobile
         run: flutter pub get
@@ -160,6 +167,13 @@ jobs:
       - name: Build release APK
         working-directory: healthsync/apps/mobile
         run: flutter build apk --release --dart-define=API_BASE_URL=https://api.healthsync.id
+
+      - name: Upload Doctor App APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: healthsync-doctor-app-release
+          path: healthsync/apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
 
   # ─────────────────────────────────────────────
   # Validate deployment manifests and gateway config
