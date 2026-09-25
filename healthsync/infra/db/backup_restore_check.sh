@@ -30,7 +30,7 @@ sha256sum "$BACKUP_FILE"
 
 psql "$maintenance_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$RESTORE_DB\";"
 psql "$maintenance_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$RESTORE_DB\";"
-pg_restore "$restore_url" --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
+pg_restore --dbname="$restore_url" --no-owner --no-privileges --exit-on-error "$BACKUP_FILE"
 
 restored_tables="$(psql "$restore_url" -Atc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")"
 if [[ "$restored_tables" -lt 1 ]]; then
