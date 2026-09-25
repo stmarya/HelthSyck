@@ -10,7 +10,7 @@ const statusLabel: Record<CheckStatus, string> = { checking: 'Checking', online:
 const statusColor: Record<CheckStatus, string> = { checking: 'var(--color-info)', online: 'var(--color-success)', degraded: 'var(--color-warning)', offline: 'var(--color-danger)', configured: 'var(--color-info)' };
 
 function environmentValue(name: string): string | undefined {
-  return (import.meta.env as Record<string, string | undefined>)[name];
+  return window.__HEALTHSYNC_CONFIG__?.[name] ?? (import.meta.env as Record<string, string | undefined>)[name];
 }
 
 function endpointFor(descriptor: IntegrationDescriptor): string | undefined {

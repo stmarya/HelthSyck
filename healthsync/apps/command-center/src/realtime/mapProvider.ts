@@ -19,7 +19,12 @@ function positiveNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function getMapRuntimeConfig(env: Record<string, string | undefined> = import.meta.env as Record<string, string | undefined>): MapRuntimeConfig {
+function runtimeEnv(): Record<string, string | undefined> {
+  const buildEnv = import.meta.env as Record<string, string | undefined>;
+  return { ...buildEnv, ...(typeof window !== 'undefined' ? window.__HEALTHSYNC_CONFIG__ : {}) };
+}
+
+export function getMapRuntimeConfig(env: Record<string, string | undefined> = runtimeEnv()): MapRuntimeConfig {
   const configured = env.VITE_MAP_PROVIDER as MapProvider | undefined;
   const provider: MapProvider = configured === 'maplibre' || configured === 'mapbox' || configured === 'google' ? configured : 'simulator';
   return {
