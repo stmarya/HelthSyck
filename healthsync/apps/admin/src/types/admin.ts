@@ -8,6 +8,7 @@ export type UserRole =
   | 'DOCTOR'
   | 'COMMAND_CENTER'
   | 'PHARMACIST'
+  | 'PHARMACY_DRIVER'
   | 'AMBULANCE_DRIVER'
   | 'ADMIN';
 

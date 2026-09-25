@@ -77,6 +77,7 @@ const NAV_ITEMS: NavItem[] = [
       { to: '/pharmacy/drugs',          label: 'Katalog Obat' },
       { to: '/pharmacy/prescriptions',  label: 'Resep per Apotek' },
       { to: '/pharmacy/reports',        label: 'Laporan Farmasi' },
+      { to: '/pharmacy/staff',          label: 'Assignment Apoteker' },
     ],
   },
   {

@@ -72,7 +72,7 @@ const RegisterSchema = z.object({
     .string()
     .min(8, 'Password must be at least 8 characters')
     .regex(PASSWORD_REGEX, 'Password must contain uppercase, lowercase, number, and special character'),
-  role: z.enum(['PATIENT', 'DOCTOR', 'COMMAND_CENTER', 'PHARMACIST', 'AMBULANCE_DRIVER']).default('PATIENT'),
+  role: z.enum(['PATIENT', 'DOCTOR', 'COMMAND_CENTER', 'PHARMACIST', 'PHARMACY_DRIVER', 'AMBULANCE_DRIVER']).default('PATIENT'),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   phone: z.string().min(8).optional(),
 });

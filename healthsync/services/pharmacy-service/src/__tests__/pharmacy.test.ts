@@ -28,6 +28,31 @@ jest.mock('pg', () => {
       return { rows: [{ id: 'ph-uuid-1', name: 'Apotek Sehat' }] };
     }
 
+    if (s.includes('FROM PHARMACY_STAFF')) {
+      return {
+        rows: [{
+          id: 'staff-uuid-1',
+          pharmacy_id: 'ph-uuid-1',
+          user_id: 'pharmacist-uuid-1',
+          userId: 'pharmacist-uuid-1',
+          email: 'apoteker@healthsync.id',
+          isActive: true,
+        }],
+        rowCount: 1,
+      };
+    }
+
+    if (s.includes('FROM USERS')) {
+      return { rows: [{ id: 'pharmacist-uuid-1' }], rowCount: 1 };
+    }
+
+    if (s.startsWith('INSERT INTO PHARMACY_STAFF')) {
+      return {
+        rows: [{ id: 'staff-uuid-1', pharmacyId: 'ph-uuid-1', userId: 'pharmacist-uuid-1', isActive: true }],
+        rowCount: 1,
+      };
+    }
+
     if (s.includes('FROM PHARMACIES')) {
       return { rows: [{ id: 'ph-uuid-1', name: 'Apotek Sehat', is_open_24h: true }] };
     }
@@ -89,6 +114,7 @@ const makeToken = (role: string, sub = `${role}-uuid-1`) =>
 
 const patientToken    = makeToken('PATIENT',    'patient-uuid-1');
 const pharmacistToken = makeToken('PHARMACIST', 'pharmacist-uuid-1');
+const adminToken      = makeToken('ADMIN',      'admin-uuid-1');
 
 describe('pharmacy-service', () => {
 
@@ -151,6 +177,30 @@ describe('pharmacy-service', () => {
         .get('/v1/pharmacies/ph-uuid-1/inventory')
         .set('Authorization', `Bearer ${pharmacistToken}`);
       expect([200, 404, 500]).toContain(res.status);
+    });
+  });
+
+  describe('Pharmacy staff assignment', () => {
+    it('non-admin users cannot view assignments', async () => {
+      const res = await request(app)
+        .get('/v1/pharmacies/ph-uuid-1/staff')
+        .set('Authorization', `Bearer ${patientToken}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('admin can list assignments', async () => {
+      const res = await request(app)
+        .get('/v1/pharmacies/ph-uuid-1/staff')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+    });
+
+    it('admin can assign an active pharmacist', async () => {
+      const res = await request(app)
+        .put('/v1/pharmacies/ph-uuid-1/staff')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ userId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', isActive: true });
+      expect(res.status).toBe(200);
     });
   });
 

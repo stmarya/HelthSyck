@@ -181,6 +181,7 @@ class AppTheme {
     switch (role.toUpperCase()) {
       case 'PHARMACIST':
         return _apotekSeed;
+      case 'PHARMACY_DRIVER':
       case 'AMBULANCE_DRIVER':
         return _driverSeed;
       default:

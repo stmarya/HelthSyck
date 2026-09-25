@@ -51,8 +51,8 @@ class DriverOrderState {
 // ─────────────────────────────────────────────
 // Notifier driver — endpoint: ambulance-service :3005
 // ─────────────────────────────────────────────
-// Catatan: AMBULANCE_DRIVER dalam konteks mobile ini merujuk ke driver
-// pengiriman obat (prescription_deliveries) BUKAN driver ambulans darurat.
+// Catatan: PHARMACY_DRIVER dalam konteks mobile ini merujuk ke driver
+// pengiriman obat (prescription_deliveries), bukan driver ambulans darurat.
 // Namun backend menggunakan tabel ambulances untuk vehicle tracking.
 // Di sini kita ambil prescription_deliveries sebagai "order" pengiriman.
 
@@ -63,61 +63,26 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
   DriverOrderNotifier(this._api, this._log)
       : super(const DriverOrderState());
 
-  /// [driverUserId] = userId dari auth state untuk lookup ambulans unit driver ini
-  Future<void> fetchOrders({String? driverUserId}) async {
+  Future<void> fetchOrders() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // Ambil unit ambulans driver ini via lookup ambulance IDs dari DB
-      // Driver hanya bisa akses GET /v1/ambulances/:id (per unit)
       String? ambulanceId = state.ambulanceId;
       String? platNomor = state.platNomor;
       bool isOnline = state.isOnline;
+      // Driver apotek tidak melakukan polling lima unit ambulans. Status
+      // online untuk delivery saat ini bersifat lokal sampai endpoint driver
+      // presence khusus ditambahkan.
 
-      if (ambulanceId == null && driverUserId != null) {
-        // Coba cari unit berdasarkan userId menggunakan known ambulance IDs
-        // (produksi: gunakan endpoint /v1/me/ambulance yang dedicated)
-        final knownIds = [
-          '00aa0000-0000-0000-0000-000000000001',
-          '00aa0000-0000-0000-0000-000000000002',
-          '00aa0000-0000-0000-0000-000000000003',
-          '00aa0000-0000-0000-0000-000000000005',
-          '00aa0000-0000-0000-0000-000000000006',
-        ];
-        for (final id in knownIds) {
-          try {
-            final resp = await _api.get('/v1/ambulances/$id', port: 3005);
-            final data = resp['data'] as Map<String, dynamic>?;
-            if (data != null && data['driver_id']?.toString() == driverUserId) {
-              ambulanceId = id;
-              platNomor = data['plate_number']?.toString();
-              isOnline = data['status']?.toString() == 'AVAILABLE' ||
-                  data['status']?.toString() == 'DISPATCHED';
-              break;
-            }
-          } catch (_) {
-            continue;
-          }
-        }
-      }
-
-      // Ambil prescription_deliveries sebagai order pengiriman
-      final presResp = await _api.get('/v1/prescriptions', port: 3004);
-      final presList = presResp['data'];
+      // Ambil delivery yang benar-benar ditugaskan ke driver ini.
+      // Endpoint ini mencegah driver melihat resep milik driver lain.
+      final deliveryResp = await _api.get('/v1/deliveries/me', port: 3004);
+      final deliveryList = deliveryResp['data'];
       List<DriverOrder> orders = [];
 
-      if (presList is List) {
-        orders = (presList as List)
-            .where((e) {
-              // Hanya resep yang butuh pengiriman (READY atau DELIVERED)
-              final s = (e as Map<String, dynamic>)['status']?.toString() ?? '';
-              return ['READY', 'DELIVERED', 'CONFIRMED', 'ISSUED'].contains(s);
-            })
+      if (deliveryList is List) {
+        orders = (deliveryList as List)
             .map((e) => _parseOrder(e as Map<String, dynamic>))
             .toList();
-      }
-
-      if (orders.isEmpty) {
-        orders = _mockOrders();
       }
 
       final aktif = orders
@@ -135,22 +100,29 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
         platNomor: platNomor,
       );
     } catch (e) {
-      _log.w('Fetch orders: gunakan mock — $e');
-      final mocks = _mockOrders();
+      _log.w('Fetch orders gagal: $e');
       state = state.copyWith(
-        items: mocks,
-        orderAktif: mocks.isNotEmpty ? mocks.first : null,
+        items: const [],
+        orderAktif: null,
         isLoading: false,
+        error: 'Gagal memuat delivery dari server',
       );
     }
   }
 
   Future<void> updateStatusOrder(String id, String status) async {
     try {
-      // Map status order → endpoint prescription
-      final endpoint = _statusToEndpoint(status);
-      if (endpoint != null) {
-        await _api.put('/v1/prescriptions/$id/$endpoint', port: 3004);
+      if (status == StatusOrder.selesai) {
+        await _api.put('/v1/prescriptions/$id/complete', port: 3004);
+      } else {
+        final deliveryStatus = _deliveryStatus(status);
+        if (deliveryStatus != null) {
+          await _api.put(
+            '/v1/prescriptions/$id/delivery-status',
+            body: {'status': deliveryStatus},
+            port: 3004,
+          );
+        }
       }
       await fetchOrders();
     } on ApiException catch (e) {
@@ -200,70 +172,42 @@ class DriverOrderNotifier extends StateNotifier<DriverOrderState> {
     }
   }
 
-  String? _statusToEndpoint(String status) {
+  String? _deliveryStatus(String status) {
     switch (status) {
-      case StatusOrder.diambil:  return 'prepare';
-      case StatusOrder.diantar:  return 'deliver';
-      case StatusOrder.selesai:  return 'complete';
+      case StatusOrder.diambil:  return 'PICKED_UP';
+      case StatusOrder.diantar:  return 'IN_TRANSIT';
       default:                   return null;
     }
   }
 
   DriverOrder _parseOrder(Map<String, dynamic> json) {
-    final prescId = json['id']?.toString() ?? '';
-    final status = _mapPrescStatus(json['status']?.toString() ?? 'ISSUED');
+    final prescId = json['prescription_id']?.toString() ?? json['id']?.toString() ?? '';
+    final status = _mapDeliveryStatus(json['status']?.toString() ?? 'ASSIGNED');
     return DriverOrder(
       id: prescId,
-      pasienNama: 'Pasien #${json['patient_id']?.toString().substring(0, 8) ?? '?'}',
+      pasienNama: json['patient_name']?.toString() ?? 'Pasien',
       pasienAlamat: json['delivery_address']?.toString() ?? 'Alamat pengiriman',
       apotek: 'Apotek HealthSync',
       status: status,
-      items: [json['notes']?.toString() ?? 'Lihat di resep'],
-      createdAt: json['issued_at'] != null
-          ? DateTime.tryParse(json['issued_at'].toString()) ?? DateTime.now()
+      items: [
+        if (json['tracking_code'] != null)
+          'Tracking: ${json['tracking_code']}',
+      ],
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
     );
   }
 
-  String _mapPrescStatus(String s) {
+  String _mapDeliveryStatus(String s) {
     switch (s.toUpperCase()) {
-      case 'ISSUED':     return StatusOrder.menunggu;
-      case 'CONFIRMED':  return StatusOrder.diterima;
-      case 'PREPARED':   return StatusOrder.diambil;
-      case 'READY':      return StatusOrder.diantar;
-      case 'DELIVERED':
-      case 'COMPLETED':  return StatusOrder.selesai;
-      case 'CANCELLED':  return StatusOrder.dibatalkan;
-      default:           return StatusOrder.menunggu;
+      case 'ASSIGNED':   return StatusOrder.diterima;
+      case 'PICKED_UP':  return StatusOrder.diambil;
+      case 'IN_TRANSIT': return StatusOrder.diantar;
+      case 'DELIVERED':  return StatusOrder.selesai;
+      default:           return StatusOrder.diterima;
     }
   }
-
-  List<DriverOrder> _mockOrders() => [
-    DriverOrder(
-      id: 'mock-ord-001',
-      pasienNama: 'Budi Santoso',
-      pasienAlamat: 'Jl. Sudirman No. 45, Jakarta Pusat',
-      apotek: 'Apotek Kimia Farma Sudirman',
-      status: StatusOrder.diterima,
-      items: ['Paracetamol 500mg x10', 'Amoxicillin 500mg x6'],
-      createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-      jarakKm: 3.2,
-      estimasiMenit: 20,
-      ongkir: 15000,
-    ),
-    DriverOrder(
-      id: 'mock-ord-002',
-      pasienNama: 'Siti Rahayu',
-      pasienAlamat: 'Jl. Thamrin No. 12, Jakarta Pusat',
-      apotek: 'Apotek Guardian Pondok Indah',
-      status: StatusOrder.selesai,
-      items: ['Metformin 500mg x30'],
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      jarakKm: 5.1,
-      estimasiMenit: 0,
-      ongkir: 20000,
-    ),
-  ];
 }
 
 // ─────────────────────────────────────────────

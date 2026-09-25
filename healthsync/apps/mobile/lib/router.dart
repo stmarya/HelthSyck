@@ -43,8 +43,8 @@ class AppRole {
   static const String pasien    = 'PATIENT';
   static const String dokter    = 'DOCTOR';
   static const String apotek    = 'PHARMACIST';         // DB: PHARMACIST
-  static const String driver    = 'AMBULANCE_DRIVER';   // DB: AMBULANCE_DRIVER
-  static const String ambulans  = 'AMBULANCE_DRIVER';   // sama dengan driver (unit)
+  static const String driver    = 'PHARMACY_DRIVER';    // DB: PHARMACY_DRIVER
+  static const String ambulans  = 'AMBULANCE_DRIVER';   // DB: AMBULANCE_DRIVER
   static const String admin     = 'ADMIN';
   static const String cc        = 'COMMAND_CENTER';
 }

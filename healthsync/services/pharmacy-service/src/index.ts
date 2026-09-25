@@ -66,6 +66,11 @@ const AdjustStockSchema = z.object({
   reason: z.string().min(1),
 });
 
+const AssignStaffSchema = z.object({
+  userId: z.string().uuid(),
+  isActive: z.boolean().default(true),
+});
+
 const PaginationSchema = z.object({
   page:  z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -86,6 +91,38 @@ const CreatePharmacySchema = z.object({
 });
 
 const UpdatePharmacySchema = CreatePharmacySchema.partial();
+
+async function pharmacistCanAccess(pharmacyId: string, userId: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1
+     FROM pharmacy_staff
+     WHERE pharmacy_id=$1 AND user_id=$2 AND is_active=TRUE
+     LIMIT 1`,
+    [pharmacyId, userId],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+async function writePharmacyAudit(
+  pharmacyId: string,
+  actorId: string,
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO pharmacy_audit_logs
+         (pharmacy_id, actor_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+      [pharmacyId, actorId, action, entityType, entityId, JSON.stringify(metadata)],
+    );
+  } catch (err) {
+    // Auditing must never take down an inventory or assignment operation.
+    console.error(`[${SERVICE_NAME}] audit write failed`, err);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // App
@@ -181,9 +218,161 @@ app.get(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /v1/pharmacies/:id — Get pharmacy detail
+// GET /v1/pharmacies/me — Get pharmacy mapped to current pharmacist
 // ─────────────────────────────────────────────────────────────────────────────
 
+app.get(
+  '/v1/pharmacies/me',
+  authenticate,
+  requireRole('PHARMACIST'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const authReq = req as AuthenticatedRequest;
+    try {
+      const result = await pool.query(
+        `SELECT p.*,
+                ps.staff_role,
+                (SELECT COUNT(*) FROM pharmacy_inventory pi WHERE pi.pharmacy_id=p.id) AS drug_count,
+                (SELECT COUNT(*) FROM pharmacy_inventory pi WHERE pi.pharmacy_id=p.id AND pi.stock_qty <= pi.reorder_level) AS low_stock_count
+         FROM pharmacies p
+         JOIN pharmacy_staff ps ON ps.pharmacy_id=p.id
+         WHERE ps.user_id=$1 AND ps.is_active=TRUE AND p.is_active=TRUE
+         ORDER BY p.name
+         LIMIT 1`,
+        [authReq.user.sub],
+      );
+
+      if (result.rowCount === 0) {
+        res.status(404).json(buildProblem(404, 'Not Found', 'Akun apoteker belum dipetakan ke apotek', req.path, authReq.requestId));
+        return;
+      }
+
+      ok(res, result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /v1/pharmacies/:id/staff — List pharmacist assignments (ADMIN only)
+app.get(
+  '/v1/pharmacies/:id/staff',
+  authenticate,
+  requireRole('ADMIN'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await pool.query(
+        `SELECT ps.id,
+                ps.pharmacy_id AS "pharmacyId",
+                ps.user_id AS "userId",
+                u.email,
+                u.phone,
+                ps.staff_role AS "staffRole",
+                ps.is_active AS "isActive",
+                ps.created_at AS "createdAt"
+         FROM pharmacy_staff ps
+         JOIN users u ON u.id=ps.user_id
+         WHERE ps.pharmacy_id=$1
+         ORDER BY ps.is_active DESC, u.email`,
+        [req.params.id],
+      );
+      ok(res, result.rows);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// PUT /v1/pharmacies/:id/staff — Assign or reactivate a pharmacist (ADMIN only)
+app.put(
+  '/v1/pharmacies/:id/staff',
+  authenticate,
+  requireRole('ADMIN'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const authReq = req as AuthenticatedRequest;
+    const parsed = AssignStaffSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json(
+        buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path, authReq.requestId),
+      );
+      return;
+    }
+
+    try {
+      const pharmacy = await pool.query(
+        'SELECT id FROM pharmacies WHERE id=$1 AND is_active=TRUE',
+        [req.params.id],
+      );
+      if (pharmacy.rowCount === 0) {
+        res.status(404).json(buildProblem(404, 'Not Found', 'Apotek tidak ditemukan atau nonaktif', req.path, authReq.requestId));
+        return;
+      }
+
+      const user = await pool.query(
+        `SELECT id FROM users
+         WHERE id=$1 AND role='PHARMACIST'::user_role AND status='ACTIVE'::user_status`,
+        [parsed.data.userId],
+      );
+      if (user.rowCount === 0) {
+        res.status(422).json(buildProblem(422, 'Validation Error', 'Akun harus berupa apoteker aktif', req.path, authReq.requestId));
+        return;
+      }
+
+      const result = await pool.query(
+        `INSERT INTO pharmacy_staff (pharmacy_id, user_id, is_active)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (pharmacy_id, user_id)
+         DO UPDATE SET is_active=EXCLUDED.is_active
+         RETURNING id, pharmacy_id AS "pharmacyId", user_id AS "userId", staff_role AS "staffRole",
+                   is_active AS "isActive", created_at AS "createdAt"`,
+        [req.params.id, parsed.data.userId, parsed.data.isActive],
+      );
+
+      await writePharmacyAudit(
+        req.params.id,
+        authReq.user.sub,
+        parsed.data.isActive ? 'STAFF_ASSIGNED' : 'STAFF_DEACTIVATED',
+        'pharmacy_staff',
+        result.rows[0]?.id ?? null,
+        { userId: parsed.data.userId },
+      );
+      ok(res, result.rows[0]);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// DELETE /v1/pharmacies/:id/staff/:userId — Deactivate a pharmacist assignment
+app.delete(
+  '/v1/pharmacies/:id/staff/:userId',
+  authenticate,
+  requireRole('ADMIN'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const authReq = req as AuthenticatedRequest;
+    try {
+      const result = await pool.query(
+        `UPDATE pharmacy_staff
+         SET is_active=FALSE
+         WHERE pharmacy_id=$1 AND user_id=$2 AND is_active=TRUE
+         RETURNING id`,
+        [req.params.id, req.params.userId],
+      );
+      if (result.rowCount === 0) {
+        res.status(404).json(buildProblem(404, 'Not Found', 'Assignment apoteker tidak ditemukan', req.path, authReq.requestId));
+        return;
+      }
+
+      await writePharmacyAudit(req.params.id, authReq.user.sub, 'STAFF_DEACTIVATED', 'pharmacy_staff', result.rows[0]!.id, {
+        userId: req.params.userId,
+      });
+      res.status(204).send();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /v1/pharmacies/:id — Get pharmacy detail
 app.get(
   '/v1/pharmacies/:id',
   optionalAuth,
@@ -222,9 +411,15 @@ app.get(
   authenticate,
   requireRole('PHARMACIST', 'ADMIN'),
   async (req: Request, res: Response, next: NextFunction) => {
+    const authReq = req as AuthenticatedRequest;
     const { id } = req.params;
 
     try {
+      if (authReq.user.role === 'PHARMACIST' && !(await pharmacistCanAccess(id, authReq.user.sub))) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'Apotek tidak terhubung ke akun ini', req.path, authReq.requestId));
+        return;
+      }
+
       const result = await pool.query(
         `SELECT pi.*, d.generic_name, d.brand_name, d.dosage_form, d.strength,
                 (pi.stock_qty <= pi.reorder_level) AS is_low_stock
@@ -264,6 +459,11 @@ app.put(
     const { drugId, stockQty, unitPrice, batchNumber, expiresAt } = parsed.data;
 
     try {
+      if (authReq.user.role === 'PHARMACIST' && !(await pharmacistCanAccess(id, authReq.user.sub))) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'Apotek tidak terhubung ke akun ini', req.path, authReq.requestId));
+        return;
+      }
+
       const result = await pool.query(
         `INSERT INTO pharmacy_inventory
            (pharmacy_id, drug_id, stock_qty, unit_price, batch_number, expires_at, updated_at)
@@ -274,6 +474,11 @@ app.put(
         [id, drugId, stockQty, unitPrice, batchNumber ?? null, expiresAt ?? null],
       );
 
+      void writePharmacyAudit(id, authReq.user.sub, 'INVENTORY_UPDATED', 'pharmacy_inventory', result.rows[0]?.id ?? null, {
+        drugId,
+        stockQty,
+        unitPrice,
+      });
       ok(res, result.rows[0]);
     } catch (err) {
       next(err);
@@ -303,6 +508,11 @@ app.post(
     const { drugId, delta, reason } = parsed.data;
 
     try {
+      if (authReq.user.role === 'PHARMACIST' && !(await pharmacistCanAccess(id, authReq.user.sub))) {
+        res.status(403).json(buildProblem(403, 'Forbidden', 'Apotek tidak terhubung ke akun ini', req.path, authReq.requestId));
+        return;
+      }
+
       const result = await pool.query<{ stock_qty: number }>(
         `UPDATE pharmacy_inventory
          SET stock_qty=stock_qty+$1, updated_at=NOW()
@@ -318,6 +528,12 @@ app.post(
         return;
       }
 
+      void writePharmacyAudit(id, authReq.user.sub, 'STOCK_ADJUSTED', 'pharmacy_inventory', null, {
+        drugId,
+        delta,
+        reason,
+        newStockQty: result.rows[0]!.stock_qty,
+      });
       ok(res, { pharmacyId: id, drugId, delta, reason, newStockQty: result.rows[0]!.stock_qty });
     } catch (err) {
       next(err);

@@ -18,6 +18,7 @@ import PharmacyPage                  from './pages/PharmacyPage';
 import DrugCatalogPage               from './pages/DrugCatalogPage';
 import PharmacyPrescriptionsPage     from './pages/PharmacyPrescriptionsPage';
 import PharmacyReportsPage           from './pages/PharmacyReportsPage';
+import PharmacyStaffPage             from './pages/PharmacyStaffPage';
 import BedManagementPage   from './pages/BedManagementPage';
 import HospitalDoctorsPage from './pages/HospitalDoctorsPage';
 import HospitalSearchPage  from './pages/HospitalSearchPage';
@@ -214,6 +215,7 @@ export default function App() {
                   <Route path="/pharmacy/drugs"         element={<RequireAdmin user={user}><DrugCatalogPage /></RequireAdmin>} />
                   <Route path="/pharmacy/prescriptions" element={<RequireAdmin user={user}><PharmacyPrescriptionsPage /></RequireAdmin>} />
                   <Route path="/pharmacy/reports"       element={<RequireAdmin user={user}><PharmacyReportsPage /></RequireAdmin>} />
+                  <Route path="/pharmacy/staff"         element={<RequireAdmin user={user}><PharmacyStaffPage /></RequireAdmin>} />
                   <Route path="/pharmacy"               element={<RequireAdmin user={user}><PharmacyPage /></RequireAdmin>} />
 
                   {/* ── Fasilitas (sub-halaman) ── */}

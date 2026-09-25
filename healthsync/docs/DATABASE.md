@@ -1,8 +1,8 @@
 # HealthSync — Dokumentasi Database
 
-> **Dihasilkan otomatis** | Terakhir diperbarui: 15 September 2026  
+> **Dihasilkan otomatis** | Terakhir diperbarui: 25 September 2026
 > **Database:** PostgreSQL (TimescaleDB) | **Container:** `hs-postgres` | **DB:** `healthsync`  
-> **Total Tabel:** 31 | **Total Baris Seed:** ~2.100+
+> **Total Tabel:** 33 | **Total Baris Seed:** ~2.100+
 
 ---
 
@@ -39,8 +39,10 @@
 | 27 | `patient_conditions` | Kondisi medis / diagnosis pasien | 37 | patient-service |
 | 28 | `patient_allergies` | Alergi pasien | 17 | patient-service |
 | 29 | `command_center_users` | Mapping user ke role Command Center | 0 | — |
-| 30 | `consent_records` | Rekam persetujuan privasi pengguna | 0 | auth-service |
-| 31 | `schema_migrations` | Riwayat migrasi database | 10 | — |
+| 30 | `pharmacy_staff` | Mapping user apoteker ke apotek | 2 | pharmacy-service |
+| 31 | `pharmacy_audit_logs` | Audit assignment dan perubahan stok apotek | 0 | pharmacy-service |
+| 32 | `consent_records` | Rekam persetujuan privasi pengguna | 0 | auth-service |
+| 33 | `schema_migrations` | Riwayat migrasi database | 14 | — |
 
 ---
 
@@ -50,7 +52,7 @@
 
 ### 1. `users`
 
-**Deskripsi:** Tabel utama autentikasi. Menyimpan akun semua role pengguna: `PATIENT`, `DOCTOR`, `PHARMACIST`, `AMBULANCE_DRIVER`, `COMMAND_CENTER`, `ADMIN`.
+**Deskripsi:** Tabel utama autentikasi. Menyimpan akun semua role pengguna: `PATIENT`, `DOCTOR`, `PHARMACIST`, `PHARMACY_DRIVER`, `AMBULANCE_DRIVER`, `COMMAND_CENTER`, `ADMIN`.
 
 **Jumlah Baris:** 45
 
@@ -60,7 +62,7 @@
 | `email` | varchar(255) | NOT NULL | — | Email unik (case-insensitive index) |
 | `phone` | varchar(20) | NULL | — | Nomor telepon (unik jika tidak NULL) |
 | `password_hash` | text | NOT NULL | — | Hash bcrypt password |
-| `role` | user_role | NOT NULL | `'PATIENT'` | Enum: PATIENT, DOCTOR, PHARMACIST, AMBULANCE_DRIVER, COMMAND_CENTER, ADMIN |
+| `role` | user_role | NOT NULL | `'PATIENT'` | Enum: PATIENT, DOCTOR, PHARMACIST, PHARMACY_DRIVER, AMBULANCE_DRIVER, COMMAND_CENTER, ADMIN |
 | `status` | user_status | NOT NULL | `'PENDING_VERIFICATION'` | Enum: PENDING_VERIFICATION, ACTIVE, SUSPENDED, DELETED |
 | `email_verified` | boolean | NOT NULL | `false` | Status verifikasi email |
 | `phone_verified` | boolean | NOT NULL | `false` | Status verifikasi telepon |
@@ -731,7 +733,45 @@
 
 ---
 
-### 30. `consent_records`
+### 30. `pharmacy_staff`
+
+**Deskripsi:** Mapping eksplisit akun `PHARMACIST` ke apotek yang boleh dikelola.
+
+**Jumlah Baris:** 2
+
+| Kolom | Tipe | Nullable | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | uuid | NOT NULL | `gen_random_uuid()` | Primary key |
+| `pharmacy_id` | uuid | NOT NULL | — | FK → pharmacies.id (CASCADE) |
+| `user_id` | uuid | NOT NULL | — | FK → users.id (CASCADE) |
+| `staff_role` | varchar(50) | NOT NULL | `'PHARMACIST'` | Peran staf pada apotek |
+| `is_active` | boolean | NOT NULL | `true` | Status assignment |
+| `created_at` | timestamptz | NOT NULL | `now()` | Waktu assignment |
+
+**Endpoint terkait:** `GET /v1/pharmacies/me`, endpoint inventory, dan workflow resep.
+
+---
+
+### 31. `pharmacy_audit_logs`
+
+**Deskripsi:** Audit trail operasional untuk assignment apoteker, update inventori, dan penyesuaian stok.
+
+**Jumlah Baris:** 0
+
+| Kolom | Tipe | Nullable | Default | Keterangan |
+|---|---|---|---|---|
+| `id` | uuid | NOT NULL | `gen_random_uuid()` | Primary key |
+| `pharmacy_id` | uuid | NOT NULL | — | FK → pharmacies.id (CASCADE) |
+| `actor_id` | uuid | NOT NULL | — | FK → users.id (RESTRICT) |
+| `action` | varchar(80) | NOT NULL | — | Jenis aksi operasional |
+| `entity_type` | varchar(80) | NOT NULL | — | Entitas yang berubah |
+| `entity_id` | uuid | NULL | — | ID entitas jika tersedia |
+| `metadata` | jsonb | NOT NULL | `{}` | Detail perubahan |
+| `created_at` | timestamptz | NOT NULL | `now()` | Waktu aksi |
+
+---
+
+### 32. `consent_records`
 
 **Deskripsi:** Rekam persetujuan (consent) pengguna terhadap kebijakan privasi dan penggunaan data.
 
@@ -751,11 +791,11 @@
 
 ---
 
-### 31. `schema_migrations`
+### 33. `schema_migrations`
 
 **Deskripsi:** Tabel pelacak riwayat migrasi database yang telah dijalankan.
 
-**Jumlah Baris:** 10
+**Jumlah Baris:** 14
 
 | Kolom | Tipe | Nullable | Keterangan |
 |---|---|---|---|
@@ -775,6 +815,10 @@
 | V008__rich_seed_data | Data seed kaya (users, patients, doctors, hospitals, dll.) | 2026-09-21 |
 | V009__data_enrichment | Pengayaan data vital signs, konsultasi, resep | 2026-09-22 |
 | V010__data_enrichment_fix | Perbaikan data seed konsultasi & pasien | 2026-09-22 |
+| V011__pharmacy_staff | Mapping akun apoteker ke apotek | 2026-09-25 |
+| V012__pharmacy_driver_role | Menambahkan role PHARMACY_DRIVER | 2026-09-25 |
+| V013__remap_seed_delivery_drivers | Memisahkan driver farmasi dari driver ambulans | 2026-09-25 |
+| V014__pharmacy_audit_logs | Audit operasional farmasi | 2026-09-25 |
 
 ---
 
@@ -793,6 +837,7 @@ users ────────────────────────�
   │       │       └──< consultation_messages                         │
   │       │       └──< consultation_ratings                          │
   │       │       └──< prescriptions >──── pharmacies                │
+  │       │                                 └──< pharmacy_staff > users
   │       │               └──< prescription_items >── drugs          │
   │       │               └──< prescription_deliveries               │
   │       ├──< hospital_beds >──── hospitals                         │
@@ -816,7 +861,7 @@ doctors ────────────────────────
 
 | Nama Enum | Nilai-nilai |
 |---|---|
-| `user_role` | PATIENT, DOCTOR, PHARMACIST, AMBULANCE_DRIVER, COMMAND_CENTER, ADMIN |
+| `user_role` | PATIENT, DOCTOR, PHARMACIST, PHARMACY_DRIVER, AMBULANCE_DRIVER, COMMAND_CENTER, ADMIN |
 | `user_status` | PENDING_VERIFICATION, ACTIVE, SUSPENDED, DELETED |
 | `gender` | MALE, FEMALE |
 | `blood_type` | A+, A-, B+, B-, O+, O-, AB+, AB-, UNKNOWN |

@@ -16,7 +16,8 @@
     "services/notification-service",
     "services/integration-service",
     "apps/command-center",
-    "apps/admin"
+    "apps/admin",
+    "apps/pharmacy"
   ],
   "scripts": {
     "install:all": "npm install",

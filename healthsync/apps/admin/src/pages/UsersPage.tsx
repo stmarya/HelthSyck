@@ -17,6 +17,7 @@ const ROLE_OPTIONS: { value: UserRole | ''; label: string }[] = [
   { value: 'DOCTOR',          label: 'Dokter' },
   { value: 'COMMAND_CENTER',  label: 'Command Center' },
   { value: 'PHARMACIST',      label: 'Apoteker' },
+  { value: 'PHARMACY_DRIVER', label: 'Driver Farmasi' },
   { value: 'AMBULANCE_DRIVER',label: 'Pengemudi Ambulans' },
   { value: 'ADMIN',           label: 'Admin' },
 ];
@@ -36,6 +37,7 @@ const ROLE_BADGE: Record<string, { bg: string; color: string }> = {
   DOCTOR:           { bg: 'var(--color-info-bg)',   color: 'var(--color-primary)' },
   COMMAND_CENTER:   { bg: 'var(--color-warning-bg)',color: 'var(--color-warning)' },
   PHARMACIST:       { bg: '#fce4ec',                color: '#c2185b' },
+  PHARMACY_DRIVER:  { bg: '#e0f2f1',                color: '#00695c' },
   AMBULANCE_DRIVER: { bg: '#fff3e0',                color: '#e65100' },
   ADMIN:            { bg: 'var(--color-accent-light)', color: 'var(--color-accent)' },
 };
@@ -49,7 +51,8 @@ const STATUS_BADGE: Record<string, { bg: string; color: string }> = {
 
 const ROLE_LABEL: Record<string, string> = {
   PATIENT: 'Pasien', DOCTOR: 'Dokter', COMMAND_CENTER: 'Command Center',
-  PHARMACIST: 'Apoteker', AMBULANCE_DRIVER: 'Pengemudi Ambulans', ADMIN: 'Admin',
+  PHARMACIST: 'Apoteker', PHARMACY_DRIVER: 'Driver Farmasi',
+  AMBULANCE_DRIVER: 'Pengemudi Ambulans', ADMIN: 'Admin',
 };
 
 const STATUS_LABEL: Record<string, string> = {

@@ -285,6 +285,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       JWT_SECRET: ${JWT_SECRET}
+      NOTIFICATION_SERVICE_URL: http://notification-service:3009
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
       NODE_ENV: ${NODE_ENV}
       LOG_LEVEL: ${LOG_LEVEL}
@@ -644,4 +645,24 @@ services:
       - "5174:5174"
     depends_on:
       auth-service:
+        condition: service_healthy
+
+  pharmacy:
+    build:
+      context: ../..
+      dockerfile: apps/pharmacy/Dockerfile
+    container_name: hs-pharmacy-app
+    <<: *service-defaults
+    environment:
+      VITE_AUTH_TARGET:         http://auth-service:3001
+      VITE_PRESCRIPTION_TARGET: http://prescription-service:3004
+      VITE_PHARMACY_TARGET:     http://pharmacy-service:3008
+    ports:
+      - "5175:5175"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      pharmacy-service:
+        condition: service_healthy
+      prescription-service:
         condition: service_healthy

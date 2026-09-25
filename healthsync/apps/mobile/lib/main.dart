@@ -39,10 +39,12 @@ class HealthSyncApp extends ConsumerWidget {
   }
 
   ThemeData _themeForRole(String role) {
-    // Role dari database: PATIENT, DOCTOR, PHARMACIST, AMBULANCE_DRIVER, ADMIN, COMMAND_CENTER
+    // Role dari database: PATIENT, DOCTOR, PHARMACIST, PHARMACY_DRIVER,
+    // AMBULANCE_DRIVER, ADMIN, COMMAND_CENTER
     switch (role.toUpperCase()) {
       case 'PHARMACIST':
         return AppTheme.apotekTheme();
+      case 'PHARMACY_DRIVER':
       case 'AMBULANCE_DRIVER':
         return AppTheme.driverTheme();
       default:
