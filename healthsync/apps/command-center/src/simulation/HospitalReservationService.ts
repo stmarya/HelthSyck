@@ -36,7 +36,7 @@ export class HospitalReservationService {
     return reservation;
   }
 
-  confirm(state: Readonly<SimState>, reservationId: string): HospitalReservation | null {
+  confirm(_state: Readonly<SimState>, reservationId: string): HospitalReservation | null {
     const reservation = this.reservations.get(reservationId);
     if (!reservation || reservation.status !== 'HELD') return null;
     reservation.status = 'RESERVED';

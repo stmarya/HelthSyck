@@ -1,4 +1,4 @@
-export type UserRole = 'PATIENT' | 'DOCTOR' | 'COMMAND_CENTER' | 'PHARMACIST' | 'AMBULANCE_DRIVER' | 'ADMIN';
+export type UserRole = 'PATIENT' | 'DOCTOR' | 'COMMAND_CENTER' | 'PHARMACIST' | 'PHARMACY_DRIVER' | 'AMBULANCE_DRIVER' | 'ADMIN';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
 export interface AdminUser { id: string; email: string; role: UserRole; name: string }
 export interface User { id: string; email: string; phone?: string; name: string; role: UserRole; status: UserStatus; createdAt: string; lastLoginAt?: string }

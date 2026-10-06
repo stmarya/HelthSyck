@@ -19,8 +19,8 @@ for (const file of files) {
 
 const requiredMarkers = {
   'src/realtime/mapProvider.ts': ['getMapReadiness', 'VITE_LOCATION_STALE_AFTER_MS'],
-  'src/pages/IntegrationHealthPage.tsx': ['Release Gate', '/health/realtime', 'checkedAt'],
-  'src/platform/integrationCatalog.ts': ['communication.v1', 'VITE_TURN_CREDENTIAL'],
+  'src/pages/IntegrationHealthPage.tsx': ['Release Gate', 'checkedAt'],
+  'src/platform/integrationCatalog.ts': ['communication.v1', 'VITE_TURN_CREDENTIAL', '/health/realtime'],
 };
 for (const [file, markers] of Object.entries(requiredMarkers)) {
   const content = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');

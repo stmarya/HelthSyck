@@ -153,6 +153,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────
 
+// Hooks are intentionally colocated with their provider.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error('useToast harus digunakan di dalam ToastProvider');

@@ -45,6 +45,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────
 
+// Hooks are intentionally colocated with their provider.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }

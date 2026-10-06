@@ -200,13 +200,13 @@ function useReportData(periode: PeriodeDays): ReportData {
       const e = err as { message?: string };
       setData((prev) => ({ ...prev, loading: false, error: e.message ?? 'Gagal memuat data laporan' }));
     }
-  }, []);
+  }, [periode]);
 
   useEffect(() => {
     void fetch();
     const iv = setInterval(() => void fetch(), 30000);
     return () => clearInterval(iv);
-  }, [fetch, periode]);
+  }, [fetch]);
 
   return data;
 }
