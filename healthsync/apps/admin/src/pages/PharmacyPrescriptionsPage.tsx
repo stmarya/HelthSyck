@@ -1,22 +1,21 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { prescriptionClient, pharmacyClient } from '../api/client';
+import { useCallback, useEffect, useState } from 'react';
+import { pharmacyClient, prescriptionClient } from '../api/client';
 import { useToast } from '../components/Toast';
 import PageHeader from '../components/PageHeader';
 import { Skeleton } from '../components/Skeleton';
 import styles from './Page.module.css';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipe Data
-// ─────────────────────────────────────────────────────────────────────────────
-
 type PrescriptionStatus =
   | 'ISSUED'
   | 'SENT_TO_PHARMACY'
+  | 'CONFIRMED'
   | 'PREPARING'
   | 'READY'
-  | 'DISPENSED'
+  | 'DELIVERING'
   | 'DELIVERED'
   | 'CANCELLED';
+
+type FilterableStatus = Exclude<PrescriptionStatus, 'CONFIRMED' | 'DELIVERING'>;
 
 interface Prescription {
   id: string;
@@ -31,161 +30,154 @@ interface Prescription {
   delivery_address: string | null;
 }
 
-interface PharmacyOption {
-  id: string;
-  name: string;
+interface PharmacyOption { id: string; name: string }
+interface PharmacyPage {
+  data: PharmacyOption[];
+  meta: { page: number; total: number; totalPages: number };
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Konstanta
-// ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_META: Record<PrescriptionStatus, { label: string; bg: string; color: string }> = {
-  ISSUED:            { label: 'Diterbitkan',   bg: '#eff6ff', color: '#2563eb' },
-  SENT_TO_PHARMACY:  { label: 'Ke Apotek',     bg: '#fefce8', color: '#ca8a04' },
-  PREPARING:         { label: 'Disiapkan',     bg: '#fff7ed', color: '#ea580c' },
-  READY:             { label: 'Siap Ambil',    bg: '#f0fdf4', color: '#16a34a' },
-  DISPENSED:         { label: 'Diserahkan',    bg: '#f5f3ff', color: '#7c3aed' },
-  DELIVERED:         { label: 'Dikirim',       bg: '#ecfdf5', color: '#059669' },
-  CANCELLED:         { label: 'Dibatalkan',    bg: '#fef2f2', color: '#dc2626' },
+  ISSUED: { label: 'Diterbitkan', bg: '#eff6ff', color: '#2563eb' },
+  SENT_TO_PHARMACY: { label: 'Ke Apotek', bg: '#fefce8', color: '#ca8a04' },
+  CONFIRMED: { label: 'Dikonfirmasi', bg: '#fef3c7', color: '#b45309' },
+  PREPARING: { label: 'Disiapkan', bg: '#fff7ed', color: '#ea580c' },
+  READY: { label: 'Siap Diserahkan', bg: '#f0fdf4', color: '#16a34a' },
+  DELIVERING: { label: 'Dalam Pengiriman', bg: '#ffedd5', color: '#9a3412' },
+  DELIVERED: { label: 'Selesai', bg: '#ecfdf5', color: '#059669' },
+  CANCELLED: { label: 'Dibatalkan', bg: '#fef2f2', color: '#dc2626' },
 };
 
-const ALL_STATUSES = Object.keys(STATUS_META) as PrescriptionStatus[];
+// Backend filter validation does not yet accept the two transition statuses below.
+// They remain visible in results, but are not offered as query parameters.
+const FILTERABLE_STATUSES: FilterableStatus[] = [
+  'ISSUED', 'SENT_TO_PHARMACY', 'PREPARING', 'READY', 'DELIVERED', 'CANCELLED',
+];
 
-function formatDateTime(iso: string): string {
+function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(iso));
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(value));
 }
 
-function exportCSV(rows: Prescription[], pharmacyName: string) {
-  const header = ['ID', 'Status', 'Apotek', 'Jenis', 'Tanggal Resep', 'Diperbarui'];
-  const data = rows.map((r) => [
-    r.id,
-    STATUS_META[r.status]?.label ?? r.status,
-    pharmacyName,
-    r.fulfillment_type ?? '-',
-    formatDateTime(r.issued_at),
-    formatDateTime(r.updated_at),
-  ]);
-  const csv = [header, ...data].map((row) => row.join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `resep-apotek-${pharmacyName.replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
+function errorMessage(error: unknown, fallback: string): string {
+  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    ?? (error instanceof Error ? error.message : fallback);
+}
+
+function csvCell(value: unknown): string {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function exportCSV(rows: Prescription[], pharmacyName: string): void {
+  const lines = [
+    ['ID', 'Status', 'Apotek', 'Jenis', 'Tanggal Resep', 'Diperbarui'],
+    ...rows.map((row) => [
+      row.id,
+      STATUS_META[row.status].label,
+      pharmacyName,
+      row.fulfillment_type ?? '-',
+      formatDateTime(row.issued_at),
+      formatDateTime(row.updated_at),
+    ]),
+  ].map((row) => row.map(csvCell).join(','));
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `resep-apotek-${pharmacyName.replace(/[^a-z0-9]+/gi, '_')}-${new Date().toISOString().slice(0, 10)}.csv`;
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Komponen Utama
-// ─────────────────────────────────────────────────────────────────────────────
+async function loadAllPharmacies(): Promise<PharmacyOption[]> {
+  const all: PharmacyOption[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const response = await pharmacyClient.get<PharmacyPage>(`/v1/pharmacies?page=${page}&limit=100`);
+    all.push(...(response.data.data ?? []));
+    totalPages = Math.max(1, response.data.meta?.totalPages ?? 1);
+    page += 1;
+  } while (page <= totalPages);
+  return all;
+}
 
 export default function PharmacyPrescriptionsPage() {
   const { showToast } = useToast();
-
-  // ── State pilihan apotek ──
-  const [pharmacies,       setPharmacies]       = useState<PharmacyOption[]>([]);
-  const [loadingPharmacy,  setLoadingPharmacy]  = useState(true);
-  const [selectedPharmacy, setSelectedPharmacy] = useState<PharmacyOption | null>(null);
-
-  // ── State filter & paginasi ──
-  const [filterStatus, setFilterStatus] = useState<PrescriptionStatus | ''>('');
-  const [page,         setPage]         = useState(1);
-  const limit = 20;
+  const [pharmacies, setPharmacies] = useState<PharmacyOption[]>([]);
+  const [loadingPharmacies, setLoadingPharmacies] = useState(true);
+  const [selectedPharmacyId, setSelectedPharmacyId] = useState('');
+  const [filterStatus, setFilterStatus] = useState<FilterableStatus | ''>('');
+  const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [rows, setRows] = useState<Prescription[]>([]);
+  const [selected, setSelected] = useState<Prescription | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const limit = 20;
+  const selectedPharmacy = pharmacies.find((item) => item.id === selectedPharmacyId) ?? null;
 
-  // ── State data resep ──
-  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
-  const [loading,       setLoading]       = useState(false);
-  const [error,         setError]         = useState<string | null>(null);
-
-  // ── State detail resep yang dipilih ──
-  const [detail, setDetail] = useState<Prescription | null>(null);
-
-  // Debounce ref untuk auto-refresh
-  const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Fetch daftar apotek ──
   useEffect(() => {
+    let active = true;
     const run = async () => {
-      setLoadingPharmacy(true);
+      setLoadingPharmacies(true);
       try {
-        const res = await pharmacyClient.get<{ data: PharmacyOption[]; meta: { total: number } }>(
-          '/v1/pharmacies?limit=100'
-        );
-        const list = res.data.data ?? [];
+        const list = await loadAllPharmacies();
+        if (!active) return;
         setPharmacies(list);
-        if (list.length > 0) setSelectedPharmacy(list[0] ?? null);
-      } catch {
-        showToast('Gagal memuat daftar apotek', 'error');
+        setSelectedPharmacyId((current) => current || list[0]?.id || '');
+      } catch (loadError) {
+        if (active) showToast(errorMessage(loadError, 'Gagal memuat seluruh daftar apotek'), 'error');
       } finally {
-        setLoadingPharmacy(false);
+        if (active) setLoadingPharmacies(false);
       }
     };
     void run();
+    return () => { active = false; };
   }, [showToast]);
 
-  // ── Fetch resep berdasarkan apotek & filter ──
-  const fetchPrescriptions = useCallback(async () => {
-    if (!selectedPharmacy) return;
-    setLoading(true);
+  const fetchRows = useCallback(async (silent = false) => {
+    if (!selectedPharmacyId) {
+      setRows([]);
+      setTotal(0);
+      return;
+    }
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
-        page:       String(page),
-        limit:      String(limit),
-        pharmacyId: selectedPharmacy.id,
+        page: String(page), limit: String(limit), pharmacyId: selectedPharmacyId,
       });
       if (filterStatus) params.set('status', filterStatus);
-
-      const res = await prescriptionClient.get<{
+      const response = await prescriptionClient.get<{
         data: Prescription[];
-        meta: { total: number; page: number; limit: number };
+        meta: { total: number; totalPages?: number };
       }>(`/v1/prescriptions?${params.toString()}`);
-
-      setPrescriptions(res.data.data ?? []);
-      setTotal(res.data.meta?.total ?? 0);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal memuat resep';
-      setError(msg);
-      showToast(msg, 'error');
+      setRows(response.data.data ?? []);
+      setTotal(response.data.meta?.total ?? 0);
+    } catch (loadError) {
+      const message = errorMessage(loadError, 'Gagal memuat resep apotek');
+      setRows([]);
+      setTotal(0);
+      setError(message);
+      if (!silent) showToast(message, 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, [selectedPharmacy, page, limit, filterStatus, showToast]);
+  }, [filterStatus, page, selectedPharmacyId, showToast]);
 
+  useEffect(() => { void fetchRows(); }, [fetchRows]);
   useEffect(() => {
-    void fetchPrescriptions();
-  }, [fetchPrescriptions]);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchRows(true);
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [fetchRows]);
 
-  // ── Auto-refresh setiap 30 detik ──
-  useEffect(() => {
-    refreshTimer.current = setInterval(() => { void fetchPrescriptions(); }, 30_000);
-    return () => { if (refreshTimer.current) clearInterval(refreshTimer.current); };
-  }, [fetchPrescriptions]);
-
-  // Reset halaman ke 1 saat filter/apotek berubah
-  const handleChangePharmacy = (pharmacyId: string) => {
-    const found = pharmacies.find((p) => p.id === pharmacyId) ?? null;
-    setSelectedPharmacy(found);
-    setPage(1);
-    setDetail(null);
-  };
-
-  const handleChangeStatus = (s: string) => {
-    setFilterStatus(s as PrescriptionStatus | '');
-    setPage(1);
-  };
-
-  const totalPages = Math.ceil(total / limit);
-
-  // ── Statistik per status ──
-  const statusCounts = prescriptions.reduce<Record<string, number>>((acc, p) => {
-    acc[p.status] = (acc[p.status] ?? 0) + 1;
-    return acc;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const counts = rows.reduce<Partial<Record<PrescriptionStatus, number>>>((result, row) => {
+    result[row.status] = (result[row.status] ?? 0) + 1;
+    return result;
   }, {});
 
   return (
@@ -193,288 +185,102 @@ export default function PharmacyPrescriptionsPage() {
       <PageHeader
         title="Resep per Apotek"
         subtitle={selectedPharmacy ? `Apotek: ${selectedPharmacy.name}` : 'Pilih apotek terlebih dahulu'}
-        breadcrumbs={[
-          { label: 'Dashboard', to: '/' },
-          { label: 'Farmasi', to: '/pharmacy' },
-          { label: 'Resep per Apotek' },
-        ]}
+        breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Farmasi', to: '/pharmacy' }, { label: 'Resep per Apotek' }]}
         actions={
-          <button
-            className={`${styles.btn} ${styles.btnOutline}`}
-            onClick={() => exportCSV(prescriptions, selectedPharmacy?.name ?? '')}
-            disabled={prescriptions.length === 0}
-          >
-            ⬇ CSV
+          <button className={`${styles.btn} ${styles.btnOutline}`}
+            onClick={() => exportCSV(rows, selectedPharmacy?.name ?? 'apotek')}
+            disabled={!selectedPharmacy || rows.length === 0}
+            title="Ekspor hanya data pada halaman aktif">
+            ⬇ CSV halaman ini
           </button>
         }
       />
 
-      {/* ── Filter Bar ── */}
-      <div className={styles.card} style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          {/* Pilih apotek */}
-          <div style={{ minWidth: 240, flex: 1 }}>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 12 }}>
-              Apotek
-            </label>
-            {loadingPharmacy ? (
-              <Skeleton height={36} />
-            ) : (
-              <select
-                style={{
-                  width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-border)', fontSize: 'var(--text-sm)',
-                  background: 'var(--color-bg)', color: 'var(--color-text)',
-                }}
-                value={selectedPharmacy?.id ?? ''}
-                onChange={(e) => handleChangePharmacy(e.target.value)}
-              >
+      <div className={styles.card}>
+        <div className={styles.toolbar}>
+          <div className={styles.toolbarLeft}>
+            {loadingPharmacies ? <Skeleton height={36} width={280} /> : (
+              <select className={styles.filterSelect} value={selectedPharmacyId}
+                onChange={(event) => { setSelectedPharmacyId(event.target.value); setPage(1); setSelected(null); }}>
                 <option value="">— Pilih Apotek —</option>
-                {pharmacies.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
+                {pharmacies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             )}
-          </div>
-
-          {/* Filter status */}
-          <div style={{ minWidth: 180 }}>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: 6, fontSize: 12 }}>
-              Status
-            </label>
-            <select
-              style={{
-                width: '100%', padding: '8px 12px', borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)', fontSize: 'var(--text-sm)',
-                background: 'var(--color-bg)', color: 'var(--color-text)',
-              }}
-              value={filterStatus}
-              onChange={(e) => handleChangeStatus(e.target.value)}
-            >
+            <select className={styles.filterSelect} value={filterStatus}
+              onChange={(event) => { setFilterStatus(event.target.value as FilterableStatus | ''); setPage(1); }}>
               <option value="">Semua Status</option>
-              {ALL_STATUSES.map((s) => (
-                <option key={s} value={s}>{STATUS_META[s].label}</option>
-              ))}
+              {FILTERABLE_STATUSES.map((status) => <option key={status} value={status}>{STATUS_META[status].label}</option>)}
             </select>
           </div>
-
-          {/* Tombol refresh */}
-          <button
-            className={`${styles.btn} ${styles.btnOutline}`}
-            onClick={() => void fetchPrescriptions()}
-            title="Refresh data"
-          >
-            ↻ Refresh
-          </button>
+          <button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => void fetchRows()}>↻ Refresh</button>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--color-muted)' }}>
+          Memuat seluruh halaman apotek. Status Dikonfirmasi dan Dalam Pengiriman tetap ditampilkan, tetapi belum tersedia sebagai filter sampai backend menerima kedua nilai tersebut.
         </div>
       </div>
 
-      {/* ── Stat Chips ── */}
-      {prescriptions.length > 0 && (
+      {rows.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          {ALL_STATUSES.filter((s) => (statusCounts[s] ?? 0) > 0).map((s) => {
-            const meta = STATUS_META[s];
-            return (
-              <button
-                key={s}
-                onClick={() => handleChangeStatus(filterStatus === s ? '' : s)}
-                style={{
-                  padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-                  cursor: 'pointer', border: `1.5px solid ${meta.color}`,
-                  background: filterStatus === s ? meta.color : meta.bg,
-                  color: filterStatus === s ? '#fff' : meta.color,
-                  transition: 'all 0.15s',
-                }}
-              >
-                {meta.label} ({statusCounts[s]})
-              </button>
-            );
-          })}
+          {(Object.keys(STATUS_META) as PrescriptionStatus[]).filter((status) => counts[status]).map((status) => (
+            <span key={status} style={{ padding: '4px 10px', borderRadius: 999, fontSize: 12,
+              background: STATUS_META[status].bg, color: STATUS_META[status].color }}>
+              {STATUS_META[status].label}: {counts[status]} (halaman ini)
+            </span>
+          ))}
         </div>
       )}
 
-      {/* ── Layout Split (tabel + detail) ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: detail ? '1fr 380px' : '1fr',
-        gap: 16, alignItems: 'start',
-      }}>
-        {/* ── Tabel Resep ── */}
+      <div className={styles.contentSplit} style={!selected ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
         <div className={styles.card} style={{ padding: 0 }}>
-          <div style={{
-            padding: 'var(--space-3) var(--space-4)',
-            borderBottom: '1px solid var(--color-border)',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
-            <span style={{ fontWeight: 600 }}>
-              {total} resep {filterStatus ? `(${STATUS_META[filterStatus as PrescriptionStatus]?.label ?? filterStatus})` : ''}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>Auto-refresh 30 dtk</span>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', fontWeight: 600 }}>
+            {total.toLocaleString('id-ID')} resep
           </div>
-
           {loading ? (
-            <div style={{ padding: 'var(--space-4)' }}>
-              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={44} style={{ marginBottom: 6 }} />)}
-            </div>
+            <div style={{ padding: 16 }}>{Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} height={44} style={{ marginBottom: 6 }} />)}</div>
           ) : error ? (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyStateIcon}>⚠️</div>
-              <div className={styles.emptyStateTitle}>Gagal memuat data</div>
-              <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>{error}</div>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => void fetchPrescriptions()}>
-                Coba Lagi
-              </button>
-            </div>
+            <div className={styles.errorState}><span>⚠ {error}</span><button className={`${styles.btn} ${styles.btnSm}`} onClick={() => void fetchRows()}>Coba Lagi</button></div>
           ) : !selectedPharmacy ? (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyStateIcon}>🏥</div>
-              <div className={styles.emptyStateTitle}>Pilih apotek terlebih dahulu</div>
-            </div>
-          ) : prescriptions.length === 0 ? (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyStateIcon}>📋</div>
-              <div className={styles.emptyStateTitle}>Tidak ada resep</div>
-              <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
-                {filterStatus
-                  ? `Tidak ada resep dengan status "${STATUS_META[filterStatus as PrescriptionStatus]?.label ?? filterStatus}".`
-                  : 'Apotek ini belum memiliki resep yang diteruskan.'}
-              </div>
-            </div>
+            <div className={styles.emptyState}><div className={styles.emptyStateTitle}>Pilih apotek terlebih dahulu</div></div>
+          ) : rows.length === 0 ? (
+            <div className={styles.emptyState}><div className={styles.emptyStateTitle}>Tidak ada resep</div></div>
           ) : (
-            <>
-              <div className={styles.tableWrapper}>
-                <table className={`${styles.table} ${styles.tableHover}`}>
-                  <thead>
-                    <tr>
-                      <th>ID Resep</th>
-                      <th>Status</th>
-                      <th>Jenis</th>
-                      <th>Tanggal Resep</th>
-                      <th>Diperbarui</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prescriptions.map((rx) => {
-                      const meta = STATUS_META[rx.status] ?? { label: rx.status, bg: '#f5f5f5', color: '#666' };
-                      return (
-                        <tr
-                          key={rx.id}
-                          onClick={() => setDetail(detail?.id === rx.id ? null : rx)}
-                          style={{
-                            cursor: 'pointer',
-                            background: detail?.id === rx.id ? 'var(--color-accent-light)' : undefined,
-                          }}
-                        >
-                          <td style={{ fontFamily: 'monospace', fontSize: 12 }}>
-                            {rx.id.slice(0, 8)}…
-                          </td>
-                          <td>
-                            <span style={{
-                              padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-                              background: meta.bg, color: meta.color,
-                            }}>
-                              {meta.label}
-                            </span>
-                          </td>
-                          <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
-                            {rx.fulfillment_type === 'PICKUP' ? '🏪 Ambil Sendiri'
-                              : rx.fulfillment_type === 'DELIVERY' ? '🚚 Dikirim'
-                              : '—'}
-                          </td>
-                          <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
-                            {formatDateTime(rx.issued_at)}
-                          </td>
-                          <td style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
-                            {formatDateTime(rx.updated_at)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Paginasi */}
-              {totalPages > 1 && (
-                <div style={{
-                  display: 'flex', justifyContent: 'center', gap: 8,
-                  padding: 'var(--space-3)', borderTop: '1px solid var(--color-border)',
-                }}>
-                  <button className={`${styles.btn} ${styles.btnSm} ${styles.btnOutline}`}
-                    disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>← Prev</button>
-                  <span style={{ lineHeight: '28px', fontSize: 'var(--text-sm)' }}>
-                    {page} / {totalPages}
-                  </span>
-                  <button className={`${styles.btn} ${styles.btnSm} ${styles.btnOutline}`}
-                    disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next →</button>
-                </div>
-              )}
-            </>
+            <div className={styles.tableWrapper}>
+              <table className={`${styles.table} ${styles.tableHover}`}>
+                <thead><tr><th>ID Resep</th><th>Status</th><th>Jenis</th><th>Tanggal Resep</th><th>Diperbarui</th></tr></thead>
+                <tbody>{rows.map((row) => {
+                  const meta = STATUS_META[row.status];
+                  return <tr key={row.id} onClick={() => setSelected(selected?.id === row.id ? null : row)} style={{ cursor: 'pointer' }}>
+                    <td><code>{row.id.slice(0, 8)}…</code></td>
+                    <td><span style={{ padding: '2px 8px', borderRadius: 999, background: meta.bg, color: meta.color }}>{meta.label}</span></td>
+                    <td>{row.fulfillment_type === 'PICKUP' ? 'Ambil Sendiri' : row.fulfillment_type === 'DELIVERY' ? 'Dikirim' : '—'}</td>
+                    <td>{formatDateTime(row.issued_at)}</td><td>{formatDateTime(row.updated_at)}</td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
           )}
+          {totalPages > 1 && <div className={styles.pagination}>
+            <span className={styles.paginationInfo}>Halaman {page} dari {totalPages}</span>
+            <div className={styles.paginationControls}>
+              <button className={styles.pageBtn} disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>‹</button>
+              <button className={styles.pageBtn} disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>›</button>
+            </div>
+          </div>}
         </div>
 
-        {/* ── Panel Detail Resep ── */}
-        {detail && (
-          <div className={styles.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <span style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Detail Resep</span>
-              <button
-                className={`${styles.btn} ${styles.btnSm} ${styles.btnOutline}`}
-                onClick={() => setDetail(null)}
-              >
-                ✕
-              </button>
-            </div>
-
-            {(() => {
-              const meta = STATUS_META[detail.status] ?? { label: detail.status, bg: '#f5f5f5', color: '#666' };
-              return (
-                <>
-                  <div style={{
-                    padding: '10px 14px', borderRadius: 8, marginBottom: 14,
-                    background: meta.bg, border: `1.5px solid ${meta.color}`,
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}>
-                    <span style={{ fontWeight: 700, color: meta.color, fontSize: 14 }}>{meta.label}</span>
-                  </div>
-
-                  {[
-                    { label: 'ID Resep',         value: detail.id },
-                    { label: 'ID Konsultasi',    value: detail.consultation_id },
-                    { label: 'ID Pasien',        value: detail.patient_id },
-                    { label: 'ID Dokter',        value: detail.doctor_id },
-                    { label: 'Jenis Pengambilan', value: detail.fulfillment_type === 'PICKUP' ? '🏪 Ambil Sendiri' : detail.fulfillment_type === 'DELIVERY' ? '🚚 Dikirim' : '—' },
-                    { label: 'Tgl Resep',        value: formatDateTime(detail.issued_at) },
-                    { label: 'Diperbarui',       value: formatDateTime(detail.updated_at) },
-                  ].map(({ label, value }) => (
-                    <div key={label} style={{
-                      display: 'flex', justifyContent: 'space-between', gap: 8,
-                      padding: '6px 0', borderBottom: '1px solid var(--color-border)',
-                      fontSize: 'var(--text-sm)',
-                    }}>
-                      <span style={{ color: 'var(--color-muted)', flexShrink: 0 }}>{label}</span>
-                      <span style={{
-                        fontWeight: 500, textAlign: 'right',
-                        fontFamily: value.length > 20 ? 'monospace' : undefined,
-                        fontSize: value.length > 20 ? 11 : undefined,
-                        wordBreak: 'break-all',
-                      }}>
-                        {value}
-                      </span>
-                    </div>
-                  ))}
-
-                  {detail.delivery_address && (
-                    <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
-                      <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 4, color: 'var(--color-muted)' }}>ALAMAT PENGIRIMAN</div>
-                      <div style={{ fontSize: 'var(--text-sm)' }}>{detail.delivery_address}</div>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        )}
+        {selected && <div className={styles.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}><strong>Detail Resep</strong>
+            <button className={`${styles.btn} ${styles.btnSm} ${styles.btnOutline}`} onClick={() => setSelected(null)}>✕</button></div>
+          {[
+            ['ID Resep', selected.id], ['ID Konsultasi', selected.consultation_id], ['ID Pasien', selected.patient_id],
+            ['ID Dokter', selected.doctor_id], ['Status', STATUS_META[selected.status].label],
+            ['Jenis', selected.fulfillment_type ?? '—'], ['Tanggal', formatDateTime(selected.issued_at)],
+            ['Diperbarui', formatDateTime(selected.updated_at)], ['Alamat', selected.delivery_address ?? '—'],
+          ].map(([label, value]) => <div key={label} style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 8,
+            padding: '7px 0', borderBottom: '1px solid var(--color-border)', fontSize: 13 }}>
+            <span style={{ color: 'var(--color-muted)' }}>{label}</span><span style={{ wordBreak: 'break-word' }}>{value}</span>
+          </div>)}
+        </div>}
       </div>
     </div>
   );

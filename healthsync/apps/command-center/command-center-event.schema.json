@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://healthsync.id/schemas/command-center-event.v1.json",
+  "title": "HealthSync Command Center Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "sequence", "type", "version", "occurredAt", "source", "mode", "correlationId", "payload"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "type": { "type": "string", "pattern": "^[a-z]+(\\.[a-z_]+)+$" },
+    "version": { "const": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "source": { "enum": ["simulation", "websocket", "sse", "api"] },
+    "mode": { "enum": ["SIMULATION", "SHADOW", "LIVE"] },
+    "correlationId": { "type": "string", "minLength": 1 },
+    "causationId": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object" }
+  }
+}

@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: command-center-config
+  namespace: healthsync
+data:
+  VITE_MAP_PROVIDER: "simulator"
+  VITE_MAP_STYLE_URL: ""
+  VITE_ROUTING_URL: ""
+  VITE_LOCATION_STALE_AFTER_MS: "15000"
+  VITE_TURN_URL: ""
+  VITE_TURN_USERNAME: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: command-center
+  namespace: healthsync
+  labels:
+    app: command-center
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: command-center
+  template:
+    metadata:
+      labels:
+        app: command-center
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: command-center
+          image: ghcr.io/healthsync-indonesia/command-center:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: command-center-config
+          env:
+            - name: VITE_MAP_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: command-center-runtime
+                  key: VITE_MAP_ACCESS_TOKEN
+                  optional: true
+            - name: VITE_TURN_CREDENTIAL
+              valueFrom:
+                secretKeyRef:
+                  name: command-center-runtime
+                  key: VITE_TURN_CREDENTIAL
+                  optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: command-center
+  namespace: healthsync
+  labels:
+    app: command-center
+spec:
+  selector:
+    app: command-center
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

@@ -1,912 +1,140 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { hospitalClient } from '../api/client';
-import type { HospitalType, CreateHospitalForm } from '../types/admin';
-import { Modal, ConfirmDialog } from '../components/Modal';
+import type { HospitalType } from '../types/admin';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import PageHeader from '../components/PageHeader';
 import { InputField, SelectField } from '../components/FormField';
 import { Skeleton } from '../components/Skeleton';
 import styles from './Page.module.css';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipe lokal — disesuaikan dengan respons snake_case dari hospital-service
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface HospitalRow {
-  id: string;
-  name: string;
-  type: HospitalType;
-  license_number?: string;
-  address: string;
-  city: string;
-  province?: string;
-  phone?: string;
-  igd_phone?: string;
-  total_beds: number;
-  available_beds: number;
-  icu_total: number;
-  icu_available: number;
-  specializations?: string[];
-  is_emt_partner?: boolean;
-  is_active?: boolean;
-  // BPJS — backend field bisa isBPJSProvider atau is_bpjs_provider
-  isBPJSProvider?: boolean;
-  is_bpjs_provider?: boolean;
-  accreditation?: string;
+  id: string; name: string; type: HospitalType; address: string; city: string; province: string;
+  phone: string | null; email?: string | null; igd_phone: string | null;
+  latitude: string | number; longitude: string | number;
+  total_beds: number; available_beds: number; icu_total: number; icu_available: number;
+  specializations: string[] | null; is_emt_partner: boolean;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Konstanta
-// ─────────────────────────────────────────────────────────────────────────────
-
-const HOSPITAL_TYPES: { value: HospitalType | ''; label: string }[] = [
-  { value: '',           label: 'Semua Tipe' },
-  { value: 'TYPE_A',     label: 'Tipe A' },
-  { value: 'TYPE_B',     label: 'Tipe B' },
-  { value: 'TYPE_C',     label: 'Tipe C' },
-  { value: 'TYPE_D',     label: 'Tipe D' },
-  { value: 'CLINIC',     label: 'Klinik' },
-  { value: 'PUSKESMAS',  label: 'Puskesmas' },
-];
-
-const TYPE_BADGE_COLORS: Record<string, { bg: string; color: string }> = {
-  TYPE_A:    { bg: 'var(--color-danger-bg)',    color: 'var(--color-danger)' },
-  TYPE_B:    { bg: 'var(--color-warning-bg)',   color: 'var(--color-warning)' },
-  TYPE_C:    { bg: 'var(--color-info-bg)',      color: 'var(--color-primary)' },
-  TYPE_D:    { bg: 'var(--color-success-bg)',   color: 'var(--color-success)' },
-  CLINIC:    { bg: 'var(--color-accent-light)', color: 'var(--color-accent)' },
-  PUSKESMAS: { bg: '#f5f5f5',                   color: '#616161' },
+interface HospitalForm {
+  name: string; type: HospitalType; licenseNumber: string; address: string; city: string; province: string;
+  phone: string; email: string; igdPhone: string; latitude: string; longitude: string;
+  totalBeds: string; icuTotal: string; specializations: string; isEmtPartner: boolean;
+}
+const EMPTY: HospitalForm = {
+  name: '', type: 'TYPE_C', licenseNumber: '', address: '', city: '', province: '', phone: '', email: '',
+  igdPhone: '', latitude: '', longitude: '', totalBeds: '0', icuTotal: '0', specializations: '', isEmtPartner: false,
 };
-
-const TYPE_LABEL: Record<string, string> = {
-  TYPE_A: 'Tipe A', TYPE_B: 'Tipe B', TYPE_C: 'Tipe C', TYPE_D: 'Tipe D',
-  CLINIC: 'Klinik', PUSKESMAS: 'Puskesmas',
+const TYPES = ['TYPE_A', 'TYPE_B', 'TYPE_C', 'TYPE_D', 'CLINIC', 'PUSKESMAS'] as const;
+const TYPE_LABEL: Record<HospitalType, string> = {
+  TYPE_A: 'Tipe A', TYPE_B: 'Tipe B', TYPE_C: 'Tipe C', TYPE_D: 'Tipe D', CLINIC: 'Klinik', PUSKESMAS: 'Puskesmas',
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-function isBpjs(h: HospitalRow): boolean {
-  return !!(h.isBPJSProvider ?? h.is_bpjs_provider);
+function errorMessage(error: unknown): string {
+  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    ?? (error instanceof Error ? error.message : 'Operasi rumah sakit gagal');
+}
+function csvCell(value: unknown): string { return `"${String(value ?? '').replace(/"/g, '""')}"`; }
+function exportCsv(rows: HospitalRow[]): void {
+  const data = [['Nama', 'Tipe', 'Kota', 'Provinsi', 'Telepon', 'Total Bed', 'Bed Tersedia', 'ICU Total', 'ICU Tersedia'],
+    ...rows.map((row) => [row.name, TYPE_LABEL[row.type], row.city, row.province, row.phone, row.total_beds, row.available_beds, row.icu_total, row.icu_available])];
+  const blob = new Blob(['\uFEFF' + data.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = `rumah-sakit-halaman-${new Date().toISOString().slice(0, 10)}.csv`; anchor.click(); URL.revokeObjectURL(url);
 }
 
-/** Warna ketersediaan bed berdasarkan persentase */
-function bedColor(available: number, total: number): string {
-  if (total === 0) return 'var(--color-muted)';
-  const pct = (available / total) * 100;
-  if (pct < 20)  return 'var(--color-danger,  #dc2626)';
-  if (pct < 50)  return 'var(--color-warning, #d97706)';
-  return 'var(--color-success, #16a34a)';
-}
-
-/** Ekspor data ke CSV */
-function exportCSV(rows: HospitalRow[]) {
-  const headers = ['Nama RS', 'Tipe', 'Kota', 'Provinsi', 'Total Bed', 'Bed Tersedia', 'ICU Total', 'ICU Tersedia', 'BPJS', 'Akreditasi'];
-  const lines = rows.map((h) =>
-    [
-      `"${h.name.replace(/"/g, '""')}"`,
-      TYPE_LABEL[h.type] ?? h.type,
-      h.city,
-      h.province ?? '',
-      h.total_beds,
-      h.available_beds,
-      h.icu_total,
-      h.icu_available,
-      isBpjs(h) ? 'Ya' : 'Tidak',
-      h.accreditation ?? '',
-    ].join(','),
-  );
-  const csv = [headers.join(','), ...lines].join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `rumah-sakit-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click(); URL.revokeObjectURL(url);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-komponen TypeBadge
-// ─────────────────────────────────────────────────────────────────────────────
-
-function TypeBadge({ type }: { type: string }) {
-  const c = TYPE_BADGE_COLORS[type] ?? { bg: '#f5f5f5', color: '#616161' };
-  return (
-    <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-      fontSize: 11, fontWeight: 600, background: c.bg, color: c.color, whiteSpace: 'nowrap',
-    }}>
-      {TYPE_LABEL[type] ?? type}
-    </span>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Panel Detail Rumah Sakit (kanan)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface DetailPanelProps {
-  hospital: HospitalRow | null;
-  onEdit: (h: HospitalRow) => void;
-  onDeactivate: (h: HospitalRow) => void;
-}
-
-function DetailPanel({ hospital, onEdit, onDeactivate }: DetailPanelProps) {
-  if (!hospital) {
-    return (
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        height: '100%', color: 'var(--color-muted)', padding: 40, textAlign: 'center', gap: 12,
-      }}>
-        <div style={{ fontSize: 48, opacity: 0.35 }}>🏥</div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-          Pilih rumah sakit
-        </div>
-        <div style={{ fontSize: 13 }}>Klik salah satu baris untuk melihat detail lengkap.</div>
-      </div>
-    );
-  }
-
-  const h = hospital;
-  const bedPct = h.total_beds > 0
-    ? Math.round((h.available_beds / h.total_beds) * 100)
-    : 0;
-
-  return (
-    <div style={{ padding: '20px 24px', overflowY: 'auto', height: '100%' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 10, background: 'var(--color-accent-light)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, flexShrink: 0,
-          }}>🏥</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3, marginBottom: 6 }}>
-              {h.name}
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <TypeBadge type={h.type} />
-              {isBpjs(h) && (
-                <span style={{
-                  display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                  fontSize: 11, fontWeight: 600,
-                  background: 'var(--color-success-bg)', color: 'var(--color-success)',
-                }}>
-                  ✓ BPJS
-                </span>
-              )}
-              {h.is_emt_partner && (
-                <span style={{
-                  display: 'inline-block', padding: '2px 8px', borderRadius: 999,
-                  fontSize: 11, fontWeight: 600,
-                  background: 'var(--color-warning-bg)', color: 'var(--color-warning)',
-                }}>
-                  🚑 Mitra EMT
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Tombol aksi */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}
-            style={{ flex: 1 }}
-            onClick={() => onEdit(h)}
-          >
-            ✎ Edit RS
-          </button>
-          <button
-            className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`}
-            onClick={() => onDeactivate(h)}
-          >
-            ⊘ Nonaktifkan
-          </button>
-        </div>
-      </div>
-
-      <hr className={styles.divider} />
-
-      {/* Info Grid */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {([
-          ['Kode RS',    h.license_number ?? '—'],
-          ['Alamat',     h.address],
-          ['Kota',       h.city],
-          ['Provinsi',   h.province ?? '—'],
-          ['Telepon',    h.phone ?? '—'],
-          ['IGD',        h.igd_phone ?? '—'],
-          ['Akreditasi', h.accreditation ?? '—'],
-        ] as [string, string][]).map(([label, value]) => (
-          <div key={label} style={{
-            display: 'grid', gridTemplateColumns: '100px 1fr',
-            gap: '6px 12px', padding: '7px 0',
-            borderBottom: '1px solid var(--color-border)',
-          }}>
-            <span style={{ fontSize: 11, color: 'var(--color-muted)', fontWeight: 500 }}>{label}</span>
-            <span style={{ fontSize: 13, wordBreak: 'break-word' }}>{value}</span>
-          </div>
-        ))}
-      </div>
-
-      <hr className={styles.divider} style={{ marginTop: 16 }} />
-
-      {/* Kapasitas — Visualisasi Modern */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Kapasitas Tempat Tidur</div>
-
-        {/* Dual radial progress — Bed + ICU */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          {[
-            {
-              label: 'Tempat Tidur',
-              available: h.available_beds,
-              total: h.total_beds,
-              pct: h.total_beds > 0 ? Math.round((h.available_beds / h.total_beds) * 100) : 0,
-            },
-            {
-              label: 'ICU',
-              available: h.icu_available,
-              total: h.icu_total,
-              pct: h.icu_total > 0 ? Math.round((h.icu_available / h.icu_total) * 100) : 0,
-            },
-          ].map((cap) => {
-            const color = cap.pct > 50 ? '#16a34a' : cap.pct > 20 ? '#d97706' : '#dc2626';
-            const circumference = 2 * Math.PI * 30; // radius 30
-            const strokeDash = (cap.pct / 100) * circumference;
-            return (
-              <div key={cap.label} style={{
-                background: 'var(--color-surface-2)', borderRadius: 10,
-                padding: '14px 12px', border: '1px solid var(--color-border)',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-              }}>
-                {/* SVG Radial Progress */}
-                <div style={{ position: 'relative', width: 72, height: 72 }}>
-                  <svg width="72" height="72" style={{ transform: 'rotate(-90deg)' }}>
-                    {/* Track */}
-                    <circle cx="36" cy="36" r="30" fill="none"
-                      stroke="var(--color-border)" strokeWidth="7" />
-                    {/* Progress */}
-                    <circle cx="36" cy="36" r="30" fill="none"
-                      stroke={color} strokeWidth="7"
-                      strokeDasharray={`${strokeDash} ${circumference}`}
-                      strokeLinecap="round"
-                      style={{ transition: 'stroke-dasharray 0.6s ease' }}
-                    />
-                  </svg>
-                  {/* Center text */}
-                  <div style={{
-                    position: 'absolute', top: '50%', left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    textAlign: 'center',
-                  }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color, lineHeight: 1 }}>{cap.pct}%</div>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: 2 }}>{cap.label}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-                    <span style={{ fontWeight: 700, color }}>{cap.available}</span>
-                    <span> / {cap.total}</span>
-                    <span style={{ display: 'block', fontSize: 10 }}>tersedia</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Progress bar total */}
-        {h.total_beds > 0 && (
-          <div style={{ background: 'var(--color-surface-2)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--color-border)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-muted)', marginBottom: 6 }}>
-              <span style={{ fontWeight: 600 }}>Hunian Keseluruhan</span>
-              <span style={{ fontWeight: 700, color: bedColor(h.available_beds, h.total_beds) }}>
-                {100 - bedPct}% terisi
-              </span>
-            </div>
-            <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 999, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', borderRadius: 999,
-                width: `${bedPct}%`,
-                background: bedColor(h.available_beds, h.total_beds),
-                transition: 'width 0.4s ease',
-              }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--color-muted)', marginTop: 4 }}>
-              <span>{h.available_beds} tersedia</span>
-              <span>{h.total_beds - h.available_beds} terisi</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Spesialisasi */}
-      {h.specializations && h.specializations.length > 0 && (
-        <>
-          <hr className={styles.divider} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Spesialisasi</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {h.specializations.map((spec) => (
-                <span key={spec} style={{
-                  padding: '3px 10px', borderRadius: 999, fontSize: 11,
-                  background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
-                  color: 'var(--color-text-secondary)',
-                }}>
-                  {spec}
-                </span>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Modal Form Rumah Sakit (Add / Edit)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface HospitalFormModalProps {
-  title: string;
-  initial: CreateHospitalForm;
-  onClose: () => void;
-  onSubmit: (form: CreateHospitalForm) => void;
-}
-
-function HospitalFormModal({ title, initial, onClose, onSubmit }: HospitalFormModalProps) {
-  const [form, setForm] = useState<CreateHospitalForm>(initial);
-  const [errors, setErrors] = useState<Partial<Record<keyof CreateHospitalForm, string>>>({});
-
-  const validate = (): boolean => {
-    const errs: Partial<Record<keyof CreateHospitalForm, string>> = {};
-    if (!form.name.trim())    errs.name    = 'Nama RS wajib diisi';
-    if (!form.address.trim()) errs.address = 'Alamat wajib diisi';
-    if (!form.city.trim())    errs.city    = 'Kota wajib diisi';
-    if (!form.type)           errs.type    = 'Tipe RS wajib dipilih';
-    if (!form.kodeRS?.trim()) errs.kodeRS  = 'Kode/Nomor RS wajib diisi (unik)';
-    if (form.totalBeds < 0)   errs.totalBeds = 'Jumlah bed tidak boleh negatif';
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
+function HospitalModal({ initial, editing, onClose, onSave }: {
+  initial: HospitalForm; editing: boolean; onClose: () => void; onSave: (value: HospitalForm) => Promise<void>;
+}) {
+  const [form, setForm] = useState(initial); const [saving, setSaving] = useState(false); const [error, setError] = useState('');
+  const set = <K extends keyof HospitalForm>(key: K, value: HospitalForm[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault(); setError('');
+    const latitude = Number(form.latitude); const longitude = Number(form.longitude);
+    const totalBeds = Number(form.totalBeds); const icuTotal = Number(form.icuTotal);
+    if (!form.name.trim() || !form.address.trim() || !form.city.trim() || !form.province.trim()) return setError('Nama, alamat, kota, dan provinsi wajib diisi.');
+    if (!editing && form.licenseNumber.trim().length < 1) return setError('Nomor izin rumah sakit wajib diisi.');
+    if (form.phone.trim().length < 8) return setError('Nomor telepon minimal 8 karakter.');
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return setError('Latitude harus berada di antara -90 dan 90.');
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return setError('Longitude harus berada di antara -180 dan 180.');
+    if (!Number.isInteger(totalBeds) || totalBeds < 0 || !Number.isInteger(icuTotal) || icuTotal < 0 || icuTotal > totalBeds) return setError('Kapasitas bed tidak valid; ICU tidak boleh melebihi total bed.');
+    setSaving(true); try { await onSave(form); } catch (saveError) { setError(errorMessage(saveError)); } finally { setSaving(false); }
   };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (validate()) onSubmit(form);
-  };
-
-  const set = <K extends keyof CreateHospitalForm>(key: K, val: CreateHospitalForm[K]) =>
-    setForm((prev) => ({ ...prev, [key]: val }));
-
-  const typeOptions = HOSPITAL_TYPES.filter((t) => t.value !== '').map((t) => ({
-    value: t.value as string, label: t.label,
-  }));
-
-  return (
-    <Modal open title={title} onClose={onClose} width={600}>
-      <form onSubmit={handleSubmit} noValidate>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <InputField
-              label="Nama Rumah Sakit" required value={form.name}
-              onChange={(e) => set('name', e.target.value)}
-              error={errors.name} placeholder="Nama lengkap RS"
-            />
-          </div>
-          <SelectField
-            label="Tipe RS" required value={form.type}
-            onChange={(e) => set('type', e.target.value as HospitalType)}
-            options={typeOptions} error={errors.type}
-          />
-          <InputField
-            label="Kode / No. Izin RS" required value={form.kodeRS ?? ''}
-            onChange={(e) => set('kodeRS', e.target.value)}
-            error={errors.kodeRS}
-            placeholder="Contoh: RS-0001-JKT"
-          />
-          <div style={{ gridColumn: '1 / -1' }}>
-            <InputField
-              label="Alamat" required value={form.address}
-              onChange={(e) => set('address', e.target.value)}
-              error={errors.address} placeholder="Alamat lengkap"
-            />
-          </div>
-          <InputField
-            label="Kota" required value={form.city}
-            onChange={(e) => set('city', e.target.value)}
-            error={errors.city} placeholder="Nama kota"
-          />
-          <InputField
-            label="Provinsi" value={form.province ?? ''}
-            onChange={(e) => set('province', e.target.value || undefined)}
-            placeholder="Opsional"
-          />
-          <InputField
-            label="Telepon" type="tel" value={form.phone ?? ''}
-            onChange={(e) => set('phone', e.target.value || undefined)}
-            placeholder="Opsional"
-          />
-          <InputField
-            label="Telepon IGD" type="tel" value={form.igdPhone ?? ''}
-            onChange={(e) => set('igdPhone', e.target.value || undefined)}
-            placeholder="Opsional"
-          />
-          <InputField
-            label="Total Tempat Tidur" type="number" value={String(form.totalBeds)}
-            onChange={(e) => set('totalBeds', Number(e.target.value))}
-            error={errors.totalBeds}
-          />
-          <InputField
-            label="Akreditasi" value={form.accreditation ?? ''}
-            onChange={(e) => set('accreditation', e.target.value || undefined)}
-            placeholder="Opsional (misal: Paripurna)"
-          />
-          <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              id="bpjs-check"
-              className={styles.checkbox}
-              checked={form.isBPJSProvider}
-              onChange={(e) => set('isBPJSProvider', e.target.checked)}
-            />
-            <label htmlFor="bpjs-check" style={{ fontSize: 14, cursor: 'pointer' }}>
-              Menerima BPJS Kesehatan
-            </label>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={onClose}>
-            Batal
-          </button>
-          <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}>
-            Simpan
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
+  return <Modal open title={editing ? 'Edit Rumah Sakit' : 'Tambah Rumah Sakit'} onClose={onClose} width={700}>
+    <form onSubmit={(event) => void submit(event)}>
+      {error && <div className={styles.errorState}>⚠ {error}</div>}
+      <div className={styles.responsiveTwoCol}>
+        <InputField label="Nama Rumah Sakit" required value={form.name} onChange={(event) => set('name', event.target.value)} />
+        <SelectField label="Tipe" required value={form.type} onChange={(event) => set('type', event.target.value as HospitalType)}
+          options={TYPES.map((value) => ({ value, label: TYPE_LABEL[value] }))} />
+        {!editing && <InputField label="Nomor Izin" required value={form.licenseNumber} onChange={(event) => set('licenseNumber', event.target.value)} />}
+        <InputField label="Telepon" required type="tel" value={form.phone} onChange={(event) => set('phone', event.target.value)} />
+        <div style={{ gridColumn: '1 / -1' }}><InputField label="Alamat" required value={form.address} onChange={(event) => set('address', event.target.value)} /></div>
+        <InputField label="Kota" required value={form.city} onChange={(event) => set('city', event.target.value)} />
+        <InputField label="Provinsi" required value={form.province} onChange={(event) => set('province', event.target.value)} />
+        <InputField label="Latitude" required type="number" value={form.latitude} onChange={(event) => set('latitude', event.target.value)} />
+        <InputField label="Longitude" required type="number" value={form.longitude} onChange={(event) => set('longitude', event.target.value)} />
+        <InputField label="Email" type="email" value={form.email} onChange={(event) => set('email', event.target.value)} />
+        <InputField label="Telepon IGD" type="tel" value={form.igdPhone} onChange={(event) => set('igdPhone', event.target.value)} />
+        <InputField label="Total Bed" required type="number" value={form.totalBeds} onChange={(event) => set('totalBeds', event.target.value)} />
+        <InputField label="Total ICU" required type="number" value={form.icuTotal} onChange={(event) => set('icuTotal', event.target.value)} />
+        <div style={{ gridColumn: '1 / -1' }}><InputField label="Spesialisasi (pisahkan dengan koma)" value={form.specializations}
+          onChange={(event) => set('specializations', event.target.value)} placeholder="CARDIOLOGY, INTERNAL_MEDICINE" /></div>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={form.isEmtPartner}
+          onChange={(event) => set('isEmtPartner', event.target.checked)} />Mitra ambulans/EMT</label>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+        <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={onClose}>Batal</button>
+        <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan'}</button>
+      </div>
+    </form>
+  </Modal>;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Komponen Utama HospitalsPage
-// ─────────────────────────────────────────────────────────────────────────────
-
-const EMPTY_FORM: CreateHospitalForm = {
-  name: '', type: 'TYPE_C', address: '', city: '',
-  kodeRS: '', totalBeds: 0, isBPJSProvider: false,
-};
 
 export default function HospitalsPage() {
-  const { showToast } = useToast();
-
-  // ── State data ──
-  const [hospitals, setHospitals]   = useState<HospitalRow[]>([]);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState<string | null>(null);
-  const [total, setTotal]           = useState(0);
-
-  // ── State filter ──
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter,  setTypeFilter]  = useState<HospitalType | ''>('');
-  const [bpjsOnly,    setBpjsOnly]    = useState(false);
-  const [page, setPage]               = useState(1);
-  const LIMIT = 20;
-
-  // ── State UI ──
-  const [selectedHospital,  setSelectedHospital]  = useState<HospitalRow | null>(null);
-  const [showAddModal,      setShowAddModal]       = useState(false);
-  const [editHospital,      setEditHospital]       = useState<HospitalRow | null>(null);
-  const [deactivateTarget,  setDeactivateTarget]   = useState<HospitalRow | null>(null);
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, []);
-
-  // ── Fetch rumah sakit ──
-  const fetchHospitals = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
-      if (searchQuery) params.set('search', searchQuery);
-      if (typeFilter)  params.set('type', typeFilter);
-      const res = await hospitalClient.get(`/v1/hospitals?${params.toString()}`);
-      const body = res.data as { data: HospitalRow[]; meta: { total: number } };
-      let rows = body.data ?? [];
-      // Filter BPJS client-side jika diaktifkan (backend belum support filter ini)
-      if (bpjsOnly) rows = rows.filter((h) => isBpjs(h));
-      setHospitals(rows);
-      setTotal(body.meta?.total ?? 0);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        ?? 'Gagal memuat daftar rumah sakit. Silakan coba lagi.';
-      setError(msg);
-      setHospitals([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, searchQuery, typeFilter, bpjsOnly]);
-
-  useEffect(() => { void fetchHospitals(); }, [fetchHospitals]);
-
-  // ── Debounce search ──
-  const handleSearchChange = (value: string) => {
-    setSearchInput(value);
-    setPage(1);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearchQuery(value), 400);
-  };
-
-  // ── Handler CRUD ──
-  const handleAddSubmit = async (form: CreateHospitalForm) => {
-    setShowAddModal(false);
-    try {
-      await hospitalClient.post('/v1/hospitals', {
-        name:            form.name,
-        type:            form.type,
-        licenseNumber:   form.kodeRS!,
-        address:         form.address,
-        city:            form.city,
-        province:        form.province ?? '-',
-        latitude:        0,
-        longitude:       0,
-        phone:           form.phone ?? '-',
-        igdPhone:        form.igdPhone,
-        totalBeds:       form.totalBeds,
-        icuTotal:        0,
-        specializations: [],
-        isEmtPartner:    false,
-      });
-      showToast('Rumah sakit berhasil ditambahkan', 'success');
-      void fetchHospitals();
-    } catch {
-      showToast('Gagal menambahkan rumah sakit', 'error');
-    }
-  };
-
-  const handleEditSubmit = async (form: CreateHospitalForm) => {
-    if (!editHospital) return;
-    setEditHospital(null);
-    try {
-      await hospitalClient.patch(`/v1/hospitals/${editHospital.id}`, {
-        name:      form.name,
-        type:      form.type,
-        address:   form.address,
-        city:      form.city,
-        province:  form.province,
-        phone:     form.phone,
-        igdPhone:  form.igdPhone,
-        totalBeds: form.totalBeds,
-      });
-      showToast('Data rumah sakit berhasil diperbarui', 'success');
-      setSelectedHospital(null);
-      void fetchHospitals();
-    } catch {
-      showToast('Gagal memperbarui data rumah sakit', 'error');
-    }
-  };
-
-  const handleDeactivate = async () => {
-    if (!deactivateTarget) return;
-    const id = deactivateTarget.id;
-    setDeactivateTarget(null);
-    if (selectedHospital?.id === id) setSelectedHospital(null);
-    try {
-      await hospitalClient.delete(`/v1/hospitals/${id}`);
-      showToast('Rumah sakit berhasil dinonaktifkan', 'success');
-      void fetchHospitals();
-    } catch {
-      showToast('Gagal menonaktifkan rumah sakit', 'error');
-    }
-  };
-
-  // ── Statistik ringkasan ──
-  const totalBeds      = hospitals.reduce((s, h) => s + h.total_beds, 0);
-  const totalAvailable = hospitals.reduce((s, h) => s + h.available_beds, 0);
-  const totalBpjs      = hospitals.filter((h) => isBpjs(h)).length;
-  const totalIcu       = hospitals.reduce((s, h) => s + h.icu_available, 0);
-
-  // ── Paginasi ──
-  const pageCount = Math.max(1, Math.ceil(total / LIMIT));
-
-  const fmtBeds = (available: number, tot: number) =>
-    tot === 0 ? '—' : `${available} / ${tot}`;
-
-  return (
-    <div className={styles.page}>
-      <PageHeader
-        title="Manajemen Rumah Sakit"
-        subtitle={`${total.toLocaleString('id-ID')} rumah sakit terdaftar`}
-        breadcrumbs={[{ label: 'Beranda', to: '/' }, { label: 'Rumah Sakit' }]}
-        actions={
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className={`${styles.btn} ${styles.btnOutline}`}
-              onClick={() => exportCSV(hospitals)}
-              title="Ekspor halaman ini ke CSV"
-            >
-              ⬇ Ekspor CSV
-            </button>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setShowAddModal(true)}>
-              + Tambah RS
-            </button>
-          </div>
-        }
-      />
-
-      {/* ── Stat Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
-        {[
-          { label: 'Total RS',       value: total,         icon: '🏥', color: 'var(--color-primary)' },
-          { label: 'Bed Tersedia',   value: totalAvailable, icon: '🛏',  color: 'var(--color-success, #16a34a)' },
-          { label: 'ICU Tersedia',   value: totalIcu,       icon: '🏨', color: 'var(--color-warning, #d97706)' },
-          { label: 'Terima BPJS',    value: totalBpjs,      icon: '✅', color: 'var(--color-accent)' },
-        ].map((s) => (
-          <div key={s.label} style={{
-            background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-            borderRadius: 10, padding: '14px 16px',
-            borderTop: `3px solid ${s.color}`,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                {loading
-                  ? <Skeleton width={60} height={28} borderRadius={4} />
-                  : <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value.toLocaleString('id-ID')}</div>
-                }
-                <div style={{ fontSize: 12, color: 'var(--color-muted)', marginTop: 4 }}>{s.label}</div>
-              </div>
-              <span style={{ fontSize: 22, opacity: 0.7 }}>{s.icon}</span>
-            </div>
-          </div>
-        ))}
-        {/* Info total bed */}
-        <div style={{
-          background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-          borderRadius: 10, padding: '14px 16px',
-          borderTop: `3px solid var(--color-muted)`,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              {loading
-                ? <Skeleton width={60} height={28} borderRadius={4} />
-                : <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--color-text)' }}>{totalBeds.toLocaleString('id-ID')}</div>
-              }
-              <div style={{ fontSize: 12, color: 'var(--color-muted)', marginTop: 4 }}>Total Kapasitas Bed</div>
-            </div>
-            <span style={{ fontSize: 22, opacity: 0.7 }}>🏗</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Split View Layout ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: selectedHospital ? '1fr 360px' : '1fr',
-        gap: 16, alignItems: 'start',
-        transition: 'grid-template-columns 0.2s ease',
-      }}>
-        {/* ── Panel Kiri: Daftar RS ── */}
-        <div className={styles.card} style={{ marginBottom: 0 }}>
-          {/* Toolbar */}
-          <div className={styles.toolbar}>
-            <div className={styles.toolbarLeft}>
-              <input
-                type="search"
-                className={styles.searchInput}
-                placeholder="Cari nama rumah sakit atau kota..."
-                value={searchInput}
-                onChange={(e) => handleSearchChange(e.target.value)}
-              />
-              <select
-                className={styles.filterSelect}
-                value={typeFilter}
-                onChange={(e) => { setTypeFilter(e.target.value as HospitalType | ''); setPage(1); }}
-              >
-                {HOSPITAL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              {/* Filter BPJS */}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                <input
-                  type="checkbox"
-                  checked={bpjsOnly}
-                  onChange={(e) => { setBpjsOnly(e.target.checked); setPage(1); }}
-                />
-                BPJS saja
-              </label>
-            </div>
-          </div>
-
-          {/* Error State */}
-          {error && (
-            <div className={styles.errorState}>
-              <span className={styles.errorStateIcon}>⚠</span>
-              <span>{error}</span>
-              <button
-                className={`${styles.btn} ${styles.btnSm} ${styles.btnSecondary}`}
-                style={{ marginLeft: 'auto' }}
-                onClick={() => void fetchHospitals()}
-              >
-                Coba Lagi
-              </button>
-            </div>
-          )}
-
-          {/* Tabel */}
-          {!error && (
-            <div className={styles.tableWrapper}>
-              <table className={styles.table} style={{ minWidth: 500 }}>
-                <thead>
-                  <tr>
-                    <th>Nama RS</th>
-                    <th>Tipe</th>
-                    <th>Kota</th>
-                    <th style={{ textAlign: 'center' }}>Bed Tersedia</th>
-                    <th style={{ textAlign: 'center' }}>ICU</th>
-                    <th style={{ textAlign: 'center' }}>BPJS</th>
-                    <th>Akreditasi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i}>
-                        {Array.from({ length: 7 }).map((__, j) => (
-                          <td key={j}>
-                            <Skeleton height={14} width={j === 0 ? '70%' : '55%'} borderRadius={3} />
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : hospitals.length === 0 ? (
-                    <tr>
-                      <td colSpan={7}>
-                        <div className={styles.emptyState}>
-                          <div className={styles.emptyStateIcon}>🏥</div>
-                          <div className={styles.emptyStateTitle}>Tidak ada rumah sakit</div>
-                          <div className={styles.emptyStateDesc}>
-                            {searchInput || typeFilter || bpjsOnly
-                              ? 'Tidak ada RS yang cocok dengan filter.'
-                              : 'Belum ada rumah sakit terdaftar.'}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    hospitals.map((h) => (
-                      <tr
-                        key={h.id}
-                        style={{
-                          cursor: 'pointer',
-                          background: selectedHospital?.id === h.id ? 'var(--color-accent-light)' : undefined,
-                        }}
-                        onClick={() => setSelectedHospital((prev) => prev?.id === h.id ? null : h)}
-                      >
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{h.name}</div>
-                          {h.license_number && (
-                            <div style={{ fontSize: 11, color: 'var(--color-muted)' }}>
-                              <code>{h.license_number}</code>
-                            </div>
-                          )}
-                        </td>
-                        <td><TypeBadge type={h.type} /></td>
-                        <td style={{ fontSize: 13 }}>{h.city}</td>
-                        <td style={{ textAlign: 'center', fontSize: 13 }}>
-                          <span style={{
-                            fontWeight: 600,
-                            color: bedColor(h.available_beds, h.total_beds),
-                          }}>
-                            {fmtBeds(h.available_beds, h.total_beds)}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'center', fontSize: 13 }}>
-                          <span style={{
-                            fontWeight: 600,
-                            color: bedColor(h.icu_available, h.icu_total),
-                          }}>
-                            {h.icu_total > 0 ? `${h.icu_available}/${h.icu_total}` : '—'}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          {isBpjs(h)
-                            ? <span style={{ color: 'var(--color-success, #16a34a)', fontWeight: 700, fontSize: 13 }}>✓</span>
-                            : <span style={{ color: 'var(--color-muted)', fontSize: 13 }}>—</span>
-                          }
-                        </td>
-                        <td style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-                          {h.accreditation ?? '—'}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Paginasi */}
-          {!error && (
-            <div className={styles.pagination}>
-              <span className={styles.paginationInfo}>
-                {total === 0 ? 'Tidak ada data' : `Total: ${total.toLocaleString('id-ID')} RS`}
-              </span>
-              <div className={styles.paginationControls}>
-                <button className={styles.pageBtn} onClick={() => setPage(1)} disabled={page === 1}>«</button>
-                <button className={styles.pageBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>‹</button>
-                <span style={{ padding: '0 10px', fontSize: 13, lineHeight: '32px' }}>
-                  {page} / {pageCount}
-                </span>
-                <button className={styles.pageBtn} onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount}>›</button>
-                <button className={styles.pageBtn} onClick={() => setPage(pageCount)} disabled={page >= pageCount}>»</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Panel Kanan: Detail RS ── */}
-        {selectedHospital && (
-          <div
-            className={styles.card}
-            style={{ marginBottom: 0, padding: 0, minHeight: 500, position: 'sticky', top: 24 }}
-          >
-            <DetailPanel
-              hospital={selectedHospital}
-              onEdit={(h) => setEditHospital(h)}
-              onDeactivate={(h) => setDeactivateTarget(h)}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── Modal Tambah RS ── */}
-      {showAddModal && (
-        <HospitalFormModal
-          title="Tambah Rumah Sakit Baru"
-          initial={EMPTY_FORM}
-          onClose={() => setShowAddModal(false)}
-          onSubmit={handleAddSubmit}
-        />
-      )}
-
-      {/* ── Modal Edit RS ── */}
-      {editHospital && (
-        <HospitalFormModal
-          title={`Edit: ${editHospital.name}`}
-          initial={{
-            name:          editHospital.name,
-            type:          editHospital.type,
-            kodeRS:        editHospital.license_number,
-            address:       editHospital.address,
-            city:          editHospital.city,
-            province:      editHospital.province,
-            phone:         editHospital.phone,
-            igdPhone:      editHospital.igd_phone,
-            totalBeds:     editHospital.total_beds,
-            accreditation: editHospital.accreditation,
-            isBPJSProvider: isBpjs(editHospital),
-          }}
-          onClose={() => setEditHospital(null)}
-          onSubmit={handleEditSubmit}
-        />
-      )}
-
-      {/* ── Konfirmasi Nonaktifkan RS ── */}
-      <ConfirmDialog
-        open={deactivateTarget !== null}
-        title="Nonaktifkan Rumah Sakit"
-        message={`Yakin ingin menonaktifkan "${deactivateTarget?.name ?? ''}"? RS tidak akan muncul di pencarian publik. Data tetap tersimpan dan dapat diaktifkan kembali oleh administrator database.`}
-        confirmLabel="Nonaktifkan"
-        danger
-        onConfirm={handleDeactivate}
-        onCancel={() => setDeactivateTarget(null)}
-      />
+  const { showToast } = useToast(); const [rows, setRows] = useState<HospitalRow[]>([]); const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(''); const [type, setType] = useState<HospitalType | ''>(''); const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<HospitalRow | null>(null); const [deactivating, setDeactivating] = useState<HospitalRow | null>(null);
+  const limit = 20;
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try { const params = new URLSearchParams({ page: String(page), limit: String(limit) }); if (search.trim()) params.set('search', search.trim()); if (type) params.set('type', type);
+      const response = await hospitalClient.get<{ data: HospitalRow[]; meta: { total: number } }>(`/v1/hospitals?${params}`);
+      setRows(response.data.data ?? []); setTotal(response.data.meta?.total ?? 0);
+    } catch (loadError) { setRows([]); setError(errorMessage(loadError)); } finally { setLoading(false); }
+  }, [page, search, type]);
+  useEffect(() => { const timer = window.setTimeout(() => void load(), 300); return () => window.clearTimeout(timer); }, [load]);
+  const payload = (form: HospitalForm) => ({ name: form.name.trim(), type: form.type, address: form.address.trim(), city: form.city.trim(), province: form.province.trim(),
+    phone: form.phone.trim(), email: form.email.trim() || undefined, igdPhone: form.igdPhone.trim() || undefined, latitude: Number(form.latitude), longitude: Number(form.longitude),
+    totalBeds: Number(form.totalBeds), icuTotal: Number(form.icuTotal), specializations: form.specializations.split(',').map((value) => value.trim()).filter(Boolean), isEmtPartner: form.isEmtPartner });
+  const saveNew = async (form: HospitalForm) => { await hospitalClient.post('/v1/hospitals', { ...payload(form), licenseNumber: form.licenseNumber.trim() }); setAdding(false); showToast('Rumah sakit berhasil ditambahkan', 'success'); await load(); };
+  const saveEdit = async (form: HospitalForm) => { if (!editing) return; await hospitalClient.patch(`/v1/hospitals/${editing.id}`, payload(form)); setEditing(null); showToast('Rumah sakit berhasil diperbarui', 'success'); await load(); };
+  const deactivate = async () => { if (!deactivating) return; try { await hospitalClient.delete(`/v1/hospitals/${deactivating.id}`); showToast('Rumah sakit dinonaktifkan', 'success'); setDeactivating(null); await load(); } catch (failure) { showToast(errorMessage(failure), 'error'); } };
+  const editForm = editing ? { name: editing.name, type: editing.type, licenseNumber: '', address: editing.address, city: editing.city, province: editing.province,
+    phone: editing.phone ?? '', email: editing.email ?? '', igdPhone: editing.igd_phone ?? '', latitude: String(editing.latitude), longitude: String(editing.longitude),
+    totalBeds: String(editing.total_beds), icuTotal: String(editing.icu_total), specializations: editing.specializations?.join(', ') ?? '', isEmtPartner: editing.is_emt_partner } : EMPTY;
+  const pages = Math.max(1, Math.ceil(total / limit));
+  return <div className={styles.page}>
+    <PageHeader title="Manajemen Rumah Sakit" subtitle={`${total.toLocaleString('id-ID')} rumah sakit aktif`}
+      breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Rumah Sakit' }]}
+      actions={<div style={{ display: 'flex', gap: 8 }}><button className={`${styles.btn} ${styles.btnOutline}`} onClick={() => exportCsv(rows)} disabled={!rows.length}>⬇ CSV halaman ini</button>
+        <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => setAdding(true)}>+ Tambah RS</button></div>} />
+    <div className={styles.card}><div className={styles.toolbar}><div className={styles.toolbarLeft}>
+      <input className={styles.searchInput} value={search} placeholder="Cari nama atau kota" onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
+      <select className={styles.filterSelect} value={type} onChange={(event) => { setType(event.target.value as HospitalType | ''); setPage(1); }}><option value="">Semua tipe</option>
+        {TYPES.map((value) => <option key={value} value={value}>{TYPE_LABEL[value]}</option>)}</select></div></div></div>
+    <div className={styles.card} style={{ padding: 0 }}>{loading ? <div style={{ padding: 16 }}>{Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} height={44} style={{ marginBottom: 6 }} />)}</div>
+      : error ? <div className={styles.errorState}>⚠ {error}<button className={`${styles.btn} ${styles.btnSm}`} onClick={() => void load()}>Coba Lagi</button></div>
+      : <div className={styles.tableWrapper}><table className={styles.table}><thead><tr><th>Nama</th><th>Tipe</th><th>Lokasi</th><th>Bed</th><th>ICU</th><th>Telepon</th><th>Aksi</th></tr></thead>
+        <tbody>{rows.map((row) => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{TYPE_LABEL[row.type]}</td><td>{row.city}, {row.province}</td>
+          <td>{row.available_beds}/{row.total_beds}</td><td>{row.icu_available}/{row.icu_total}</td><td>{row.phone ?? '—'}</td><td><div style={{ display: 'flex', gap: 6 }}>
+            <button className={`${styles.btn} ${styles.btnSm} ${styles.btnOutline}`} onClick={() => setEditing(row)}>Edit</button>
+            <button className={`${styles.btn} ${styles.btnSm} ${styles.btnDangerOutline}`} onClick={() => setDeactivating(row)}>Nonaktifkan</button></div></td></tr>)}</tbody></table></div>}
+      {pages > 1 && <div className={styles.pagination}><span className={styles.paginationInfo}>{page} / {pages}</span><div className={styles.paginationControls}>
+        <button className={styles.pageBtn} disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>‹</button><button className={styles.pageBtn} disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>›</button></div></div>}
     </div>
-  );
+    {adding && <HospitalModal initial={EMPTY} editing={false} onClose={() => setAdding(false)} onSave={saveNew} />}
+    {editing && <HospitalModal initial={editForm} editing onClose={() => setEditing(null)} onSave={saveEdit} />}
+    <ConfirmDialog open={Boolean(deactivating)} title="Nonaktifkan Rumah Sakit" message={`Nonaktifkan ${deactivating?.name ?? ''}?`}
+      confirmLabel="Nonaktifkan" danger onConfirm={() => void deactivate()} onCancel={() => setDeactivating(null)} />
+  </div>;
 }

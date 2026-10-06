@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://healthsync.id/contracts/app-compatibility.v1.json",
+  "title": "HealthSync Cross-App Compatibility Contract",
+  "version": 1,
+  "apps": ["admin", "command-center", "mobile-patient", "mobile-pharmacy", "mobile-driver", "mobile-ambulance"],
+  "sharedContracts": [
+    { "id": "auth.v1", "purpose": "identity, role, facility scope" },
+    { "id": "event-envelope.v1", "purpose": "correlated operational events" },
+    { "id": "communication.v1", "purpose": "chat, call signalling, target availability" },
+    { "id": "ambulance.v1", "purpose": "dispatch, assignment, GPS, task state" },
+    { "id": "hospital-capacity.v1", "purpose": "capacity, resource hold, referral, blood request" },
+    { "id": "pharmacy.v1", "purpose": "prescription, inventory, fulfillment, delivery" }
+  ],
+  "requiredChannels": ["api", "realtime", "audit"],
+  "releaseGate": ["contract validation", "typecheck", "build", "authorization tests", "browser E2E"]
+}

@@ -18,6 +18,25 @@ interface ServiceHealth {
   uptimeClass: string;
 }
 
+interface HealthResponse {
+  status?: string;
+  db?: boolean;
+  redis?: boolean;
+}
+
+function makeTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(timeoutMs);
+  const controller = new AbortController();
+  window.setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
+function isHealthyResponse(payload: HealthResponse): boolean {
+  const dbHealthy = payload.db ?? true;
+  const redisHealthy = payload.redis ?? true;
+  return payload.status !== 'degraded' && payload.status !== 'error' && dbHealthy && redisHealthy;
+}
+
 const SERVICES_DEF: Omit<ServiceHealth, 'status' | 'lastChecked'>[] = [
   { name: 'auth-service',         displayName: 'Auth Service',         port: 3001, url: '/health/auth',         uptimeClass: 'Core' },
   { name: 'patient-service',      displayName: 'Patient Service',      port: 3002, url: '/health/patient',      uptimeClass: 'Core' },
@@ -56,9 +75,14 @@ export default function HealthCheckPage() {
       SERVICES_DEF.map(async (svc) => {
         const start = Date.now();
         try {
-          const res = await fetch(svc.url, { signal: AbortSignal.timeout(5000) });
+          const res = await fetch(svc.url, { signal: makeTimeoutSignal(5000) });
           const lat = Date.now() - start;
           if (!res.ok) return { ...svc, status: 'OFFLINE' as const, lastChecked: new Date() };
+          const contentType = res.headers.get('content-type') ?? '';
+          const payload = contentType.includes('application/json')
+            ? await res.json() as HealthResponse
+            : {};
+          if (!isHealthyResponse(payload)) return { ...svc, status: 'OFFLINE' as const, lastChecked: new Date() };
           return { ...svc, status: 'ONLINE' as const, latency: lat, lastChecked: new Date() };
         } catch {
           return { ...svc, status: 'OFFLINE' as const, lastChecked: new Date() };

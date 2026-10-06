@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: realtime-service-config
+  namespace: healthsync
+data:
+  NODE_ENV: "production"
+  PORT: "3011"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-service
+  namespace: healthsync
+  labels:
+    app: realtime-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: realtime-service
+  template:
+    metadata:
+      labels:
+        app: realtime-service
+        version: v1
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: realtime-service
+          image: ghcr.io/healthsync-indonesia/realtime-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3011
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: realtime-service-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: jwt-secret
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: healthsync-secrets
+                  key: redis-url
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3011
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3011
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtime-service
+  namespace: healthsync
+  labels:
+    app: realtime-service
+spec:
+  selector:
+    app: realtime-service
+  ports:
+    - name: ws
+      port: 3011
+      targetPort: 3011
+      protocol: TCP
+  type: ClusterIP

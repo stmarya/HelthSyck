@@ -54,3 +54,37 @@
   flex: 1;
   overflow: auto;
 }
+
+
+.appShell {
+  background: var(--color-bg);
+}
+
+.navbar {
+  background: linear-gradient(180deg, #211b2a 0%, #1d1925 100%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.navbarTop,
+.navbarBottom {
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.navbarTop {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.navbarBottom {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 760px) {
+  .navbarTop {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}

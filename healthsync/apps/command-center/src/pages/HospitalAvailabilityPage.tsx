@@ -340,7 +340,7 @@ export default function HospitalAvailabilityPage() {
 
   // State RS: clone dari SEED agar tidak mutasi data asli
   const [rumahSakitList, setRumahSakitList] = useState<RumahSakit[]>(() =>
-    SEED_RUMAH_SAKIT.map((rs) => ({
+    (simulationEngine.getState().rumahSakit.length > 0 ? simulationEngine.getState().rumahSakit : SEED_RUMAH_SAKIT).map((rs) => ({
       ...rs,
       koordinat: { ...rs.koordinat },
       kapasitas: {
@@ -411,7 +411,12 @@ export default function HospitalAvailabilityPage() {
 
   const handleKonfirmasiRujukan = useCallback(() => {
     if (!modalRujukan) return;
-    toast.success(`Permintaan rujukan ke ${modalRujukan.rs.nama} berhasil dikirim`, 'Rujukan Terkirim');
+    const patient = simulationEngine.getState().pasien.find((item) => item.nama.toLowerCase() === modalRujukan.namaPasien.trim().toLowerCase()) ?? simulationEngine.getState().pasien[0];
+    const referral = patient
+      ? simulationEngine.requestReferral(patient.id, modalRujukan.rs.id, modalRujukan.tipeRuang, modalRujukan.keterangan || 'Permintaan rujukan dari operator')
+      : null;
+    if (referral) toast.success(`Permintaan ${referral.id} ke ${modalRujukan.rs.nama} berhasil dibuat`, 'Rujukan Terkirim');
+    else toast.error('Rujukan tidak dapat dibuat. Periksa pasien dan koneksi simulator.', 'Rujukan Gagal');
     setModalRujukan(null);
   }, [modalRujukan, toast]);
 
@@ -423,17 +428,10 @@ export default function HospitalAvailabilityPage() {
 
   const handleKirimDarah = useCallback(() => {
     if (!modalDarah) return;
-    if (modalDarah.urgency === 'Kritis') {
-      toast.warning(
-        `Request darah ${modalDarah.golongan} (${modalDarah.jumlah} kantong) ke ${modalDarah.rs.nama} — KRITIS, sedang diproses prioritas tinggi`,
-        'Request Darah Kritis',
-      );
-    } else {
-      toast.success(
-        `Request darah ${modalDarah.golongan} (${modalDarah.jumlah} kantong) ke ${modalDarah.rs.nama} berhasil dikirim`,
-        'Request Darah Terkirim',
-      );
-    }
+    const request = simulationEngine.requestBlood(modalDarah.rs.id, modalDarah.golongan, modalDarah.jumlah, modalDarah.urgency);
+    if (!request) toast.error('Request darah tidak dapat dibuat.', 'Request Darah Gagal');
+    else if (request.urgency === 'Kritis') toast.warning(`Request ${request.id} untuk ${request.bloodType} (${request.units} kantong) diprioritaskan`, 'Request Darah Kritis');
+    else toast.success(`Request ${request.id} berhasil dikirim ke ${modalDarah.rs.nama}`, 'Request Darah Terkirim');
     setModalDarah(null);
   }, [modalDarah, toast]);
 

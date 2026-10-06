@@ -50,6 +50,24 @@ const SERVICE_LIST: [string, string][] = [
   ['Alert',        '/health/alert'],
 ];
 
+async function checkServiceHealth(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 3000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    const body = (await response.clone().json().catch(() => null)) as
+      | { status?: string; db?: boolean; redis?: boolean; kafka?: boolean; mqtt?: boolean }
+      | null;
+    const dependencyFlags = [body?.db, body?.redis, body?.kafka, body?.mqtt];
+    const dependenciesHealthy = dependencyFlags.every((value) => value === undefined || value === true);
+    return response.ok && body?.status !== 'error' && dependenciesHealthy;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Komponen Tooltip Kustom
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,7 +235,7 @@ export default function OverviewPage() {
   const activeAmbs = ambulances.filter((a) => activeStatuses.includes(a.status)).length;
 
   // ── Agregasi Rujukan ──
-  const pendingReferrals = referrals.filter((r) => r.status === 'PENDING').length;
+  const pendingReferrals = referrals.filter((r) => r.status === 'SENT').length;
   const inTransitReferrals = referrals.filter((r) => r.status === 'IN_TRANSIT').length;
   const criticalReferrals = referrals.filter(
     (r) => r.urgency_level === 'CRITICAL' || r.urgency_level === 'EMERGENCY',
@@ -240,7 +258,7 @@ export default function OverviewPage() {
 
   // ── Data grafik batang: urgency rujukan ──
   const referralUrgencyData = [
-    { name: 'Rutin', value: referrals.filter((r) => r.urgency_level === 'ROUTINE').length, color: '#6b7280' },
+    { name: 'Normal', value: referrals.filter((r) => r.urgency_level === 'NORMAL').length, color: '#6b7280' },
     { name: 'Mendesak', value: referrals.filter((r) => r.urgency_level === 'URGENT').length, color: '#f59e0b' },
     { name: 'Kritis', value: referrals.filter((r) => r.urgency_level === 'CRITICAL').length, color: '#ef4444' },
     { name: 'Darurat', value: referrals.filter((r) => r.urgency_level === 'EMERGENCY').length, color: '#7c2d12' },
@@ -251,9 +269,7 @@ export default function OverviewPage() {
     const checkHealth = () => {
       Promise.allSettled(
         SERVICE_LIST.map(([name, url]) =>
-          fetch(url, { signal: AbortSignal.timeout(3000) })
-            .then((r) => [name, r.ok] as [string, boolean])
-            .catch(() => [name, false] as [string, boolean]),
+          checkServiceHealth(url).then((healthy) => [name, healthy] as [string, boolean]),
         ),
       ).then((results) => {
         const health: Record<string, boolean> = {};
@@ -598,7 +614,7 @@ export default function OverviewPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {[
               { label: 'Total Pasien', value: patients.length > 0 ? patients.length : '—', color: 'var(--color-primary)' },
-              { label: 'Rujukan Aktif', value: referrals.filter(r => !['COMPLETED','CANCELLED'].includes(r.status)).length, color: 'var(--color-warning)' },
+              { label: 'Rujukan Aktif', value: referrals.filter(r => !['REJECTED','ARRIVED','CANCELLED'].includes(r.status)).length, color: 'var(--color-warning)' },
               { label: 'Konsultasi Selesai', value: consultations.filter(c => c.status === 'COMPLETED').length, color: 'var(--color-success)' },
               { label: 'RS Mitra EMT', value: hospitals.filter(h => h.is_emt_partner).length, color: '#7c3aed' },
             ].map(({ label, value, color }) => (

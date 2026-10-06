@@ -15,21 +15,25 @@ import styles from './Page.module.css';
 const STATUS_OPTIONS: { value: ConsultationStatus | ''; label: string }[] = [
   { value: '',            label: 'Semua Status' },
   { value: 'PENDING',     label: 'Menunggu' },
+  { value: 'ACCEPTED',    label: 'Diterima' },
   { value: 'IN_PROGRESS', label: 'Berlangsung' },
   { value: 'COMPLETED',   label: 'Selesai' },
   { value: 'CANCELLED',   label: 'Dibatalkan' },
+  { value: 'EXPIRED',     label: 'Kedaluwarsa' },
 ];
 
 const STATUS_STYLE: Record<ConsultationStatus, { bg: string; color: string }> = {
   PENDING:     { bg: 'var(--color-warning-bg)',  color: 'var(--color-warning)' },
+  ACCEPTED:    { bg: '#ecfeff',                  color: '#0f766e' },
   IN_PROGRESS: { bg: 'var(--color-info-bg)',     color: 'var(--color-primary)' },
   COMPLETED:   { bg: 'var(--color-success-bg)',  color: 'var(--color-success)' },
   CANCELLED:   { bg: 'var(--color-danger-bg)',   color: 'var(--color-danger)' },
+  EXPIRED:     { bg: 'var(--color-surface-2)',   color: 'var(--color-muted)' },
 };
 
 const STATUS_LABEL: Record<ConsultationStatus, string> = {
-  PENDING: 'Menunggu', IN_PROGRESS: 'Berlangsung',
-  COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan',
+  PENDING: 'Menunggu', ACCEPTED: 'Diterima', IN_PROGRESS: 'Berlangsung',
+  COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan', EXPIRED: 'Kedaluwarsa',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,25 +101,14 @@ export default function ConsultationsPage({
         limit: String(limit),
       });
       if (status) params.set('status', status);
+      if (search.trim()) params.set('search', search.trim());
 
       const res = await consultationClient.get<{
         data: ConsultationRow[];
         meta: PaginationMeta;
       }>(`/v1/consultations?${params.toString()}`);
 
-      let data = res.data.data ?? [];
-
-      // Filter client-side untuk search (patient_name / doctor_email)
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        data = data.filter(
-          (r) =>
-            (r.patient_name ?? '').toLowerCase().includes(q) ||
-            (r.doctor_email ?? '').toLowerCase().includes(q),
-        );
-      }
-
-      setRows(data);
+      setRows(res.data.data ?? []);
       setMeta(res.data.meta ?? null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Gagal memuat konsultasi';

@@ -1,0 +1,199 @@
+# Public Command Center host. Replace command.healthsync.id with the approved DNS name before apply.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: command-center-web-ingress
+  namespace: healthsync
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - command.healthsync.id
+      secretName: command-center-tls
+  rules:
+    - host: command.healthsync.id
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: realtime-service
+                port:
+                  number: 3011
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: command-center
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: command-center-api-ingress
+  namespace: healthsync
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - command.healthsync.id
+      secretName: command-center-tls
+  rules:
+    - host: command.healthsync.id
+      http:
+        paths:
+          - path: /v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 3001
+          - path: /v1/patients
+            pathType: Prefix
+            backend:
+              service:
+                name: patient-service
+                port:
+                  number: 3002
+          - path: /v1/consultations
+            pathType: Prefix
+            backend:
+              service:
+                name: consultation-service
+                port:
+                  number: 3003
+          - path: /v1/prescriptions
+            pathType: Prefix
+            backend:
+              service:
+                name: prescription-service
+                port:
+                  number: 3004
+          - path: /v1/ambulances
+            pathType: Prefix
+            backend:
+              service:
+                name: ambulance-service
+                port:
+                  number: 3005
+          - path: /v1/referrals
+            pathType: Prefix
+            backend:
+              service:
+                name: referral-service
+                port:
+                  number: 3006
+          - path: /v1/hospitals
+            pathType: Prefix
+            backend:
+              service:
+                name: hospital-service
+                port:
+                  number: 3007
+          - path: /v1/doctors
+            pathType: Prefix
+            backend:
+              service:
+                name: hospital-service
+                port:
+                  number: 3007
+          - path: /v1/pharmacies
+            pathType: Prefix
+            backend:
+              service:
+                name: pharmacy-service
+                port:
+                  number: 3008
+          - path: /v1/drugs
+            pathType: Prefix
+            backend:
+              service:
+                name: pharmacy-service
+                port:
+                  number: 3008
+          - path: /v1/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 3009
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: command-center-health-ingress
+  namespace: healthsync
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rewrite-target: /health
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - command.healthsync.id
+      secretName: command-center-tls
+  rules:
+    - host: command.healthsync.id
+      http:
+        paths:
+          - path: /health/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 3001
+          - path: /health/patient
+            pathType: Prefix
+            backend:
+              service:
+                name: patient-service
+                port:
+                  number: 3002
+          - path: /health/consultation
+            pathType: Prefix
+            backend:
+              service:
+                name: consultation-service
+                port:
+                  number: 3003
+          - path: /health/ambulance
+            pathType: Prefix
+            backend:
+              service:
+                name: ambulance-service
+                port:
+                  number: 3005
+          - path: /health/hospital
+            pathType: Prefix
+            backend:
+              service:
+                name: hospital-service
+                port:
+                  number: 3007
+          - path: /health/pharmacy
+            pathType: Prefix
+            backend:
+              service:
+                name: pharmacy-service
+                port:
+                  number: 3008
+          - path: /health/realtime
+            pathType: Prefix
+            backend:
+              service:
+                name: realtime-service
+                port:
+                  number: 3011

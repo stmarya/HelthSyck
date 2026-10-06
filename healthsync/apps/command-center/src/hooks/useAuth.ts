@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { authClient } from '../api/client';
 
+const ACCESS_DENIED_MESSAGE = 'Akses ditolak. Akun ini tidak memiliki izin untuk Command Center.';
+
 interface User {
   userId: string;
   email: string;
@@ -29,8 +31,8 @@ export function useAuth() {
 
       // Validasi role: hanya COMMAND_CENTER dan ADMIN yang boleh masuk
       if (role !== 'COMMAND_CENTER' && role !== 'ADMIN') {
-        setError('Akses ditolak. Akun ini tidak memiliki izin untuk Command Center.');
-        throw new Error('Forbidden role');
+        setError(ACCESS_DENIED_MESSAGE);
+        throw new Error(ACCESS_DENIED_MESSAGE);
       }
 
       localStorage.setItem('hs_access_token', accessToken);
@@ -41,8 +43,10 @@ export function useAuth() {
       return userData;
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
-      // Jangan timpa pesan "Akses ditolak" yang sudah di-set di atas
-      if (!error) {
+      // React state update asynchronous; closure `error` bisa masih null.
+      if (err instanceof Error && err.message === ACCESS_DENIED_MESSAGE) {
+        setError(ACCESS_DENIED_MESSAGE);
+      } else {
         const msg = axiosErr.response?.data?.detail ?? 'Login gagal';
         setError(msg);
       }
@@ -50,7 +54,7 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
-  }, [error]);
+  }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('hs_access_token');

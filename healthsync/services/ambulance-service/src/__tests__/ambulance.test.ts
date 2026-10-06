@@ -41,6 +41,7 @@ jest.mock('ioredis', () =>
     on: jest.fn(),
     connect: jest.fn().mockResolvedValue(undefined),
     quit: jest.fn().mockResolvedValue(undefined),
+    ping: jest.fn().mockResolvedValue('PONG'),
     geoadd: jest.fn().mockResolvedValue(1),
     geodist: jest.fn().mockResolvedValue('500'),
     setex: jest.fn().mockResolvedValue('OK'),

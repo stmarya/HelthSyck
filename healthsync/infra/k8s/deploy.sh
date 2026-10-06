@@ -21,6 +21,9 @@ MANIFESTS=(
   "pharmacy-service.yaml"
   "notification-service.yaml"
   "integration-service.yaml"
+  "realtime-service.yaml"
+  "command-center.yaml"
+  "command-center-ingress.yaml"
   "iot-ingestion.yaml"
   "alert-service.yaml"
   "hpa.yaml"
@@ -45,7 +48,8 @@ if [[ "$ACTION" == "apply" ]]; then
   DEPLOYMENTS=(
     auth-service patient-service consultation-service prescription-service
     ambulance-service referral-service hospital-service pharmacy-service
-    notification-service integration-service iot-ingestion alert-service
+    notification-service integration-service realtime-service command-center
+    iot-ingestion alert-service
   )
   for dep in "${DEPLOYMENTS[@]}"; do
     kubectl rollout status deployment/"$dep" -n "$NAMESPACE" --timeout=120s || true

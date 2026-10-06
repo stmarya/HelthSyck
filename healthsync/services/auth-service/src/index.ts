@@ -105,6 +105,14 @@ const VerifyOtpSchema = z.object({
   purpose: z.enum(['PHONE_VERIFY', 'PASSWORD_RESET']),
 });
 
+const AdminCreateUserSchema = RegisterSchema.omit({ name: true }).extend({
+  role: z.enum(['PATIENT', 'DOCTOR', 'COMMAND_CENTER', 'PHARMACIST', 'AMBULANCE_DRIVER', 'ADMIN']),
+});
+
+const AdminUpdateUserSchema = z.object({
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_VERIFICATION']),
+});
+
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
@@ -167,6 +175,28 @@ async function writeAuditLog(
     // Audit log failures must not break the main flow
     console.error(`[${SERVICE_NAME}] Audit log write failed:`, err);
   }
+}
+
+function createRateLimitMiddleware(keyPrefix: string, maxRequests: number, windowSeconds: number) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const actor = (req as AuthRequest).user?.sub ?? req.ip ?? 'anonymous';
+      const key = `rate_limit:${keyPrefix}:${actor}`;
+      const redis = getRedis();
+      const current = await redis.incr(key);
+      if (current === 1) {
+        await redis.expire(key, windowSeconds);
+      }
+
+      if (current > maxRequests) {
+        res.status(429).json(buildProblem(429, 'Too Many Requests', 'Too many requests. Please try again later.', req.path));
+        return;
+      }
+      next();
+    } catch {
+      next();
+    }
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -358,7 +388,14 @@ app.get('/health', async (_req: Request, res: Response) => {
     await getRedis().ping();
     redisOk = true;
   } catch { /* intentionally swallowed */ }
-  res.json({ status: 'ok', service: SERVICE_NAME, db: dbOk, redis: redisOk, timestamp: new Date().toISOString() });
+  const healthy = dbOk && redisOk;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    service: SERVICE_NAME,
+    db: dbOk,
+    redis: redisOk,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -402,7 +439,7 @@ app.post('/v1/auth/register', async (req: Request, res: Response, next: NextFunc
 
     const { accessToken, refreshToken, tokenHash } = issueTokens(user.id, user.role);
     await storeRefreshToken(user.id, user.role, tokenHash);
-    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req, { method: 'register' });
+    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req, { method: 'register', status: 'SUCCESS' });
 
     res.status(201).json({
       data: { userId: user.id, email: user.email, name, role: user.role, accessToken, refreshToken },
@@ -456,7 +493,7 @@ app.post('/v1/auth/login', async (req: Request, res: Response, next: NextFunctio
         .incr(failKey)
         .expire(failKey, 15 * 60)
         .exec();
-      await writeAuditLog(user.id, 'LOGIN_FAIL', req);
+      await writeAuditLog(user.id, 'LOGIN_FAIL', req, { status: 'FAILURE' });
       res.status(401).json(buildProblem(401, 'Unauthorized', 'Invalid email or password', req.path));
       return;
     }
@@ -470,7 +507,7 @@ app.post('/v1/auth/login', async (req: Request, res: Response, next: NextFunctio
     // Update last_login_at
     await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
-    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req);
+    await writeAuditLog(user.id, 'LOGIN_SUCCESS', req, { status: 'SUCCESS' });
 
     res.json({
       data: { userId: user.id, email: user.email, role: user.role, accessToken, refreshToken },
@@ -510,7 +547,7 @@ app.post('/v1/auth/refresh', async (req: Request, res: Response, next: NextFunct
     const { accessToken: newAccessToken, refreshToken: newRefreshToken, tokenHash: newHash } = issueTokens(userId, role);
     await storeRefreshToken(userId, role, newHash);
 
-    await writeAuditLog(userId, 'TOKEN_REFRESH', req);
+    await writeAuditLog(userId, 'TOKEN_REFRESH', req, { status: 'SUCCESS' });
 
     res.json({
       data: { accessToken: newAccessToken, refreshToken: newRefreshToken },
@@ -534,7 +571,7 @@ app.post('/v1/auth/logout', authenticate, async (req: Request, res: Response, ne
       await getRedis().del(`refresh:${hash}`);
     }
 
-    await writeAuditLog(user.sub, 'LOGOUT', req);
+    await writeAuditLog(user.sub, 'LOGOUT', req, { status: 'SUCCESS' });
 
     res.json({ data: { message: 'Logged out successfully' }, meta: { timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -623,7 +660,7 @@ app.post('/v1/auth/change-password', authenticate, async (req: Request, res: Res
       await redis.del(`refresh:${hashToken(refreshToken)}`);
     }
 
-    await writeAuditLog(sub, 'PASSWORD_CHANGE', req);
+    await writeAuditLog(sub, 'PASSWORD_CHANGE', req, { status: 'SUCCESS' });
 
     res.json({ data: { message: 'Password changed successfully' }, meta: { timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -721,7 +758,7 @@ app.post('/v1/auth/otp/verify', async (req: Request, res: Response, next: NextFu
       await pool.query('UPDATE users SET phone_verified = TRUE WHERE id = $1', [userId]);
     }
 
-    await writeAuditLog(userId, 'OTP_VERIFIED', req, { purpose });
+    await writeAuditLog(userId, 'OTP_VERIFIED', req, { purpose, status: 'SUCCESS' });
 
     res.json({ data: { verified: true }, meta: { timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -748,12 +785,13 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
 // GET /v1/auth/admin/users — paginated user list for Admin Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
+app.get('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-users-read', 120, 60), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const page  = Math.max(1, parseInt(String(req.query['page']  ?? '1'),  10));
+    const page  = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10));
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '20'), 10)));
     const q     = (req.query['q']    as string | undefined)?.trim() ?? '';
     const role  = (req.query['role'] as string | undefined)?.trim() ?? '';
+    const status = (req.query['status'] as string | undefined)?.trim() ?? '';
     const offset = (page - 1) * limit;
 
     const conditions: string[] = [];
@@ -767,6 +805,10 @@ app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response
     if (role) {
       params.push(role);
       conditions.push(`u.role = $${params.length}::user_role`);
+    }
+    if (status) {
+      params.push(status);
+      conditions.push(`u.status = $${params.length}::user_status`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -784,9 +826,11 @@ app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response
     const dataParams = [...params, limit, offset];
     const dataRes = await getPool().query<{
       id: string; email: string; phone: string | null; role: string;
-      status: string; created_at: string; name: string | null;
+      status: string; created_at: string; name: string | null; last_login_at: string | null;
+      email_verified: boolean; phone_verified: boolean;
     }>(
       `SELECT u.id, u.email, u.phone, u.role, u.status, u.created_at,
+              u.last_login_at, u.email_verified, u.phone_verified,
               COALESCE(
                 p.name,
                 INITCAP(REPLACE(SPLIT_PART(u.email, '@', 1), '.', ' '))
@@ -808,10 +852,269 @@ app.get('/v1/auth/admin/users', requireAdmin, async (req: Request, res: Response
         status:    u.status,
         name:      u.name ?? u.email,
         createdAt: u.created_at,
+        lastLoginAt: u.last_login_at,
+        emailVerified: u.email_verified,
+        phoneVerified: u.phone_verified,
       })),
       meta: {
         page, limit, total,
         totalPages: Math.ceil(total / limit),
+        timestamp: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /v1/auth/admin/users — create user from Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post('/v1/auth/admin/users', requireAdmin, createRateLimitMiddleware('admin-users-create', 20, 60), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = AdminCreateUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
+      return;
+    }
+
+    const { email, password, role, phone } = parsed.data;
+    const adminUser = (req as AuthRequest).user;
+    const pool = getPool();
+
+    const existing = await pool.query<{ id: string }>(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      [email],
+    );
+    if (existing.rowCount && existing.rowCount > 0) {
+      res.status(409).json(buildProblem(409, 'Conflict', 'Email already registered', req.path));
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const userId = crypto.randomUUID();
+    const inserted = await pool.query<{
+      id: string; email: string; phone: string | null; role: string; status: string; created_at: string;
+    }>(
+      `INSERT INTO users (id, email, phone, password_hash, role, status)
+       VALUES ($1, $2, $3, $4, $5::user_role, 'ACTIVE')
+       RETURNING id, email, phone, role, status, created_at`,
+      [userId, email, phone ?? null, passwordHash, role],
+    );
+
+    const user = inserted.rows[0];
+    if (!user) throw new Error('Insert failed unexpectedly');
+
+    await writeAuditLog(adminUser.sub, 'ADMIN_USER_CREATE', req, {
+      targetUserId: user.id,
+      targetEmail: user.email,
+      targetRole: user.role,
+      status: 'SUCCESS',
+    });
+
+    res.status(201).json({
+      data: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        createdAt: user.created_at,
+      },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /v1/auth/admin/users/:id — update status safely from Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.patch('/v1/auth/admin/users/:id', requireAdmin, createRateLimitMiddleware('admin-users-update', 30, 60), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = AdminUpdateUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(422).json(buildProblem(422, 'Validation Error', parsed.error.issues[0]?.message ?? 'Invalid input', req.path));
+      return;
+    }
+
+    const { id } = req.params;
+    if (!id || !z.string().uuid().safeParse(id).success) {
+      res.status(422).json(buildProblem(422, 'Validation Error', 'User ID is invalid', req.path));
+      return;
+    }
+
+    const adminUser = (req as AuthRequest).user;
+    if (adminUser.sub === id && parsed.data.status !== 'ACTIVE') {
+      res.status(409).json(buildProblem(409, 'Conflict', 'Admins cannot deactivate or suspend their own account', req.path));
+      return;
+    }
+
+    const pool = getPool();
+    const currentResult = await pool.query<{
+      id: string; email: string; phone: string | null; role: string; status: string;
+      created_at: string; last_login_at: string | null; email_verified: boolean; phone_verified: boolean; name: string | null;
+    }>(
+      `SELECT u.id, u.email, u.phone, u.role, u.status, u.created_at, u.last_login_at, u.email_verified, u.phone_verified,
+              COALESCE(p.name, INITCAP(REPLACE(SPLIT_PART(u.email, '@', 1), '.', ' '))) AS name
+       FROM users u
+       LEFT JOIN patients p ON p.user_id = u.id
+       WHERE u.id = $1`,
+      [id],
+    );
+
+    const currentUser = currentResult.rows[0];
+    if (!currentUser) {
+      res.status(404).json(buildProblem(404, 'Not Found', 'User not found', req.path));
+      return;
+    }
+
+    const updated = await pool.query(
+      `UPDATE users
+       SET status = $1::user_status
+       WHERE id = $2
+       RETURNING id`,
+      [parsed.data.status, id],
+    );
+
+    const userId = updated.rows[0]?.id as string | undefined;
+    if (!userId) {
+      res.status(404).json(buildProblem(404, 'Not Found', 'User not found', req.path));
+      return;
+    }
+
+    const userResult = await pool.query<{
+      id: string; email: string; phone: string | null; role: string; status: string;
+      created_at: string; last_login_at: string | null; email_verified: boolean; phone_verified: boolean; name: string | null;
+    }>(
+      `SELECT u.id, u.email, u.phone, u.role, u.status, u.created_at, u.last_login_at, u.email_verified, u.phone_verified,
+              COALESCE(p.name, INITCAP(REPLACE(SPLIT_PART(u.email, '@', 1), '.', ' '))) AS name
+       FROM users u
+       LEFT JOIN patients p ON p.user_id = u.id
+       WHERE u.id = $1`,
+      [userId],
+    );
+
+    const user = userResult.rows[0];
+    if (!user) {
+      res.status(404).json(buildProblem(404, 'Not Found', 'User not found', req.path));
+      return;
+    }
+
+    await writeAuditLog(adminUser.sub, 'ADMIN_USER_STATUS_UPDATE', req, {
+      targetUserId: user.id,
+      targetEmail: user.email,
+      previousStatus: currentUser.status,
+      nextStatus: user.status,
+      status: 'SUCCESS',
+    });
+
+    res.json({
+      data: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        name: user.name ?? user.email,
+        createdAt: user.created_at,
+        lastLoginAt: user.last_login_at,
+        emailVerified: user.email_verified,
+        phoneVerified: user.phone_verified,
+      },
+      meta: { timestamp: new Date().toISOString() },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /v1/auth/admin/logs — paginated audit log feed for Admin Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('/v1/auth/admin/logs', requireAdmin, createRateLimitMiddleware('admin-logs-read', 120, 60), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query['page'] ?? '1'), 10));
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query['limit'] ?? '25'), 10)));
+    const q = (req.query['q'] as string | undefined)?.trim() ?? '';
+    const action = (req.query['action'] as string | undefined)?.trim() ?? '';
+    const status = (req.query['status'] as string | undefined)?.trim() ?? '';
+    const offset = (page - 1) * limit;
+
+    const statusExpr = `CASE
+      WHEN COALESCE(l.metadata->>'status', '') IN ('SUCCESS', 'FAILURE', 'WARNING') THEN l.metadata->>'status'
+      WHEN l.event = 'LOGIN_FAIL' THEN 'FAILURE'
+      WHEN l.event = 'LOGIN_SUCCESS' THEN 'SUCCESS'
+      ELSE 'WARNING'
+    END`;
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (q) {
+      params.push(`%${q}%`);
+      conditions.push(`(COALESCE(u.email, '') ILIKE $${params.length} OR l.event ILIKE $${params.length} OR COALESCE(l.metadata::text, '') ILIKE $${params.length})`);
+    }
+
+    if (action) {
+      params.push(action);
+      conditions.push(`l.event = $${params.length}`);
+    }
+
+    if (status) {
+      params.push(status);
+      conditions.push(`${statusExpr} = $${params.length}`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await getPool().query<{ count: string }>(
+      `SELECT COUNT(*) AS count
+       FROM auth_audit_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       ${where}`,
+      params,
+    );
+
+    const dataResult = await getPool().query<{
+      id: string; created_at: string; event: string; ip_address: string | null;
+      user_email: string | null; status: 'SUCCESS' | 'FAILURE' | 'WARNING'; detail: string | null;
+    }>(
+      `SELECT l.id::text,
+              l.created_at,
+              l.event,
+              l.ip_address::text,
+              u.email AS user_email,
+              ${statusExpr} AS status,
+              l.metadata::text AS detail
+       FROM auth_audit_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       ${where}
+       ORDER BY l.created_at DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, offset],
+    );
+
+    res.json({
+      data: dataResult.rows.map((row) => ({
+        id: row.id,
+        timestamp: row.created_at,
+        userEmail: row.user_email ?? 'Sistem',
+        action: row.event,
+        resource: 'auth-service',
+        ipAddress: row.ip_address ?? undefined,
+        status: row.status,
+        detail: row.detail ?? undefined,
+      })),
+      meta: {
+        page,
+        limit,
+        total: parseInt(countResult.rows[0]?.count ?? '0', 10),
+        totalPages: Math.ceil(parseInt(countResult.rows[0]?.count ?? '0', 10) / limit),
         timestamp: new Date().toISOString(),
       },
     });

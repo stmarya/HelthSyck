@@ -4,7 +4,7 @@ metadata:
   name: healthsync-ingress
   namespace: healthsync
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
@@ -49,7 +49,7 @@ spec:
                 name: prescription-service
                 port:
                   number: 3004
-          - path: /v1/ambulance(/|$)(.*)
+          - path: /v1/ambulances(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -70,7 +70,21 @@ spec:
                 name: hospital-service
                 port:
                   number: 3007
+          - path: /v1/doctors(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: hospital-service
+                port:
+                  number: 3007
           - path: /v1/pharmacies(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: pharmacy-service
+                port:
+                  number: 3008
+          - path: /v1/drugs(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -84,10 +98,31 @@ spec:
                 name: notification-service
                 port:
                   number: 3009
-          - path: /v1/integration(/|$)(.*)
+          - path: /v1/integrations(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
                 name: integration-service
                 port:
                   number: 3010
+          - path: /v1/iot(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: iot-ingestion
+                port:
+                  number: 4001
+          - path: /v1/alerts(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: alert-service
+                port:
+                  number: 4002
+          - path: /v1/admin(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 3001

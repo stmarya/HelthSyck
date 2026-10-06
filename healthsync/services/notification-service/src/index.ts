@@ -5,7 +5,8 @@ import { z, ZodError } from 'zod';
 import crypto from 'crypto';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
-import * as admin from 'firebase-admin';
+import { applicationDefault, initializeApp, type App } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 
 // ─────────────────────────────────────────────
 // Config
@@ -29,11 +30,11 @@ const redis = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 3 
 redis.on('error', (err) => console.error(`[${SERVICE_NAME}] Redis error:`, err));
 
 // Firebase Admin — only init if credentials are provided
-let fcmApp: admin.app.App | null = null;
+let fcmApp: App | null = null;
 if (FCM_PROJECT_ID) {
   try {
-    fcmApp = admin.initializeApp({
-      credential: admin.credential.applicationDefault(),
+    fcmApp = initializeApp({
+      credential: applicationDefault(),
       projectId: FCM_PROJECT_ID,
     });
     console.log(`[${SERVICE_NAME}] Firebase Admin initialized for project ${FCM_PROJECT_ID}`);
@@ -163,7 +164,7 @@ async function sendPushNotification(
     return 'SENT';
   }
 
-  const messaging = admin.messaging(fcmApp);
+  const messaging = getMessaging(fcmApp);
   const stringData: Record<string, string> = {};
   if (data) {
     for (const [k, v] of Object.entries(data)) {

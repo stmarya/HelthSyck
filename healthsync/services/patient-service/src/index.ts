@@ -194,7 +194,12 @@ app.get('/health', async (_req: Request, res: Response) => {
     await getPool().query('SELECT 1');
     dbOk = true;
   } catch { /* intentionally swallowed */ }
-  res.json({ status: 'ok', service: SERVICE_NAME, db: dbOk, timestamp: new Date().toISOString() });
+  res.status(dbOk ? 200 : 503).json({
+    status: dbOk ? 'ok' : 'degraded',
+    service: SERVICE_NAME,
+    db: dbOk,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ─────────────────────────────────────────────

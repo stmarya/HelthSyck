@@ -121,6 +121,7 @@ const FindNearbySchema = z.object({
 
 const ListAmbulancesSchema = z.object({
   hospitalId: z.string().uuid().optional(),
+  status: z.enum(['OFFLINE', 'AVAILABLE', 'DISPATCHED', 'EN_ROUTE', 'AT_SCENE', 'TRANSPORTING', 'RETURNING']).optional(),
   page:       z.coerce.number().int().min(1).default(1),
   limit:      z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -218,7 +219,14 @@ app.get('/health', async (_req: Request, res: Response) => {
   let redisOk = false;
   try { await getPool().query('SELECT 1'); dbOk = true; } catch { /* swallowed */ }
   try { await getRedis().ping(); redisOk = true; } catch { /* swallowed */ }
-  res.json({ status: 'ok', service: SERVICE_NAME, db: dbOk, redis: redisOk, timestamp: new Date().toISOString() });
+  const healthy = dbOk && redisOk;
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    service: SERVICE_NAME,
+    db: dbOk,
+    redis: redisOk,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -236,7 +244,7 @@ app.get(
         return;
       }
 
-      const { hospitalId, page, limit } = filter.data;
+      const { hospitalId, status, page, limit } = filter.data;
       const offset = (page - 1) * limit;
       const pool = getPool();
 
@@ -244,6 +252,9 @@ app.get(
       const conditions: string[] = ['a.is_active = TRUE'];
       if (hospitalId) {
         conditions.push(`a.hospital_id = $${params.push(hospitalId)}`);
+      }
+      if (status) {
+        conditions.push(`a.status = $${params.push(status)}`);
       }
 
       const whereClause = conditions.join(' AND ');

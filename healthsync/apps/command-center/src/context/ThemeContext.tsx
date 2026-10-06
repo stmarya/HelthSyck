@@ -12,9 +12,9 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'light',
+  theme: 'dark',
   toggle: () => undefined,
-  isDark: false,
+  isDark: true,
 });
 
 // ─── Provider ─────────────────────────────────────────────────────────────
@@ -22,7 +22,8 @@ const ThemeContext = createContext<ThemeContextValue>({
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem('hs_theme');
-    return (stored === 'dark' || stored === 'light') ? stored : 'light';
+    // Default war-room gelap mengikuti referensi Command Center dan mengurangi glare.
+    return (stored === 'dark' || stored === 'light') ? stored : 'dark';
   });
 
   // Terapkan ke dokumen
@@ -44,6 +45,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────
 
+// Hooks are intentionally colocated with their provider.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }

@@ -210,7 +210,12 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 app.get('/health', async (_req: Request, res: Response) => {
   let dbOk = false;
   try { await getPool().query('SELECT 1'); dbOk = true; } catch { /* swallowed */ }
-  res.json({ status: 'ok', service: SERVICE_NAME, db: dbOk, timestamp: new Date().toISOString() });
+  res.status(dbOk ? 200 : 503).json({
+    status: dbOk ? 'ok' : 'degraded',
+    service: SERVICE_NAME,
+    db: dbOk,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ─────────────────────────────────────────────
