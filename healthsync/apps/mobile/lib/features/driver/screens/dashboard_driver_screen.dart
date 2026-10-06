@@ -28,8 +28,7 @@ class _DashboardDriverScreenState
   void initState() {
     super.initState();
     Future.microtask(() async {
-      final userId = ref.read(authProvider).user?.id;
-      ref.read(driverOrderProvider.notifier).fetchOrders(driverUserId: userId);
+      ref.read(driverOrderProvider.notifier).fetchOrders();
       final auth = ref.read(authProvider);
       final token = auth.accessToken;
       final entityId = auth.user?.id;
