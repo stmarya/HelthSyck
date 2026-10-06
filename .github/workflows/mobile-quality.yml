@@ -23,7 +23,9 @@ jobs:
           channel: stable
           cache: true
       - name: Ensure Android scaffold
-        run: flutter create --platforms=android --org id.healthsync --project-name healthsync_mobile .
+        run: |
+          flutter create --platforms=android --org id.healthsync --project-name healthsync_mobile .
+          rm -f test/widget_test.dart
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
