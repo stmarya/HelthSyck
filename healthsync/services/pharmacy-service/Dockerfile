@@ -39,10 +39,8 @@ WORKDIR /app
 RUN apk add --no-cache dumb-init
 ENV NODE_ENV=production
 
-# Copy hoisted root node_modules first, then overlay with service-level deps
-# This ensures ALL deps (hoisted + non-hoisted) are in /app/node_modules
+# Copy hoisted workspace dependencies used by the compiled service
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/services/pharmacy-service/node_modules ./node_modules
 COPY --from=deps /app/packages/shared/package.json ./packages/shared/
 COPY --from=build-shared /app/packages/shared/dist ./packages/shared/dist/
 COPY --from=build-service /app/services/pharmacy-service/dist ./dist/
